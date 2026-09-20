@@ -542,10 +542,15 @@ export const supabaseRepo = {
 
   // TRANSACTIONS
   async getTransactions(userId?: string): Promise<Transaction[]> {
-    if (userId) {
-      return dbStore.transactions.filter((t) => !t.userId || t.userId === userId);
-    }
-    return dbStore.transactions;
+    const admin=getSupabaseAdmin(); if(!admin) throw new Error('Supabase is not configured');
+    let query=admin.from('wallet_transactions').select('*').order('created_at',{ascending:false});
+    if(userId) query=query.eq('user_id',userId);
+    const {data,error}=await query;
+    if(error) throw new Error(error.message);
+    return (data||[]).map((t:any)=>({
+      id:t.id,userId:t.user_id,walletId:t.wallet_id,type:t.type,amount:Number(t.amount),status:t.status,
+      gameId:t.game_id,description:t.description,referenceId:t.reference_id,idempotencyKey:t.idempotency_key,createdAt:t.created_at
+    }));
   },
 
   // GAME ROUND PERSISTENCE
