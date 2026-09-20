@@ -20,7 +20,7 @@ const isConfigured = Boolean(
   SUPABASE_URL &&
   SUPABASE_URL.startsWith('http') &&
   !SUPABASE_URL.includes('your-project') &&
-  (SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY)
+  SUPABASE_SERVICE_ROLE_KEY
 );
 
 // Lazy initialized clients
@@ -30,8 +30,8 @@ let cachedPublicClient: SupabaseClient | null = null;
 export function getSupabaseAdmin(): SupabaseClient | null {
   if (!isConfigured) return null;
   if (!cachedAdminClient) {
-    const key = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
-    cachedAdminClient = createClient(SUPABASE_URL, key, {
+    if (!SUPABASE_SERVICE_ROLE_KEY) return null;
+    cachedAdminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
   }
@@ -53,8 +53,8 @@ export function getSupabaseConfigStatus(): SupabaseConfigStatus {
     hasAnonKey: Boolean(SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('your-')),
     hasServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_SERVICE_ROLE_KEY.includes('your-')),
     hasDatabaseUrl: Boolean(DATABASE_URL && !DATABASE_URL.includes('your-')),
-    authProvider: isConfigured ? 'supabase_auth' : 'local_authoritative_engine',
-    dbEngine: isConfigured ? 'supabase_postgresql' : 'authoritative_simulated_pg',
+    authProvider: isConfigured ? 'supabase_auth' : 'not_configured',
+    dbEngine: isConfigured ? 'supabase_postgresql' : 'not_configured',
     storageAvailable: isConfigured
   };
 }
@@ -200,24 +200,14 @@ export const supabaseRepo = {
   // USER QUERIES
   async getUserById(id: string): Promise<User | null> {
     const admin = getSupabaseAdmin();
-    if (admin) {
-      const { data } = await admin.from('users').select('*').eq('id', id).single();
-      if (data) {
-        return {
-          id: data.id,
-          email: data.email,
-          mobile: data.mobile,
-          username: data.username,
-          role: data.role as UserRole,
-          parentId: data.parent_id,
-          vipTier: data.vip_tier,
-          avatarUrl: data.avatar_url,
-          isDemo: data.is_demo,
-          createdAt: data.created_at
-        };
-      }
-    }
-    return dbStore.users.get(id) || null;
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('users').select('*').eq('id', id).single();
+    if (error || !data) return null;
+    return {
+      id: data.id, email: data.email, mobile: data.mobile, username: data.username,
+      role: data.role as UserRole, parentId: data.parent_id, vipTier: data.vip_tier,
+      avatarUrl: data.avatar_url, isDemo: data.is_demo, createdAt: data.created_at
+    };
   },
 
   async getUserByEmailOrMobile(identifier: string): Promise<User | null> {
