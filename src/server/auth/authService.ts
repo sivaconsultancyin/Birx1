@@ -24,6 +24,10 @@ const sessionTokens = new Map<string, string>();
 
 
 export const authService = {
+  logout(token: string): void {
+    sessionTokens.delete(token);
+  },
+
   extractToken(req: Request): string | null {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
