@@ -1798,7 +1798,8 @@ function generateCrashPoint(): number {
   return Number(Math.max(1.05, clamped).toFixed(2));
 }
 
-function runAviatorCycle() {
+async function runAviatorCycle() {
+  if (!(await acquireGameLease('aviator'))) return;
   if (aviatorTimer) clearInterval(aviatorTimer);
 
   // Phase 1: Betting (5 seconds countdown)
@@ -1812,23 +1813,33 @@ function runAviatorCycle() {
 
   broadcastSSE('round_started', { gameId: 'aviator', roundId: aviatorState.roundId });
 
-  const betInterval = setInterval(() => {
+  await supabaseRepo.saveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+
+  const betInterval = setInterval(async () => {
+    if (!(await acquireGameLease('aviator'))) return;
+    const persisted = await supabaseRepo.getAuthoritativeGameState('aviator');
+    if (persisted) { aviatorState = persisted as AviatorState; currentCrashTarget = Number(persisted.crashTarget || currentCrashTarget); }
     aviatorState.countdown -= 1;
     if (aviatorState.countdown <= 0) {
       clearInterval(betInterval);
       startAviatorFlight();
     }
+    await supabaseRepo.saveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
   }, 1000);
 }
 
-function startAviatorFlight() {
+async function startAviatorFlight() {
+  if (!(await acquireGameLease('aviator'))) return;
+  const persisted = await supabaseRepo.getAuthoritativeGameState('aviator');
+  if (persisted) { aviatorState = persisted as AviatorState; currentCrashTarget = Number(persisted.crashTarget || currentCrashTarget); }
   aviatorState.phase = 'running';
   aviatorState.multiplier = 1.0;
 
   broadcastSSE('betting_closed', { gameId: 'aviator' });
 
   const startTime = Date.now();
-  const flightInterval = setInterval(() => {
+  const flightInterval = setInterval(async () => {
+    if (!(await acquireGameLease('aviator'))) return;
     const elapsedSec = (Date.now() - startTime) / 1000;
     // Exponential curve: 1 + 0.06 * t^1.7
     const nextMult = Number((1.0 + 0.06 * Math.pow(elapsedSec * 1.8, 1.6)).toFixed(2));
@@ -1864,11 +1875,11 @@ function startAviatorFlight() {
       });
 
       // Restart cycle after 3s
-      setTimeout(() => {
-        runAviatorCycle();
-      }, 3500);
+      await supabaseRepo.saveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+      setTimeout(() => { runAviatorCycle(); }, 3500);
     } else {
       aviatorState.multiplier = nextMult;
+      await supabaseRepo.saveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
     }
   }, 100);
 }
