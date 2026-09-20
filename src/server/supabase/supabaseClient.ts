@@ -461,48 +461,43 @@ export const supabaseRepo = {
 
   // COIN RECHARGE
   async createRecharge(userId: string, amount: number, method = 'UPI'): Promise<CoinRecharge> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
     const user = await this.getUserById(userId);
-    const recharge: CoinRecharge = {
-      id: `rch_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      userId,
-      username: user?.username || 'Player',
-      amount,
-      method,
-      status: 'pending',
-      createdAt: new Date().toISOString()
+    const id = `rch_${crypto.randomUUID()}`;
+    const { data, error } = await admin.from('coin_recharges').insert({
+      id, user_id: userId, amount, method, status: 'pending'
+    }).select('*').single();
+    if (error || !data) throw new Error(error?.message || 'Failed to create recharge');
+    return {
+      id: data.id, userId: data.user_id, username: user?.username || 'Player',
+      amount: Number(data.amount), method: data.method, status: data.status,
+      approvedBy: data.approved_by, transactionId: data.transaction_id, createdAt: data.created_at
     };
-    dbStore.recharges.unshift(recharge);
-    return recharge;
   },
 
   async approveRecharge(rechargeId: string, approvedByUserId: string): Promise<CoinRecharge> {
-    const rch = dbStore.recharges.find((r) => r.id === rechargeId);
-    if (!rch) throw new Error('Recharge record not found');
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data: rch, error } = await admin.from('coin_recharges').select('*').eq('id', rechargeId).single();
+    if (error || !rch) throw new Error('Recharge record not found');
     if (rch.status !== 'pending') throw new Error(`Recharge already ${rch.status}`);
-
-    rch.status = 'approved';
-    rch.approvedBy = approvedByUserId;
-
-    // Credit player wallet atomically
-    const creditRes = await this.atomicCredit(
-      rch.userId,
-      rch.amount,
-      'recharge',
-      `Admin Coin Recharge #${rch.id}`,
-      undefined,
-      `idemp_rch_${rch.id}`
-    );
-    rch.transactionId = creditRes.transaction.id;
-
-    return rch;
+    const creditRes = await this.atomicCredit(rch.user_id, Number(rch.amount), 'recharge', `Admin Coin Recharge #${rch.id}`, undefined, `idemp_rch_${rch.id}`);
+    const { data, error: updateError } = await admin.from('coin_recharges').update({
+      status:'approved', approved_by:approvedByUserId, transaction_id:creditRes.transaction.id, updated_at:new Date().toISOString()
+    }).eq('id', rechargeId).eq('status','pending').select('*').single();
+    if (updateError || !data) throw new Error(updateError?.message || 'Recharge approval failed');
+    const user=await this.getUserById(data.user_id);
+    return { id:data.id,userId:data.user_id,username:user?.username||'Player',amount:Number(data.amount),method:data.method,status:data.status,approvedBy:data.approved_by,transactionId:data.transaction_id,createdAt:data.created_at };
   },
 
   async rejectRecharge(rechargeId: string, rejectedByUserId: string): Promise<CoinRecharge> {
-    const rch = dbStore.recharges.find((r) => r.id === rechargeId);
-    if (!rch) throw new Error('Recharge record not found');
-    rch.status = 'rejected';
-    rch.approvedBy = rejectedByUserId;
-    return rch;
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('coin_recharges').update({status:'rejected',approved_by:rejectedByUserId,updated_at:new Date().toISOString()}).eq('id',rechargeId).eq('status','pending').select('*').single();
+    if (error || !data) throw new Error(error?.message || 'Recharge not found or already processed');
+    const user=await this.getUserById(data.user_id);
+    return {id:data.id,userId:data.user_id,username:user?.username||'Player',amount:Number(data.amount),method:data.method,status:data.status,approvedBy:data.approved_by,transactionId:data.transaction_id,createdAt:data.created_at};
   },
 
   async getRecharges(): Promise<CoinRecharge[]> {
@@ -510,61 +505,35 @@ export const supabaseRepo = {
   },
 
   // WITHDRAWALS
-  async createWithdrawal(userId: string, amount: number, upiId: string): Promise<WithdrawalRequest> {
-    // Deduct wallet immediately into locked or pending debit
-    const debitRes = await this.atomicDebit(
-      userId,
-      amount,
-      'withdrawal',
-      `Withdrawal Request to ${upiId}`,
-      undefined,
-      `wth_req_${Date.now()}`
-    );
-
-    const user = await this.getUserById(userId);
-    const req: WithdrawalRequest = {
-      id: `wth_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      userId,
-      username: user?.username || 'Player',
-      amount,
-      upiId,
-      status: 'pending',
-      transactionId: debitRes.transaction.id,
-      createdAt: new Date().toISOString()
-    };
-    dbStore.withdrawals.unshift(req);
-    return req;
+  async createWithdrawal(userId: string, amount: number, upiId: string, idempotencyKey?: string): Promise<WithdrawalRequest> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const debitRes = await this.atomicDebit(userId, amount, 'withdrawal', `Withdrawal Request to ${upiId}`, undefined, idempotencyKey || `wth_req_${crypto.randomUUID()}`);
+    const id = `wth_${crypto.randomUUID()}`;
+    const { data, error } = await admin.from('withdrawal_requests').insert({id,user_id:userId,amount,upi_id:upiId,status:'pending',transaction_id:debitRes.transaction.id,idempotency_key:idempotencyKey||null}).select('*').single();
+    if (error || !data) {
+      await this.atomicCredit(userId,amount,'refund','Refund for failed withdrawal request');
+      throw new Error(error?.message || 'Failed to create withdrawal request');
+    }
+    const user=await this.getUserById(userId);
+    return {id:data.id,userId:data.user_id,username:user?.username||'Player',amount:Number(data.amount),upiId:data.upi_id,status:data.status,approvedBy:data.approved_by,transactionId:data.transaction_id,createdAt:data.created_at};
   },
 
   async approveWithdrawal(withdrawalId: string, approvedByUserId: string): Promise<WithdrawalRequest> {
-    const req = dbStore.withdrawals.find((w) => w.id === withdrawalId);
-    if (!req) throw new Error('Withdrawal request not found');
-    if (req.status !== 'pending') throw new Error(`Withdrawal is already ${req.status}`);
-
-    req.status = 'approved';
-    req.approvedBy = approvedByUserId;
-    return req;
+    const admin=getSupabaseAdmin(); if(!admin) throw new Error('Supabase is not configured');
+    const {data,error}=await admin.from('withdrawal_requests').update({status:'approved',approved_by:approvedByUserId,updated_at:new Date().toISOString()}).eq('id',withdrawalId).eq('status','pending').select('*').single();
+    if(error||!data) throw new Error(error?.message||'Withdrawal not found or already processed');
+    const user=await this.getUserById(data.user_id);
+    return {id:data.id,userId:data.user_id,username:user?.username||'Player',amount:Number(data.amount),upiId:data.upi_id,status:data.status,approvedBy:data.approved_by,transactionId:data.transaction_id,createdAt:data.created_at};
   },
 
   async rejectWithdrawal(withdrawalId: string, rejectedByUserId: string): Promise<WithdrawalRequest> {
-    const req = dbStore.withdrawals.find((w) => w.id === withdrawalId);
-    if (!req) throw new Error('Withdrawal request not found');
-    if (req.status !== 'pending') throw new Error(`Withdrawal is already ${req.status}`);
-
-    req.status = 'rejected';
-    req.approvedBy = rejectedByUserId;
-
-    // Refund player wallet
-    await this.atomicCredit(
-      req.userId,
-      req.amount,
-      'refund',
-      `Refund for Rejected Withdrawal #${req.id}`,
-      undefined,
-      `idemp_wth_refund_${req.id}`
-    );
-
-    return req;
+    const admin=getSupabaseAdmin(); if(!admin) throw new Error('Supabase is not configured');
+    const {data,error}=await admin.from('withdrawal_requests').update({status:'rejected',approved_by:rejectedByUserId,updated_at:new Date().toISOString()}).eq('id',withdrawalId).eq('status','pending').select('*').single();
+    if(error||!data) throw new Error(error?.message||'Withdrawal not found or already processed');
+    await this.atomicCredit(data.user_id,Number(data.amount),'refund',`Refund for Rejected Withdrawal #${data.id}`,undefined,`idemp_wth_refund_${data.id}`);
+    const user=await this.getUserById(data.user_id);
+    return {id:data.id,userId:data.user_id,username:user?.username||'Player',amount:Number(data.amount),upiId:data.upi_id,status:data.status,approvedBy:data.approved_by,transactionId:data.transaction_id,createdAt:data.created_at};
   },
 
   async getWithdrawals(): Promise<WithdrawalRequest[]> {
