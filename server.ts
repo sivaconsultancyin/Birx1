@@ -1649,6 +1649,7 @@ setInterval(async () => {
       });
     }
   }
+  await supabaseRepo.saveAuthoritativeGameState('teen-patti', teenPattiState);
 }, 1000);
 
 // --- TEEN PATTI API ENDPOINTS ---
