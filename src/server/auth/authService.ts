@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Request, Response, NextFunction } from 'express';
 import { User, UserRole, Wallet } from '../../types.ts';
 import { supabaseRepo, getSupabaseAdmin } from '../supabase/supabaseClient.ts';
@@ -29,129 +30,85 @@ sessionTokens.set('token_player', 'usr_brix_8849');
 sessionTokens.set('token_demo', 'usr_brix_8849');
 
 export const authService = {
-  // Extract token from request headers
   extractToken(req: Request): string | null {
     const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      return authHeader.substring(7).trim();
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7).trim();
+      return token || null;
     }
-    const tokenQuery = req.query.token as string;
-    if (tokenQuery) return tokenQuery;
     return null;
   },
 
-  // Resolve user from token
   async resolveUserFromToken(token: string): Promise<User | null> {
     if (!token) return null;
-
-    // 1. Check if token is a Supabase JWT
     const admin = getSupabaseAdmin();
-    if (admin && token.startsWith('eyJ')) {
+    if (admin) {
       try {
         const { data: { user: sbUser }, error } = await admin.auth.getUser(token);
         if (!error && sbUser) {
-          const dbUser = await supabaseRepo.getUserById(sbUser.id);
-          if (dbUser) return dbUser;
+          return await supabaseRepo.getUserById(sbUser.id);
         }
       } catch {
-        // Fall back to token map
+        // Invalid/expired JWT.
       }
     }
-
-    // 2. Check local session token map
     const userId = sessionTokens.get(token);
-    if (userId) {
-      return supabaseRepo.getUserById(userId);
-    }
-
-    // 3. Fallback: default player for demo token
-    if (token === 'token_demo' || token === 'token_player') {
-      return supabaseRepo.getUserById('usr_brix_8849');
-    }
-
-    return null;
+    return userId ? supabaseRepo.getUserById(userId) : null;
   },
 
-  // Login with mobile or email + OTP/password
   async login(identifier: string, _codeOrPassword?: string): Promise<AuthSession> {
-    let user = await supabaseRepo.getUserByEmailOrMobile(identifier);
-
-    // If identifier is not found, default to player or create on-the-fly demo player
-    if (!user) {
-      user = await supabaseRepo.createUser({
-        id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        mobile: identifier.startsWith('+') ? identifier : `+91 ${identifier}`,
-        email: identifier.includes('@') ? identifier : undefined,
-        username: `Player_${identifier.slice(-4) || 'VIP'}`,
-        role: 'PLAYER',
-        parentId: 'usr_admin_001',
-        vipTier: 'Bronze',
-        isDemo: true,
-        createdAt: new Date().toISOString()
-      });
-    }
-
-    const token = `token_${user.role.toLowerCase()}_${user.id}`;
+    const user = await supabaseRepo.getUserByEmailOrMobile(identifier);
+    if (!user) throw new Error('Account not found. Please register first.');
+    const token = createSessionToken();
     sessionTokens.set(token, user.id);
-
     const wallet = await supabaseRepo.getWallet(user.id);
     return { token, user, wallet };
   },
 
-  // Register new account
-  async register(mobile: string, username: string, role: UserRole = 'PLAYER', parentId?: string): Promise<AuthSession> {
+  async register(mobile: string, username: string, _role: UserRole = 'PLAYER', parentId?: string): Promise<AuthSession> {
     const existing = await supabaseRepo.getUserByEmailOrMobile(mobile);
-    if (existing) {
-      return this.login(mobile);
-    }
+    if (existing) throw new Error('An account with this mobile number already exists.');
 
     const user = await supabaseRepo.createUser({
-      id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      mobile: mobile.startsWith('+') ? mobile : `+91 ${mobile}`,
-      username: username || `Player_${mobile.slice(-4)}`,
-      role,
-      parentId: parentId || (role === 'PLAYER' ? 'usr_admin_001' : undefined),
+      id: `usr_${crypto.randomUUID()}`,
+      mobile: mobile.startsWith('+') ? mobile : `+91${mobile.replace(/\\D/g, '')}`,
+      username,
+      role: 'PLAYER',
+      parentId,
       vipTier: 'Bronze',
-      isDemo: true,
+      isDemo: false,
       createdAt: new Date().toISOString()
     });
 
-    const token = `token_${user.role.toLowerCase()}_${user.id}`;
+    const token = createSessionToken();
     sessionTokens.set(token, user.id);
-
     const wallet = await supabaseRepo.getWallet(user.id);
     return { token, user, wallet };
   },
 
-  // Switch role for quick testing/validation in UI
   async switchRole(userId: string, newRole: UserRole): Promise<AuthSession> {
+    if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEV_ROLE_SWITCH !== 'true') {
+      throw new Error('Role switching is disabled.');
+    }
     const updatedUser = await supabaseRepo.updateUserRole(userId, newRole);
     if (!updatedUser) throw new Error('User not found');
-
-    const token = `token_${newRole.toLowerCase()}_${userId}`;
+    const token = createSessionToken();
     sessionTokens.set(token, userId);
-
     const wallet = await supabaseRepo.getWallet(userId);
     return { token, user: updatedUser, wallet };
   },
 
-  // Verify hierarchy management permission:
-  // OWNER can manage ALL
-  // SUPER_ADMIN can manage ADMIN and PLAYER
-  // ADMIN can manage PLAYER
-  // PLAYER can manage NONE
   canManageUser(actor: User, targetRole: UserRole): boolean {
     if (actor.role === 'OWNER') return true;
-    if (actor.role === 'SUPER_ADMIN') {
-      return targetRole === 'ADMIN' || targetRole === 'PLAYER';
-    }
-    if (actor.role === 'ADMIN') {
-      return targetRole === 'PLAYER';
-    }
+    if (actor.role === 'SUPER_ADMIN') return targetRole === 'ADMIN' || targetRole === 'PLAYER';
+    if (actor.role === 'ADMIN') return targetRole === 'PLAYER';
     return false;
   }
 };
 
+function createSessionToken(): string {
+  return `brix_${crypto.randomBytes(32).toString('hex')}`;
+}
 // ---------------------------------------------------------------------
 // EXPRESS MIDDLEWARES
 // ---------------------------------------------------------------------
