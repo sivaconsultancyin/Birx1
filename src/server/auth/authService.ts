@@ -106,7 +106,7 @@ export const authService = {
     if (actor.role === 'ADMIN') return targetRole === 'PLAYER';
     return false;
   }
-}
+};
 // ---------------------------------------------------------------------
 // EXPRESS MIDDLEWARES
 // ---------------------------------------------------------------------
