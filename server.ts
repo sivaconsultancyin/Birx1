@@ -1828,7 +1828,7 @@ app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
 
   const winAmount = Math.floor(numAmount * multiplier);
   if (winAmount > 0) {
-    creditWallet(requireActor(req).id, winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
+    await creditWallet(requireActor(req).id, winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
   }
 
   dragonTigerState.dragonCard = dragonCard;
