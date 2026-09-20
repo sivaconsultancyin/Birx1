@@ -22,12 +22,6 @@ export interface AuthSession {
 // Memory session cache (maps token -> userId)
 const sessionTokens = new Map<string, string>();
 
-// Seed default demo tokens for instant validation
-sessionTokens.set('token_owner', 'usr_owner_001');
-sessionTokens.set('token_super', 'usr_super_001');
-sessionTokens.set('token_admin', 'usr_admin_001');
-sessionTokens.set('token_player', 'usr_brix_8849');
-sessionTokens.set('token_demo', 'usr_brix_8849');
 
 export const authService = {
   extractToken(req: Request): string | null {
@@ -116,16 +110,7 @@ function createSessionToken(): string {
 // 1. Authenticate user from Supabase token / session
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = authService.extractToken(req);
-  if (!token) {
-    // If demo mode, resolve default player
-    const defaultPlayer = await supabaseRepo.getUserById('usr_brix_8849');
-    if (defaultPlayer) {
-      req.user = defaultPlayer;
-      req.wallet = await supabaseRepo.getWallet(defaultPlayer.id);
-      return next();
-    }
-    return res.status(401).json({ error: 'Unauthorized: Authentication token required' });
-  }
+  if (!token) return res.status(401).json({ error: 'Unauthorized: Authentication token required' });
 
   const user = await authService.resolveUserFromToken(token);
   if (!user) {
