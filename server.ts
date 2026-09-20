@@ -95,8 +95,8 @@ const handleSSEConnection = (req: Request, res: Response) => {
   });
 };
 
-app.get('/api/events/stream', handleSSEConnection);
-app.get('/api/realtime', handleSSEConnection);
+app.get('/api/events/stream', requireAuth, requirePlayerForGames, handleSSEConnection);
+app.get('/api/realtime', requireAuth, requirePlayerForGames, handleSSEConnection);
 
 // -------------------------------------------------------------
 // HEALTH CHECK
@@ -497,7 +497,7 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER', 'SUPE
 // -------------------------------------------------------------
 // WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
 // -------------------------------------------------------------
-app.get('/api/wallet/balance', async (req: Request, res: Response) => {
+app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
   const actor = req.user || currentUser;
   const wallet = await supabaseRepo.getWallet(actor.id);
   userWallet.balance = wallet.balance;
@@ -505,13 +505,13 @@ app.get('/api/wallet/balance', async (req: Request, res: Response) => {
   res.json({ wallet });
 });
 
-app.get('/api/wallet/transactions', async (req: Request, res: Response) => {
+app.get('/api/wallet/transactions', requireAuth, async (req: Request, res: Response) => {
   const actor = req.user || currentUser;
   const txList = await supabaseRepo.getTransactions(actor.id);
   res.json({ transactions: txList });
 });
 
-app.post('/api/wallet/deposit', async (req: Request, res: Response) => {
+app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response) => {
   const { amount, method = 'UPI', idempotencyKey } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 100) {
@@ -526,7 +526,7 @@ app.post('/api/wallet/deposit', async (req: Request, res: Response) => {
   return res.json({ success: true, wallet: userWallet, transaction: result.transaction });
 });
 
-app.post('/api/wallet/withdraw', async (req: Request, res: Response) => {
+app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response) => {
   const { amount, upiId, idempotencyKey } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 500) {
