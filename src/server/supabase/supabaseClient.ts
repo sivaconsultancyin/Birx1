@@ -340,23 +340,13 @@ export const supabaseRepo = {
   // WALLET & BALANCE
   async getWallet(userId: string): Promise<Wallet> {
     const admin = getSupabaseAdmin();
-    if (admin) {
-      const { data } = await admin.from('wallets').select('*').eq('user_id', userId).single();
-      if (data) {
-        return {
-          balance: Number(data.balance),
-          bonus: Number(data.bonus),
-          lockedAmount: Number(data.locked_amount || 0),
-          currency: data.currency,
-          isDemo: data.is_demo
-        };
-      }
-    }
-
-    if (!dbStore.wallets.has(userId)) {
-      dbStore.wallets.set(userId, { balance: 10000, bonus: 500, lockedAmount: 0, currency: 'INR', isDemo: false });
-    }
-    return dbStore.wallets.get(userId)!;
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('wallets').select('*').eq('user_id', userId).single();
+    if (error || !data) throw new Error('Wallet not found');
+    return {
+      balance: Number(data.balance), bonus: Number(data.bonus),
+      lockedAmount: Number(data.locked_amount || 0), currency: data.currency, isDemo: data.is_demo
+    };
   },
 
   // ATOMIC WALLET DEBIT
@@ -377,22 +367,15 @@ export const supabaseRepo = {
 
     const admin = getSupabaseAdmin();
     if (admin) {
-      try {
-        const { data, error } = await admin.rpc('atomic_wallet_debit', {
-          p_user_id: userId,
-          p_amount: amount,
-          p_type: type,
-          p_description: description,
-          p_game_id: gameId || null,
-          p_idempotency_key: idempotencyKey || null
-        });
-        if (!error && data && data.success) {
-          return data;
-        }
-      } catch {
-        // Fall back to transactional memory lock
-      }
+      const { data, error } = await admin.rpc('atomic_wallet_debit', {
+        p_user_id: userId, p_amount: amount, p_type: type,
+        p_description: description, p_game_id: gameId || null,
+        p_idempotency_key: idempotencyKey || null
+      });
+      if (error || !data?.success) throw new Error(error?.message || 'Atomic wallet debit failed');
+      return data;
     }
+    throw new Error('Supabase is not configured');
 
     // Atomic local transaction
     const wallet = await this.getWallet(userId);
@@ -441,22 +424,15 @@ export const supabaseRepo = {
 
     const admin = getSupabaseAdmin();
     if (admin) {
-      try {
-        const { data, error } = await admin.rpc('atomic_wallet_credit', {
-          p_user_id: userId,
-          p_amount: amount,
-          p_type: type,
-          p_description: description,
-          p_game_id: gameId || null,
-          p_idempotency_key: idempotencyKey || null
-        });
-        if (!error && data && data.success) {
-          return data;
-        }
-      } catch {
-        // Fall back to memory
-      }
+      const { data, error } = await admin.rpc('atomic_wallet_credit', {
+        p_user_id: userId, p_amount: amount, p_type: type,
+        p_description: description, p_game_id: gameId || null,
+        p_idempotency_key: idempotencyKey || null
+      });
+      if (error || !data?.success) throw new Error(error?.message || 'Atomic wallet credit failed');
+      return data;
     }
+    throw new Error('Supabase is not configured');
 
     const wallet = await this.getWallet(userId);
     wallet.balance += amount;
