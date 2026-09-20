@@ -2010,6 +2010,10 @@ app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req
 // VITE MIDDLEWARE & STATIC FALLBACK
 // -------------------------------------------------------------
 async function start() {
+  if (process.env.NODE_ENV === 'production' && !getSupabaseConfigStatus().isConfigured) {
+    throw new Error('Production startup blocked: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
+  }
+
   // Execute database state recovery for any interrupted game rounds or unconfirmed transactions
   try {
     await gameRecoveryService.recoverInterruptedRounds();
@@ -2033,7 +2037,7 @@ async function start() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Brix Games Engine] Server live on http://0.0.0.0:${PORT}`);
-    console.log(`[Supabase Platform] Connected status:`, getSupabaseConfigStatus().isConfigured ? 'LIVE POSTGRESQL' : 'READY STORE');
+    console.log(`[Supabase Platform] Connected status: LIVE POSTGRESQL`);
   });
 }
 
