@@ -122,44 +122,18 @@ const gameHistories: GameHistoryEntry[] = [
 ];
 
 // Helper: record transaction & ledger (authoritative single source of truth)
-function deductWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string): boolean {
-  if (userWallet.balance < amount) return false;
-  userWallet.balance -= amount;
-  const tx: Transaction = {
-    id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    userId: currentUser.id,
-    type: 'bet',
-    amount,
-    status: 'success',
-    gameId,
-    description,
-    createdAt: new Date().toISOString(),
-    referenceId: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
-    idempotencyKey
-  };
-  transactions.unshift(tx);
-  // Persist into Supabase PostgreSQL atomic wallet ledger
-  supabaseRepo.atomicDebit(currentUser.id, amount, 'bet', description, gameId, idempotencyKey).catch(() => {});
-  return true;
+// Wallet mutations must use Supabase atomic RPCs. No in-memory financial fallback.
+async function deductWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string): Promise<boolean> {
+  try {
+    await supabaseRepo.atomicDebit(currentUser.id, amount, 'bet', description, gameId, idempotencyKey);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-function creditWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string) {
-  userWallet.balance += amount;
-  const tx: Transaction = {
-    id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    userId: currentUser.id,
-    type: 'payout',
-    amount,
-    status: 'success',
-    gameId,
-    description,
-    createdAt: new Date().toISOString(),
-    referenceId: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
-    idempotencyKey
-  };
-  transactions.unshift(tx);
-  // Persist into Supabase PostgreSQL atomic wallet ledger
-  supabaseRepo.atomicCredit(currentUser.id, amount, 'payout', description, gameId, idempotencyKey).catch(() => {});
+async function creditWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string) {
+  return supabaseRepo.atomicCredit(currentUser.id, amount, 'payout', description, gameId, idempotencyKey);
 }
 
 function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'>) {
@@ -217,111 +191,48 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // -------------------------------------------------------------
 // AUTH ENDPOINTS
 // -------------------------------------------------------------
-const otps: Record<string, string> = {
-  '9876543210': '1234'
-};
-
-app.post('/api/auth/send-otp', (req: Request, res: Response) => {
-  const { mobile } = req.body;
-  if (!mobile || mobile.length < 10) {
-    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
+// Supabase Auth SMS OTP endpoints
+app.post('/api/auth/send-otp', async (req: Request, res: Response) => {
+  try {
+    const { mobile } = req.body;
+    const result = await authService.sendOtp(String(mobile || ''));
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
-  // Generate demo 4-digit OTP
-  const code = '1234';
-  otps[mobile.slice(-10)] = code;
-  return res.json({
-    success: true,
-    message: 'OTP sent successfully! (Demo OTP: 1234)',
-    demoOtp: '1234'
-  });
 });
 
 app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
-  const { mobile, otp } = req.body;
-  const cleanMobile = mobile ? mobile.slice(-10) : '';
-  const validOtp = otps[cleanMobile] || '1234';
-
-  if (otp !== validOtp && otp !== '1234') {
-    return res.status(400).json({ error: 'Invalid OTP code. Try entering 1234 for Demo.' });
+  try {
+    const { mobile, otp } = req.body;
+    const session = await authService.verifyOtp(String(mobile || ''), String(otp || ''));
+    res.json({
+      success: true,
+      token: session.token,
+      user: session.user,
+      wallet: session.wallet
+    });
+  } catch (err: any) {
+    res.status(401).json({ error: err.message });
   }
-
-  const session = await authService.login(cleanMobile || '9876543210', otp);
-  currentUser.id = session.user.id;
-  currentUser.mobile = session.user.mobile;
-  currentUser.username = session.user.username;
-  currentUser.role = session.user.role;
-  currentUser.parentId = session.user.parentId;
-  userWallet.balance = session.wallet.balance;
-  userWallet.bonus = session.wallet.bonus;
-
-  return res.json({
-    success: true,
-    token: session.token,
-    user: session.user,
-    wallet: session.wallet
-  });
 });
 
-app.post('/api/auth/register', async (req: Request, res: Response) => {
-  const { mobile, otp, username, role = 'PLAYER' } = req.body;
-  if (!username || username.trim().length < 3) {
-    return res.status(400).json({ error: 'Username must be at least 3 characters' });
-  }
-  const cleanMobile = mobile ? mobile.slice(-10) : '9876543210';
-  const session = await authService.register(cleanMobile, username.trim(), role);
-  currentUser.id = session.user.id;
-  currentUser.mobile = session.user.mobile;
-  currentUser.username = session.user.username;
-  currentUser.role = session.user.role;
-  currentUser.parentId = session.user.parentId;
-  userWallet.balance = session.wallet.balance;
-  userWallet.bonus = session.wallet.bonus;
-
-  return res.json({
-    success: true,
-    token: session.token,
-    user: session.user,
-    wallet: session.wallet
-  });
+app.post('/api/auth/register', (_req: Request, res: Response) => {
+  res.status(410).json({ error: 'Legacy registration is disabled. Use Supabase Auth SMS OTP.' });
 });
 
-app.post('/api/auth/switch-role', async (req: Request, res: Response) => {
-  const { role } = req.body;
-  if (!role || !['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role' });
-  }
-
-  const session = await authService.switchRole(currentUser.id, role);
-  currentUser.role = session.user.role;
-
-  return res.json({
-    success: true,
-    token: session.token,
-    user: session.user,
-    wallet: session.wallet
-  });
+app.post('/api/auth/switch-role', (_req: Request, res: Response) => {
+  res.status(410).json({ error: 'Role switching is disabled. Roles are managed by authorized administrators.' });
 });
 
-app.get('/api/auth/me', async (req: Request, res: Response) => {
-  const token = authService.extractToken(req);
-  if (token) {
-    const resolvedUser = await authService.resolveUserFromToken(token);
-    if (resolvedUser) {
-      currentUser.id = resolvedUser.id;
-      currentUser.username = resolvedUser.username;
-      currentUser.role = resolvedUser.role;
-      currentUser.parentId = resolvedUser.parentId;
-      currentUser.mobile = resolvedUser.mobile;
-    }
-  }
-  const wallet = await supabaseRepo.getWallet(currentUser.id);
-  userWallet.balance = wallet.balance;
-  userWallet.bonus = wallet.bonus;
-  res.json({ user: currentUser, wallet: userWallet });
+app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
+  const actor = req.user!;
+  const wallet = await supabaseRepo.getWallet(actor.id);
+  res.json({ user: actor, wallet });
 });
 
 app.post('/api/auth/logout', (_req: Request, res: Response) => {
-  res.json({ success: true, message: 'Logged out successfully' });
+  res.json({ success: true, message: 'Client session can be signed out with Supabase Auth.' });
 });
 
 // -------------------------------------------------------------
