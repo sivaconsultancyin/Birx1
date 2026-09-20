@@ -28,12 +28,12 @@ import {
 const BASE_URL = '/api';
 
 async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('brix_token') || 'token_demo';
+  const token = localStorage.getItem('brix_token');
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'X-Request-Id': `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       ...(options.headers || {})
     }
@@ -51,7 +51,7 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
 // AUTH API
 // -------------------------------------------------------------
 export const authApi = {
-  async sendOtp(mobile: string): Promise<{ success: boolean; message: string; demoOtp: string }> {
+  async sendOtp(mobile: string): Promise<{ success: boolean; message: string }> {
     return fetchJson('/auth/send-otp', {
       method: 'POST',
       body: JSON.stringify({ mobile })
@@ -84,16 +84,9 @@ export const authApi = {
     return fetchJson('/auth/me');
   },
 
-  async switchRole(role: UserRole): Promise<{ success: boolean; user: User; wallet: Wallet; token: string }> {
-    const res = await fetchJson<{ success: boolean; user: User; wallet: Wallet; token: string }>('/auth/switch-role', {
-      method: 'POST',
-      body: JSON.stringify({ role })
-    });
-    if (res.token) {
-      localStorage.setItem('brix_token', res.token);
-    }
-    return res;
-  },
+  async switchRole(_role: UserRole): Promise<never> {
+    throw new Error('Role switching is disabled. Roles are managed by authorized administrators.');
+  }
 
   async logout(): Promise<{ success: boolean }> {
     localStorage.removeItem('brix_token');
