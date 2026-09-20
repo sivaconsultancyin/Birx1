@@ -1770,6 +1770,9 @@ const handlePostTeenPattiAction = (req: Request, res: Response) => {
 app.post('/api/games/teen-patti/action', handlePostTeenPattiAction);
 app.post('/games/teen-patti/action', handlePostTeenPattiAction);
 
+// Persist the authoritative round after every scheduler tick.
+// The lease ensures only one instance advances the round.
+
 // -------------------------------------------------------------
 // 3. AVIATOR ENGINE (SERVER-AUTHORITATIVE)
 // -------------------------------------------------------------
