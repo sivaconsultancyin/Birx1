@@ -416,7 +416,7 @@ export const supabaseRepo = {
     gameId?: string,
     idempotencyKey?: string
   ): Promise<{ success: boolean; wallet: Wallet; transaction: Transaction }> {
-    if (amount < 0) throw new Error('Invalid credit amount');
+    if (amount <= 0) throw new Error('Invalid credit amount');
 
     if (idempotencyKey && dbStore.idempotency.has(idempotencyKey)) {
       return dbStore.idempotency.get(idempotencyKey);
@@ -501,7 +501,10 @@ export const supabaseRepo = {
   },
 
   async getRecharges(): Promise<CoinRecharge[]> {
-    return dbStore.recharges;
+    const admin=getSupabaseAdmin(); if(!admin) throw new Error('Supabase is not configured');
+    const {data,error}=await admin.from('coin_recharges').select('*').order('created_at',{ascending:false});
+    if(error) throw new Error(error.message);
+    return (data||[]).map((r:any)=>({id:r.id,userId:r.user_id,username:'Player',amount:Number(r.amount),method:r.method,status:r.status,approvedBy:r.approved_by,transactionId:r.transaction_id,createdAt:r.created_at}));
   },
 
   // WITHDRAWALS
