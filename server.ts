@@ -40,6 +40,17 @@ const PORT = 3000;
 
 app.use(express.json());
 
+function requireActor(req: Request): User {
+  if (!req.user) throw new Error('Authentication required');
+  return req.user;
+}
+
+async function getRequestWallet(req: Request): Promise<Wallet> {
+  return supabaseRepo.getWallet(requireActor(req).id);
+}
+
+let activeTeenPattiUser: User | null = null;
+
 // -------------------------------------------------------------
 // IN-MEMORY SERVER-AUTHORITATIVE STATE STORE
 // Synchronized with Supabase Single Source of Truth
@@ -123,17 +134,17 @@ const gameHistories: GameHistoryEntry[] = [
 
 // Helper: record transaction & ledger (authoritative single source of truth)
 // Wallet mutations must use Supabase atomic RPCs. No in-memory financial fallback.
-async function deductWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string): Promise<boolean> {
+async function deductWallet(userId: string, amount: number, description: string, gameId?: any, idempotencyKey?: string): Promise<boolean> {
   try {
-    await supabaseRepo.atomicDebit(currentUser.id, amount, 'bet', description, gameId, idempotencyKey);
+    await supabaseRepo.atomicDebit(userId, amount, 'bet', description, gameId, idempotencyKey);
     return true;
   } catch {
     return false;
   }
 }
 
-async function creditWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string) {
-  return supabaseRepo.atomicCredit(currentUser.id, amount, 'payout', description, gameId, idempotencyKey);
+async function creditWallet(userId: string, amount: number, description: string, gameId?: any, idempotencyKey?: string) {
+  return supabaseRepo.atomicCredit(userId, amount, 'payout', description, gameId, idempotencyKey);
 }
 
 function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'>) {
@@ -241,7 +252,7 @@ app.post('/api/auth/logout', (_req: Request, res: Response) => {
 // GET visible users respecting OWNER -> SUPER_ADMIN -> ADMIN -> PLAYER hierarchy
 app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = requireActor(req);
     const users = await supabaseRepo.getVisibleUsers(actor);
     res.json({ users });
   } catch (err: any) {
@@ -252,7 +263,7 @@ app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', '
 // CREATE subordinate user under actor
 app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = requireActor(req);
     const { mobile, username, role, email } = req.body;
     if (!mobile || !username || !role) {
       return res.status(400).json({ error: 'mobile, username, and role are required' });
@@ -283,7 +294,7 @@ app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_A
 // UPDATE user role
 app.patch('/api/admin/users/:id/role', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = requireActor(req);
     const { role } = req.body;
     if (!authService.canManageUser(actor, role)) {
       return res.status(403).json({ error: `Permission denied: ${actor.role} cannot grant role ${role}` });
@@ -303,12 +314,12 @@ app.get('/api/admin/recharges', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN
 
 app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = requireActor(req);
     const recharge = await walletService.approveCoinRecharge(req.params.id, actor.id);
     // Sync local wallet if it was for current user
     if (recharge.userId === currentUser.id) {
       userWallet.balance += recharge.amount;
-      broadcastSSE('wallet_updated', { wallet: userWallet });
+      broadcastSSE('wallet_updated', { wallet: await getRequestWallet(req) });
     }
     res.json({ success: true, recharge });
   } catch (err: any) {
@@ -318,7 +329,7 @@ app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER',
 
 app.post('/api/admin/recharges/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = requireActor(req);
     const recharge = await walletService.rejectCoinRecharge(req.params.id, actor.id);
     res.json({ success: true, recharge });
   } catch (err: any) {
@@ -334,7 +345,7 @@ app.get('/api/admin/withdrawals', requireAuth, requireRoles(['OWNER', 'SUPER_ADM
 
 app.post('/api/admin/withdrawals/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = requireActor(req);
     const withdrawal = await walletService.approveWithdrawal(req.params.id, actor.id);
     res.json({ success: true, withdrawal });
   } catch (err: any) {
@@ -344,11 +355,11 @@ app.post('/api/admin/withdrawals/:id/approve', requireAuth, requireRoles(['OWNER
 
 app.post('/api/admin/withdrawals/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = requireActor(req);
     const withdrawal = await walletService.rejectWithdrawal(req.params.id, actor.id);
     if (withdrawal.userId === currentUser.id) {
       userWallet.balance += withdrawal.amount;
-      broadcastSSE('wallet_updated', { wallet: userWallet });
+      broadcastSSE('wallet_updated', { wallet: await getRequestWallet(req) });
     }
     res.json({ success: true, withdrawal });
   } catch (err: any) {
@@ -393,7 +404,7 @@ app.get('/api/storage/documents', async (_req: Request, res: Response) => {
   res.json({ documents: docs });
 });
 
-app.post('/api/storage/documents/upload', async (req: Request, res: Response) => {
+app.post('/api/storage/documents/upload', requireAuth, async (req: Request, res: Response) => {
   try {
     const { name, category, url, size, uploadedBy } = req.body;
     if (!name || !category) {
@@ -404,7 +415,7 @@ app.post('/api/storage/documents/upload', async (req: Request, res: Response) =>
       category,
       url: url || `/assets/docs/${name}`,
       size: Number(size) || 125000,
-      uploadedBy: uploadedBy || (req.user?.id || currentUser.id)
+      uploadedBy: uploadedBy || (requireActor(req).id)
     });
     res.json({ success: true, document: doc });
   } catch (err: any) {
@@ -469,9 +480,9 @@ app.get('/api/admin/claims', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 
   res.json({ claims: memoryClaims });
 });
 
-app.post('/api/admin/claims/create', async (req: Request, res: Response) => {
+app.post('/api/admin/claims/create', requireAuth, async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = requireActor(req);
     const { type, subject, description, amount, gameId, documentUrl } = req.body;
     if (!subject || !description) {
       return res.status(400).json({ error: 'Subject and description are required' });
@@ -553,48 +564,48 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER', 'SUPE
 // -------------------------------------------------------------
 // WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
 // -------------------------------------------------------------
-app.get('/api/wallet/balance', async (req: Request, res: Response) => {
-  const actor = req.user || currentUser;
+app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
+  const actor = requireActor(req);
   const wallet = await supabaseRepo.getWallet(actor.id);
   userWallet.balance = wallet.balance;
   userWallet.bonus = wallet.bonus;
   res.json({ wallet });
 });
 
-app.get('/api/wallet/transactions', async (req: Request, res: Response) => {
-  const actor = req.user || currentUser;
+app.get('/api/wallet/transactions', requireAuth, async (req: Request, res: Response) => {
+  const actor = requireActor(req);
   const txList = await supabaseRepo.getTransactions(actor.id);
   res.json({ transactions: txList });
 });
 
-app.post('/api/wallet/deposit', async (req: Request, res: Response) => {
+app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response) => {
   const { amount, method = 'UPI', idempotencyKey } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 100) {
     return res.status(400).json({ error: 'Minimum deposit amount is ₹100' });
   }
 
-  const actor = req.user || currentUser;
+  const actor = requireActor(req);
   const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
   userWallet.balance = result.wallet.balance;
 
-  broadcastSSE('wallet_updated', { wallet: userWallet });
-  return res.json({ success: true, wallet: userWallet, transaction: result.transaction });
+  broadcastSSE('wallet_updated', { wallet: await getRequestWallet(req) });
+  return res.json({ success: true, wallet: await getRequestWallet(req), transaction: result.transaction });
 });
 
-app.post('/api/wallet/withdraw', async (req: Request, res: Response) => {
+app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response) => {
   const { amount, upiId, idempotencyKey } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 500) {
     return res.status(400).json({ error: 'Minimum withdrawal is ₹500' });
   }
 
-  const actor = req.user || currentUser;
+  const actor = requireActor(req);
   try {
     const result = await walletService.requestWithdrawal(actor.id, numAmount, upiId || 'Bank Account', idempotencyKey);
     userWallet.balance = result.wallet.balance;
-    broadcastSSE('wallet_updated', { wallet: userWallet });
-    return res.json({ success: true, wallet: userWallet, request: result.request });
+    broadcastSSE('wallet_updated', { wallet: await getRequestWallet(req) });
+    return res.json({ success: true, wallet: await getRequestWallet(req), request: result.request });
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
   }
@@ -918,7 +929,7 @@ setInterval(() => {
       if (rouletteHistoryRecords.length > 50) rouletteHistoryRecords.pop();
 
       if (settlement.grossPayout > 0) {
-        await creditWallet(settlement.grossPayout, `Roulette Payout #${rouletteState.roundId}`, 'roulette');
+        await creditWallet(requireActor(req).id,  settlement.grossPayout, `Roulette Payout #${rouletteState.roundId}`, 'roulette');
       }
 
       if (settlement.totalBet > 0) {
@@ -944,7 +955,7 @@ setInterval(() => {
         grossPayout: settlement.grossPayout,
         netResult: settlement.netResult,
         settlementStatus: 'settled',
-        wallet: userWallet,
+        wallet: await getRequestWallet(req),
         recentResults: rouletteState.recentResults
       };
 
@@ -955,7 +966,7 @@ setInterval(() => {
         winningCategory: settlement.winningCategory
       });
       broadcastSSE('roulette_settlement', roundSettlements[rouletteState.roundId]);
-      broadcastSSE('roulette_wallet_updated', { wallet: userWallet });
+      broadcastSSE('roulette_wallet_updated', { wallet: await getRequestWallet(req) });
     }
   } else if (rouletteState.phase === 'result') {
     rouletteState.countdown -= 1;
@@ -1090,7 +1101,7 @@ const handlePostRouletteBets = (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Betting is currently closed for this round' });
   }
 
-  if (!(await deductWallet(totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette'))) {
+  if (!(await deductWallet(requireActor(req).id, totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1102,7 +1113,7 @@ const handlePostRouletteBets = (req: Request, res: Response) => {
     roundId: rouletteState.roundId,
     bets: currentRoundBets[rouletteState.roundId],
     totalBetPlaced: totalBet,
-    wallet: userWallet,
+    wallet: await getRequestWallet(req),
     countdown: rouletteState.countdown
   };
 
@@ -1110,7 +1121,7 @@ const handlePostRouletteBets = (req: Request, res: Response) => {
     processedRouletteIdempotency.set(idempotencyKey, responsePayload);
   }
 
-  broadcastSSE('roulette_wallet_updated', { wallet: userWallet });
+  broadcastSSE('roulette_wallet_updated', { wallet: await getRequestWallet(req) });
   return res.json(responsePayload);
 };
 app.post('/api/games/roulette/bets', handlePostRouletteBets);
@@ -1171,7 +1182,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
 
   // Atomic debit
   const currentRoundId = rouletteState.roundId;
-  if (!(await deductWallet(totalBet, `Roulette Round ${currentRoundId}`, 'roulette'))) {
+  if (!(await deductWallet(requireActor(req).id, totalBet, `Roulette Round ${currentRoundId}`, 'roulette'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1181,7 +1192,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
 
   // Atomic credit if winning
   if (settlement.grossPayout > 0) {
-    await creditWallet(settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
+    await creditWallet(requireActor(req).id,  settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
   }
 
   // Update server state
@@ -1228,7 +1239,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
     netProfit: settlement.netResult,
     netResult: settlement.netResult,
     settlementStatus: 'settled',
-    wallet: userWallet,
+    wallet: await getRequestWallet(req),
     recentResults: rouletteState.recentResults
   };
 
@@ -1241,7 +1252,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
   broadcastSSE('roulette_spin_started', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor });
   broadcastSSE('roulette_result', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, category: settlement.winningCategory });
   broadcastSSE('roulette_settlement', fullSettlementResult);
-  broadcastSSE('roulette_wallet_updated', { wallet: userWallet });
+  broadcastSSE('roulette_wallet_updated', { wallet: await getRequestWallet(req) });
 
   return res.json(fullSettlementResult);
 };
@@ -1318,7 +1329,7 @@ setInterval(() => {
         teenPattiState.userSettlement = settlement;
 
         if (settlement.grossPayout > 0) {
-          await creditWallet(settlement.grossPayout, `Teen Patti Win #${teenPattiState.roundId}`, 'teen-patti');
+          await creditWallet(requireActor(req).id,  settlement.grossPayout, `Teen Patti Win #${teenPattiState.roundId}`, 'teen-patti');
         }
 
         if (settlement.betAmount > 0) {
@@ -1376,7 +1387,7 @@ setInterval(() => {
       if (userSettlementDetail) {
         broadcastSSE('teen_patti_settlement', userSettlementDetail);
       }
-      broadcastSSE('wallet_updated', { wallet: userWallet });
+      broadcastSSE('wallet_updated', { wallet: await getRequestWallet(req) });
     }
   } else if (teenPattiState.phase === 'result') {
     teenPattiState.countdown -= 1;
@@ -1396,16 +1407,18 @@ setInterval(() => {
 }, 1000);
 
 // --- TEEN PATTI API ENDPOINTS ---
-const handleGetTeenPattiState = (_req: Request, res: Response) => {
+const handleGetTeenPattiState = (req: Request, res: Response) => {
+  activeTeenPattiUser = requireActor(req);
   res.json({
     state: sanitizeTeenPattiState(teenPattiState)
   });
 };
 
-app.get('/api/games/teen-patti/state', handleGetTeenPattiState);
-app.get('/games/teen-patti/state', handleGetTeenPattiState);
+app.get('/api/games/teen-patti/state', requireAuth, handleGetTeenPattiState);
+app.get('/games/teen-patti/state', requireAuth, handleGetTeenPattiState);
 
 const handlePostTeenPattiBet = (req: Request, res: Response) => {
+  activeTeenPattiUser = requireActor(req);
   const { amount }: { amount: number } = req.body;
   const betAmount = Number(amount);
   if (!betAmount || betAmount <= 0) {
@@ -1419,11 +1432,11 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
 
   // Calculate delta if player already has a bet
   const additionalBet = betAmount > userPlayer.currentBet ? betAmount - userPlayer.currentBet : betAmount;
-  if (userWallet.balance < additionalBet) {
+  if ((await getRequestWallet(req)).balance < additionalBet) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
-  if (!(await deductWallet(additionalBet, `Teen Patti Bet #${teenPattiState.roundId}`, 'teen-patti'))) {
+  if (!(await deductWallet(requireActor(req).id, additionalBet, `Teen Patti Bet #${teenPattiState.roundId}`, 'teen-patti'))) {
     return res.status(400).json({ error: 'Failed to place bet' });
   }
 
@@ -1444,7 +1457,7 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
   return res.json({
     success: true,
     state: sanitizeTeenPattiState(teenPattiState),
-    wallet: userWallet
+    wallet: await getRequestWallet(req)
   });
 };
 
@@ -1452,12 +1465,13 @@ app.post('/api/games/teen-patti/bet', handlePostTeenPattiBet);
 app.post('/games/teen-patti/bet', handlePostTeenPattiBet);
 
 const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
+  activeTeenPattiUser = requireActor(req);
   const bootAmount = Number(req.body?.bootAmount || 50);
   const userPlayer = teenPattiState.players.find((p) => p.isUser);
   if (userPlayer && teenPattiState.phase === 'betting') {
     if (userPlayer.currentBet < bootAmount) {
       const delta = bootAmount - userPlayer.currentBet;
-      if (userWallet.balance >= delta && (await deductWallet(delta, 'Teen Patti Boot Bet', 'teen-patti'))) {
+      if ((await getRequestWallet(req)).balance >= delta && (await deductWallet(requireActor(req).id, delta, 'Teen Patti Boot Bet', 'teen-patti'))) {
         userPlayer.currentBet = bootAmount;
         teenPattiState.pot += delta;
       }
@@ -1467,7 +1481,7 @@ const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
   return res.json({
     success: true,
     state: sanitizeTeenPattiState(teenPattiState),
-    wallet: userWallet
+    wallet: await getRequestWallet(req)
   });
 };
 
@@ -1475,6 +1489,7 @@ app.post('/api/games/teen-patti/new-round', handlePostTeenPattiNewRound);
 app.post('/games/teen-patti/new-round', handlePostTeenPattiNewRound);
 
 const handlePostTeenPattiAction = (req: Request, res: Response) => {
+  activeTeenPattiUser = requireActor(req);
   const { action, betAmount = 0 }: { action: 'see' | 'blind' | 'chaal' | 'fold' | 'show' | 'bet'; betAmount?: number } =
     req.body;
 
@@ -1488,7 +1503,7 @@ const handlePostTeenPattiAction = (req: Request, res: Response) => {
 
   if (action === 'fold') {
     userPlayer.folded = true;
-    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: userWallet });
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: await getRequestWallet(req) });
   }
 
   if (action === 'blind' || action === 'chaal' || action === 'bet') {
@@ -1496,16 +1511,16 @@ const handlePostTeenPattiAction = (req: Request, res: Response) => {
     if (teenPattiState.phase !== 'betting') {
       return res.status(400).json({ error: 'Betting is closed for this round' });
     }
-    if (!(await deductWallet(stake, `Teen Patti ${action.toUpperCase()}`, 'teen-patti'))) {
+    if (!(await deductWallet(requireActor(req).id, stake, `Teen Patti ${action.toUpperCase()}`, 'teen-patti'))) {
       return res.status(400).json({ error: 'Insufficient wallet balance' });
     }
     userPlayer.currentBet += stake;
     teenPattiState.pot += stake;
-    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: userWallet });
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: await getRequestWallet(req) });
   }
 
   if (action === 'show') {
-    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: userWallet });
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: await getRequestWallet(req) });
   }
 
   return res.status(400).json({ error: 'Unknown action' });
@@ -1647,7 +1662,7 @@ app.post('/api/games/aviator/bet', (req: Request, res: Response) => {
   return res.json({
     success: true,
     bet: currentAviatorBet,
-    wallet: userWallet
+    wallet: await getRequestWallet(req)
   });
 });
 
@@ -1668,7 +1683,7 @@ app.post('/api/games/aviator/cashout', (_req: Request, res: Response) => {
   currentAviatorBet.cashOutMultiplier = cashMultiplier;
   currentAviatorBet.winAmount = payout;
 
-  await creditWallet(payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
+  await creditWallet(requireActor(req).id,  payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
 
   recordHistory({
     gameId: 'aviator',
@@ -1684,7 +1699,7 @@ app.post('/api/games/aviator/cashout', (_req: Request, res: Response) => {
     success: true,
     cashMultiplier,
     winAmount: payout,
-    wallet: userWallet
+    wallet: await getRequestWallet(req)
   });
 });
 
@@ -1734,7 +1749,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
 
   const winAmount = Math.floor(numAmount * multiplier);
   if (winAmount > 0) {
-    await creditWallet(winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
+    await creditWallet(requireActor(req).id,  winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
   }
 
   diceState.dice1 = d1;
@@ -1762,7 +1777,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
     isDoubles,
     multiplier,
     winAmount,
-    wallet: userWallet,
+    wallet: await getRequestWallet(req),
     recentSums: diceState.recentSums
   });
 });
@@ -1840,7 +1855,7 @@ app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
     winner,
     multiplier,
     winAmount,
-    wallet: userWallet,
+    wallet: await getRequestWallet(req),
     recentResults: dragonTigerState.recentResults
   });
 });
@@ -1961,7 +1976,7 @@ setInterval(() => {
         const winAmount = Math.floor(numAmount * multiplier);
 
         if (winAmount > 0) {
-          await creditWallet(winAmount, `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
+          await creditWallet(requireActor(req).id,  winAmount, `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
         }
 
         recordHistory({
@@ -2046,7 +2061,7 @@ app.post('/api/games/andar-bahar/deal', (req: Request, res: Response) => {
     winningSide: andarBaharFinalWinner,
     multiplier,
     winAmount,
-    wallet: userWallet,
+    wallet: await getRequestWallet(req),
     recentWinners: andarBaharState.recentWinners,
     state: andarBaharState
   });
