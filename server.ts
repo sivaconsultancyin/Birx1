@@ -196,7 +196,7 @@ app.post('/api/auth/logout', requireAuth, (req: Request, res: Response) => {
 // GET visible users respecting OWNER -> SUPER_ADMIN -> ADMIN -> PLAYER hierarchy
 app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = req.user!;
     const users = await supabaseRepo.getVisibleUsers(actor);
     res.json({ users });
   } catch (err: any) {
@@ -207,7 +207,7 @@ app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', '
 // CREATE subordinate user under actor
 app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = req.user!;
     const { mobile, username, role, email } = req.body;
     if (!mobile || !username || !role) {
       return res.status(400).json({ error: 'mobile, username, and role are required' });
@@ -218,7 +218,7 @@ app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_A
     }
 
     const created = await supabaseRepo.createUser({
-      id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: `usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
       mobile,
       email,
       username,
@@ -238,7 +238,7 @@ app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_A
 // UPDATE user role
 app.patch('/api/admin/users/:id/role', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = req.user!;
     const { role } = req.body;
     if (!authService.canManageUser(actor, role)) {
       return res.status(403).json({ error: `Permission denied: ${actor.role} cannot grant role ${role}` });
@@ -258,7 +258,7 @@ app.get('/api/admin/recharges', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN
 
 app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = req.user!;
     const recharge = await walletService.approveCoinRecharge(req.params.id, actor.id);
     // Sync local wallet if it was for current user
     if (recharge.userId === currentUser.id) {
@@ -273,7 +273,7 @@ app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER',
 
 app.post('/api/admin/recharges/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = req.user!;
     const recharge = await walletService.rejectCoinRecharge(req.params.id, actor.id);
     res.json({ success: true, recharge });
   } catch (err: any) {
@@ -289,7 +289,7 @@ app.get('/api/admin/withdrawals', requireAuth, requireRoles(['OWNER', 'SUPER_ADM
 
 app.post('/api/admin/withdrawals/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = req.user!;
     const withdrawal = await walletService.approveWithdrawal(req.params.id, actor.id);
     res.json({ success: true, withdrawal });
   } catch (err: any) {
@@ -299,7 +299,7 @@ app.post('/api/admin/withdrawals/:id/approve', requireAuth, requireRoles(['OWNER
 
 app.post('/api/admin/withdrawals/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = req.user!;
     const withdrawal = await walletService.rejectWithdrawal(req.params.id, actor.id);
     if (withdrawal.userId === currentUser.id) {
       userWallet.balance += withdrawal.amount;
@@ -426,13 +426,13 @@ app.get('/api/admin/claims', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 
 
 app.post('/api/admin/claims/create', async (req: Request, res: Response) => {
   try {
-    const actor = req.user || currentUser;
+    const actor = req.user!;
     const { type, subject, description, amount, gameId, documentUrl } = req.body;
     if (!subject || !description) {
       return res.status(400).json({ error: 'Subject and description are required' });
     }
     const newClaim: PlatformClaim = {
-      id: `clm_${Math.floor(1000 + Math.random() * 9000)}`,
+      id: `clm_${crypto.randomInt(1000, 10000)}`,
       userId: actor.id,
       username: actor.username,
       type: type || 'dispute',
@@ -509,15 +509,14 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER', 'SUPE
 // WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
 // -------------------------------------------------------------
 app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
-  const actor = req.user || currentUser;
+  const actor = req.user!;
   const wallet = await supabaseRepo.getWallet(actor.id);
-  userWallet.balance = wallet.balance;
-  userWallet.bonus = wallet.bonus;
+  
   res.json({ wallet });
 });
 
 app.get('/api/wallet/transactions', requireAuth, async (req: Request, res: Response) => {
-  const actor = req.user || currentUser;
+  const actor = req.user!;
   const txList = await supabaseRepo.getTransactions(actor.id);
   res.json({ transactions: txList });
 });
@@ -529,12 +528,10 @@ app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response)
     return res.status(400).json({ error: 'Minimum deposit amount is ₹100' });
   }
 
-  const actor = req.user || currentUser;
+  const actor = req.user!;
   const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
-  userWallet.balance = result.wallet.balance;
-
-  broadcastSSE('wallet_updated', { wallet: userWallet });
-  return res.json({ success: true, wallet: userWallet, transaction: result.transaction });
+  broadcastSSE('wallet_updated', { userId: actor.id, wallet: result.wallet });
+  return res.json({ success: true, wallet: result.wallet, transaction: result.transaction });
 });
 
 app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response) => {
@@ -544,12 +541,11 @@ app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response
     return res.status(400).json({ error: 'Minimum withdrawal is ₹500' });
   }
 
-  const actor = req.user || currentUser;
+  const actor = req.user!;
   try {
     const result = await walletService.requestWithdrawal(actor.id, numAmount, upiId || 'Bank Account', idempotencyKey);
-    userWallet.balance = result.wallet.balance;
-    broadcastSSE('wallet_updated', { wallet: userWallet });
-    return res.json({ success: true, wallet: userWallet, request: result.request });
+    broadcastSSE('wallet_updated', { userId: actor.id, wallet: result.wallet });
+    return res.json({ success: true, wallet: result.wallet, request: result.request });
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
   }
@@ -605,14 +601,14 @@ const ROULETTE_PAYOUT_RULES = {
 };
 
 let rouletteState: RouletteState = {
-  roundId: 'RL-' + Math.floor(1000 + Math.random() * 9000),
+  roundId: 'RL-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
   countdown: 15,
   winningNumber: 17,
   winningColor: 'black',
   winningCategory: '17 BLACK • Odd • Low (1-18) • 2nd Dozen • 2nd Col',
   recentResults: [17, 32, 0, 26, 3, 15, 28, 21, 4, 19],
-  serverSeedHash: 'd3b07384d113edec49eaa6238ad5ff00' + Math.random().toString(16).slice(2, 8),
+  serverSeedHash: 'd3b07384d113edec49eaa6238ad5ff00' + crypto.randomBytes(4).toString('hex'),
   minimumBet: ROULETTE_LIMITS.minimumBet,
   maximumBet: ROULETTE_LIMITS.maximumBet,
   maximumExposure: ROULETTE_LIMITS.maximumExposure
@@ -847,7 +843,7 @@ setInterval(() => {
       rouletteState.countdown = 6;
 
       // Authoritative RNG generation strictly on server before spin starts
-      const winningNum = EUROPEAN_WHEEL[Math.floor(Math.random() * EUROPEAN_WHEEL.length)];
+      const winningNum = EUROPEAN_WHEEL[crypto.randomInt(EUROPEAN_WHEEL.length)];
       rouletteState.winningNumber = winningNum;
       rouletteState.winningColor = winningNum === 0 ? 'green' : RED_NUMBERS.includes(winningNum) ? 'red' : 'black';
 
@@ -924,11 +920,11 @@ setInterval(() => {
     rouletteState.countdown -= 1;
     if (rouletteState.countdown <= 0) {
       // Transition to new round
-      const newRoundId = 'RL-' + Math.floor(1000 + Math.random() * 9000);
+      const newRoundId = 'RL-' + crypto.randomInt(1000, 10000);
       rouletteState.roundId = newRoundId;
       rouletteState.phase = 'betting';
       rouletteState.countdown = 15;
-      rouletteState.serverSeedHash = 'd3b07384d113edec49eaa6238ad5ff00' + Math.random().toString(16).slice(2, 8);
+      rouletteState.serverSeedHash = 'd3b07384d113edec49eaa6238ad5ff00' + crypto.randomBytes(4).toString('hex');
       currentRoundBets[newRoundId] = [];
 
       broadcastSSE('roulette_round_started', {
@@ -1138,7 +1134,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
   }
 
   // Authoritative server outcome from European wheel (0-36)
-  const winningNum = EUROPEAN_WHEEL[Math.floor(Math.random() * EUROPEAN_WHEEL.length)];
+  const winningNum = EUROPEAN_WHEEL[crypto.randomInt(EUROPEAN_WHEEL.length)];
   const settlement = computeRouletteSettlement(winningNum, bets);
 
   // Atomic credit if winning
@@ -1171,9 +1167,9 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
     settlementStatus: 'settled'
   });
 
-  const nextRoundId = 'RL-' + Math.floor(1000 + Math.random() * 9000);
+  const nextRoundId = 'RL-' + crypto.randomInt(1000, 10000);
   rouletteState.roundId = nextRoundId;
-  rouletteState.serverSeedHash = 'd3b07384d113edec49eaa6238ad5ff00' + Math.random().toString(16).slice(2, 8);
+  rouletteState.serverSeedHash = 'd3b07384d113edec49eaa6238ad5ff00' + crypto.randomBytes(4).toString('hex');
 
   const fullSettlementResult = {
     success: true,
@@ -1480,7 +1476,7 @@ app.post('/games/teen-patti/action', handlePostTeenPattiAction);
 // 3. AVIATOR ENGINE (SERVER-AUTHORITATIVE)
 // -------------------------------------------------------------
 let aviatorState: AviatorState = {
-  roundId: 'AV-' + Math.floor(1000 + Math.random() * 9000),
+  roundId: 'AV-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
   multiplier: 1.0,
   crashMultiplier: null,
@@ -1509,7 +1505,7 @@ function runAviatorCycle() {
   aviatorState.multiplier = 1.0;
   aviatorState.crashMultiplier = null;
   aviatorState.countdown = 5;
-  aviatorState.roundId = 'AV-' + Math.floor(1000 + Math.random() * 9000);
+  aviatorState.roundId = 'AV-' + crypto.randomInt(1000, 10000);
   currentAviatorBet = null;
   currentCrashTarget = generateCrashPoint();
 
@@ -1654,7 +1650,7 @@ app.post('/api/games/aviator/cashout', (_req: Request, res: Response) => {
 // 4. DICE ENGINE (SERVER-AUTHORITATIVE)
 // -------------------------------------------------------------
 let diceState: DiceState = {
-  roundId: 'DC-' + Math.floor(1000 + Math.random() * 9000),
+  roundId: 'DC-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
   dice1: 4,
   dice2: 3,
@@ -1704,7 +1700,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
   diceState.sum = total;
   diceState.recentSums.unshift(total);
   if (diceState.recentSums.length > 10) diceState.recentSums.pop();
-  diceState.roundId = 'DC-' + Math.floor(1000 + Math.random() * 9000);
+  diceState.roundId = 'DC-' + crypto.randomInt(1000, 10000);
 
   recordHistory({
     gameId: 'dice',
@@ -1733,7 +1729,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
 // 5. DRAGON TIGER ENGINE (SERVER-AUTHORITATIVE)
 // -------------------------------------------------------------
 let dragonTigerState: DragonTigerState = {
-  roundId: 'DT-' + Math.floor(1000 + Math.random() * 9000),
+  roundId: 'DT-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
   dragonCard: { suit: 'hearts', rank: 'K', value: 13 },
   tigerCard: { suit: 'spades', rank: '7', value: 7 },
@@ -1783,7 +1779,7 @@ app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
   dragonTigerState.winner = winner;
   dragonTigerState.recentResults.unshift(winner);
   if (dragonTigerState.recentResults.length > 15) dragonTigerState.recentResults.pop();
-  dragonTigerState.roundId = 'DT-' + Math.floor(1000 + Math.random() * 9000);
+  dragonTigerState.roundId = 'DT-' + crypto.randomInt(1000, 10000);
 
   recordHistory({
     gameId: 'dragon-tiger',
@@ -1816,7 +1812,7 @@ let andarBaharTargetJoker: Card | null = { suit: 'spades', rank: '8', value: 8 }
 let andarBaharFinalWinner: AndarBaharSide = 'andar';
 
 let andarBaharState: AndarBaharState = {
-  roundId: 'AB-' + Math.floor(1000 + Math.random() * 9000),
+  roundId: 'AB-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
   jokerCard: { suit: 'spades', rank: '8', value: 8 },
   dealtCards: [
@@ -1853,7 +1849,7 @@ function startAuthoritativeAndarBaharRound() {
   andarBaharDealtQueue = dealt;
   andarBaharFinalWinner = winner;
 
-  andarBaharState.roundId = 'AB-' + Math.floor(1000 + Math.random() * 9000);
+  andarBaharState.roundId = 'AB-' + crypto.randomInt(1000, 10000);
   andarBaharState.phase = 'betting';
   andarBaharState.countdown = 10;
   andarBaharState.jokerCard = null;
