@@ -366,6 +366,306 @@ app.patch('/api/storage/documents/:id/status', requireAuth, requireRoles(['OWNER
 });
 
 // CLAIMS & APPLICATION STATUS MANAGEMENT
+// CLAIMS & POLICY MANAGEMENT — Supabase authoritative storage
+interface PlatformClaim { id:string; userId:string; type:string; title:string; description:string; status:string; createdAt:string; updatedAt:string; }
+
+app.get('/api/admin/claims', requireAuth, requireRoles(['OWNER','SUPER_ADMIN','ADMIN']), async (_req,res) => {
+  try { res.json({ claims: await supabaseRepo.getClaims() }); }
+  catch (e:any) { res.status(500).json({error:e.message}); }
+});
+
+app.post('/api/admin/claims/create', requireAuth, requireRoles(['OWNER','SUPER_ADMIN','ADMIN']), async (req,res) => {
+  try {
+    const claim={ id:`clm_${crypto.randomUUID()}`, user_id:req.user!.id, type:String(req.body.type||'general'), title:String(req.body.title||'').trim(), description:String(req.body.description||'').trim(), status:'pending' };
+    if(!claim.title || !claim.description) return res.status(400).json({error:'title and description are required'});
+    res.status(201).json({success:true,claim:await supabaseRepo.createClaim(claim)});
+  } catch(e:any){res.status(500).json({error:e.message});}
+});
+
+app.patch('/api/admin/claims/:id/status', requireAuth, requireRoles(['OWNER','SUPER_ADMIN','ADMIN']), async (req,res) => {
+  try {
+    const status=String(req.body.status||'');
+    if(!['pending','approved','rejected','resolved'].includes(status)) return res.status(400).json({error:'Invalid status'});
+    res.json({success:true,claim:await supabaseRepo.updateClaimStatus(req.params.id,status)});
+  } catch(e:any){res.status(500).json({error:e.message});}
+});
+
+// POLICY PRICING & AGENT COMMISSION CONFIGURATION — Supabase authoritative storage
+app.get('/api/admin/policies', requireAuth, requireRoles(['OWNER','SUPER_ADMIN','ADMIN']), async (_req,res) => {
+  try { res.json({policies:await supabaseRepo.getPolicies()}); }
+  catch(e:any){res.status(500).json({error:e.message});}
+});
+app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER_ADMIN']), async (req,res) => {
+  try {
+    const current=await supabaseRepo.getPolicies();
+    const allowed=['commissionRates','withdrawalFees','minDeposit','minWithdrawal','gameLimits','vipTiers'];
+    const next:any={...current};
+    for(const key of allowed) if(req.body[key]!==undefined) next[key]=req.body[key];
+    res.json({success:true,policies:await supabaseRepo.updatePolicies(next,req.user!.id)});
+  } catch(e:any){res.status(500).json({error:e.message});}
+});
+
+// HEALTH CHECK
+
+// -------------------------------------------------------------
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
+});
+
+// -------------------------------------------------------------
+ // AUTH ENDPOINTS
+ // -------------------------------------------------------------
+const otps = new Map<string, { codeHash: string; expiresAt: number; attempts: number }>();
+
+function normalizeMobile(value: unknown): string {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 15) throw new Error('Invalid mobile number');
+  return digits;
+}
+
+app.post('/api/auth/send-otp', (req: Request, res: Response) => {
+  try {
+    const mobile = normalizeMobile(req.body.mobile);
+    const code = crypto.randomInt(100000, 1000000).toString();
+    otps.set(mobile, { codeHash: crypto.createHash('sha256').update(code).digest('hex'), expiresAt: Date.now() + 5 * 60_000, attempts: 0 });
+    // Integrate an SMS provider here; never return the OTP from the API.
+    res.json({ success: true, message: 'OTP sent successfully.' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
+  try {
+    const mobile = normalizeMobile(req.body.mobile);
+    const otp = String(req.body.otp || '');
+    const record = otps.get(mobile);
+    if (!record || Date.now() > record.expiresAt || record.attempts >= 5) return res.status(400).json({ error: 'Invalid or expired OTP' });
+    record.attempts++;
+    const hash = crypto.createHash('sha256').update(otp).digest('hex');
+    if (hash !== record.codeHash) return res.status(400).json({ error: 'Invalid or expired OTP' });
+    otps.delete(mobile);
+    const session = await authService.login(mobile, otp);
+    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/register', async (req: Request, res: Response) => {
+  try {
+    const mobile = normalizeMobile(req.body.mobile);
+    const username = String(req.body.username || '').trim();
+    if (username.length < 3 || username.length > 50) return res.status(400).json({ error: 'Username must be 3-50 characters' });
+    const session = await authService.register(mobile, username, 'PLAYER');
+    res.status(201).json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/switch-role', requireAuth, requireRoles(['OWNER']), async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEV_ROLE_SWITCH !== 'true') {
+    return res.status(403).json({ error: 'Role switching is disabled.' });
+  }
+  try {
+    const { role } = req.body;
+    if (!['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+    const session = await authService.switchRole(req.user!.id, role);
+    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
+  res.json({ user: req.user, wallet: req.wallet });
+});
+
+app.post('/api/auth/logout', requireAuth, (req: Request, res: Response) => {
+  const token = authService.extractToken(req);
+  if (token) authService.logout(token);
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
+// -------------------------------------------------------------
+// ADMIN MANAGEMENT ENDPOINTS (Strict Role-Based Access Control)
+// -------------------------------------------------------------
+// GET visible users respecting OWNER -> SUPER_ADMIN -> ADMIN -> PLAYER hierarchy
+app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const users = await supabaseRepo.getVisibleUsers(actor);
+    res.json({ users });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// CREATE subordinate user under actor
+app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const { mobile, username, role, email } = req.body;
+    if (!mobile || !username || !role) {
+      return res.status(400).json({ error: 'mobile, username, and role are required' });
+    }
+
+    if (!authService.canManageUser(actor, role)) {
+      return res.status(403).json({ error: `Actor with role ${actor.role} cannot create user with role ${role}` });
+    }
+
+    const created = await supabaseRepo.createUser({
+      id: `usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+      mobile,
+      email,
+      username,
+      role,
+      parentId: actor.id,
+      vipTier: 'Bronze',
+      isDemo: false,
+      createdAt: new Date().toISOString()
+    });
+
+    res.json({ success: true, user: created });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// UPDATE user role
+app.patch('/api/admin/users/:id/role', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const { role } = req.body;
+    if (!authService.canManageUser(actor, role)) {
+      return res.status(403).json({ error: `Permission denied: ${actor.role} cannot grant role ${role}` });
+    }
+    const updated = await supabaseRepo.updateUserRole(req.params.id, role);
+    res.json({ success: true, user: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// COIN RECHARGES
+app.get('/api/admin/recharges', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const recharges = await walletService.getRecharges();
+  res.json({ recharges });
+});
+
+app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const recharge = await walletService.approveCoinRecharge(req.params.id, actor.id);
+    // Sync local wallet if it was for current user
+    res.json({ success: true, recharge });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/recharges/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const recharge = await walletService.rejectCoinRecharge(req.params.id, actor.id);
+    res.json({ success: true, recharge });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// WITHDRAWALS
+app.get('/api/admin/withdrawals', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const withdrawals = await walletService.getWithdrawals();
+  res.json({ withdrawals });
+});
+
+app.post('/api/admin/withdrawals/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const withdrawal = await walletService.approveWithdrawal(req.params.id, actor.id);
+    res.json({ success: true, withdrawal });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/withdrawals/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const withdrawal = await walletService.rejectWithdrawal(req.params.id, actor.id);
+    res.json({ success: true, withdrawal });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// SUPABASE STATUS & HEALTH
+app.get('/api/admin/supabase-status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const status = getSupabaseConfigStatus();
+  const allUsers = await supabaseRepo.getVisibleUsers({ role: 'OWNER' } as User);
+  const recharges = await walletService.getRecharges();
+  const withdrawals = await walletService.getWithdrawals();
+  const allTransactions = await walletService.getTransactions();
+
+  res.json({
+    status,
+    stats: {
+      totalUsers: allUsers.length,
+      totalRecharges: recharges.length,
+      totalWithdrawals: withdrawals.length,
+      totalTransactions: allTransactions.length,
+      schemaFile: 'supabase/migrations/20260920000000_supabase_brix_platform.sql'
+    }
+  });
+});
+
+// STORAGE ASSETS & SHUFFLE VIDEO
+app.get('/api/storage/shuffle-video', async (_req: Request, res: Response) => {
+  const info = await storageService.getShuffleVideoInfo();
+  res.json(info);
+});
+
+app.get('/api/admin/storage/assets', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const assets = await storageService.listAssets('all');
+  res.json({ assets });
+});
+
+// DOCUMENT UPLOADS & GOOGLE DRIVE INTEGRATION METADATA
+app.get('/api/storage/documents', requireAuth, async (_req: Request, res: Response) => {
+  const docs = await storageService.listDocuments();
+  res.json({ documents: docs });
+});
+
+app.post('/api/storage/documents/upload', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const { name, category, url, size, uploadedBy } = req.body;
+    if (!name || !category) {
+      return res.status(400).json({ error: 'Document name and category are required' });
+    }
+    const doc = await storageService.recordDocument({
+      name,
+      category,
+      url: url || `/assets/docs/${name}`,
+      size: Number(size) || 125000,
+      uploadedBy: req.user!.id
+    });
+    res.json({ success: true, document: doc });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/storage/documents/:id/status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const updated = await storageService.updateDocumentStatus(id, status);
+  if (!updated) return res.status(404).json({ error: 'Document not found' });
+  res.json({ success: true, document: updated });
+});
+
+// CLAIMS & APPLICATION STATUS MANAGEMENT
 interface PlatformClaim {
   id: string;
   userId: string;
