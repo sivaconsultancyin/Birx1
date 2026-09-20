@@ -584,6 +584,66 @@ export const supabaseRepo = {
   },
 
   async getActiveGameRounds(): Promise<any[]> {
-    return Array.from(dbStore.gameRounds.values());
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('game_rounds').select('*').in('phase', ['betting','lock','deal','running','closed']).order('updated_at',{ascending:false});
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async saveAuthoritativeGameState(gameId: string, state: any): Promise<void> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { error } = await admin.from('authoritative_game_states').upsert({
+      game_id: gameId, round_id: state.roundId, phase: state.phase, state, updated_at: new Date().toISOString()
+    }, { onConflict: 'game_id' });
+    if (error) throw new Error(error.message);
+  },
+
+  async getAuthoritativeGameState(gameId: string): Promise<any | null> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('authoritative_game_states').select('state').eq('game_id', gameId).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data?.state ?? null;
+  },
+
+  async claimGameLease(gameId: string, ownerId: string, leaseMs = 4000): Promise<boolean> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const until = new Date(Date.now() + leaseMs).toISOString();
+    const { data, error } = await admin.rpc('claim_game_lease', { p_game_id: gameId, p_owner_id: ownerId, p_lease_until: until });
+    if (error) throw new Error(error.message);
+    return Boolean(data);
+  },
+
+  async getClaims(): Promise<any[]> {
+    const admin=getSupabaseAdmin(); if(!admin) throw new Error('Supabase is not configured');
+    const {data,error}=await admin.from('platform_claims').select('*').order('created_at',{ascending:false});
+    if(error) throw new Error(error.message); return data||[];
+  },
+
+  async createClaim(claim: any): Promise<any> {
+    const admin=getSupabaseAdmin(); if(!admin) throw new Error('Supabase is not configured');
+    const {data,error}=await admin.from('platform_claims').insert(claim).select('*').single();
+    if(error||!data) throw new Error(error?.message||'Claim creation failed'); return data;
+  },
+
+  async updateClaimStatus(id: string,status: string): Promise<any> {
+    const admin=getSupabaseAdmin(); if(!admin) throw new Error('Supabase is not configured');
+    const {data,error}=await admin.from('platform_claims').update({status,updated_at:new Date().toISOString()}).eq('id',id).select('*').single();
+    if(error||!data) throw new Error(error?.message||'Claim not found'); return data;
+  },
+
+  async getPolicies(): Promise<any> {
+    const admin=getSupabaseAdmin(); if(!admin) throw new Error('Supabase is not configured');
+    const {data,error}=await admin.from('platform_policies').select('config').eq('id','default').single();
+    if(error) throw new Error(error.message); return data?.config||{};
+  },
+
+  async updatePolicies(config: any, updatedBy: string): Promise<any> {
+    const admin=getSupabaseAdmin(); if(!admin) throw new Error('Supabase is not configured');
+    const {data,error}=await admin.from('platform_policies').upsert({id:'default',config,updated_by:updatedBy,updated_at:new Date().toISOString()}).select('config').single();
+    if(error||!data) throw new Error(error?.message||'Policy update failed'); return data.config;
   }
 };
