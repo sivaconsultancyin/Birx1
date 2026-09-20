@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import crypto from 'node:crypto';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import {
@@ -40,136 +41,26 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// -------------------------------------------------------------
-// IN-MEMORY SERVER-AUTHORITATIVE STATE STORE
-// Synchronized with Supabase Single Source of Truth
-// -------------------------------------------------------------
-const currentUser: User = {
-  id: 'usr_brix_8849',
-  email: 'player@brix.casino',
-  mobile: '+91 98765 43210',
-  username: 'LuckyBrix',
-  role: 'PLAYER',
-  parentId: 'usr_admin_001',
-  avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-  isDemo: true,
-  vipTier: 'Gold',
-  createdAt: new Date().toISOString()
-};
+// Request-scoped identity only. Never use process-global user/wallet state for authorization.
+const gameHistories: GameHistoryEntry[] = [];
+const transactions: Transaction[] = [];
+const currentUser = {} as User;
+const userWallet = {} as Wallet;
 
-const userWallet: Wallet = {
-  balance: 25000,
-  bonus: 1000,
-  currency: 'INR',
-  isDemo: true
-};
-
-const transactions: Transaction[] = [
-  {
-    id: 'tx_init_1001',
-    type: 'deposit',
-    amount: 25000,
-    status: 'success',
-    description: 'Welcome Credits (Demo Reserve)',
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    referenceId: 'UPI-DEMO-99887711'
-  },
-  {
-    id: 'tx_init_1002',
-    type: 'bonus',
-    amount: 1000,
-    status: 'success',
-    description: 'First Login Gold Bonus',
-    createdAt: new Date(Date.now() - 3600000 * 20).toISOString(),
-    referenceId: 'BONUS-GOLD-772'
-  }
-];
-
-const gameHistories: GameHistoryEntry[] = [
-  {
-    id: 'gh_hist_901',
-    gameId: 'aviator',
-    gameName: 'Aviator',
-    betAmount: 500,
-    winAmount: 1420,
-    outcome: 'Cashed out @ 2.84x',
-    multiplier: 2.84,
-    settlementStatus: 'settled',
-    createdAt: new Date(Date.now() - 1000 * 60 * 15).toISOString()
-  },
-  {
-    id: 'gh_hist_902',
-    gameId: 'teen-patti',
-    gameName: 'Teen Patti',
-    betAmount: 200,
-    winAmount: 600,
-    outcome: 'Won with Color / Flush (Hearts)',
-    multiplier: 3.0,
-    settlementStatus: 'settled',
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString()
-  },
-  {
-    id: 'gh_hist_903',
-    gameId: 'roulette',
-    gameName: 'Roulette',
-    betAmount: 100,
-    winAmount: 0,
-    outcome: 'Landed on 17 Black (Bet: Red)',
-    multiplier: 0,
-    settlementStatus: 'settled',
-    createdAt: new Date(Date.now() - 1000 * 60 * 90).toISOString()
-  }
-];
-
-// Helper: record transaction & ledger (authoritative single source of truth)
-function deductWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string): boolean {
-  if (userWallet.balance < amount) return false;
-  userWallet.balance -= amount;
-  const tx: Transaction = {
-    id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    userId: currentUser.id,
-    type: 'bet',
-    amount,
-    status: 'success',
-    gameId,
-    description,
-    createdAt: new Date().toISOString(),
-    referenceId: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
-    idempotencyKey
-  };
-  transactions.unshift(tx);
-  // Persist into Supabase PostgreSQL atomic wallet ledger
-  supabaseRepo.atomicDebit(currentUser.id, amount, 'bet', description, gameId, idempotencyKey).catch(() => {});
-  return true;
+async function getRequestUser(req: Request): Promise<User> {
+  if (!req.user) throw new Error('Authentication required');
+  return req.user;
 }
 
-function creditWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string) {
-  userWallet.balance += amount;
-  const tx: Transaction = {
-    id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    userId: currentUser.id,
-    type: 'payout',
-    amount,
-    status: 'success',
-    gameId,
-    description,
-    createdAt: new Date().toISOString(),
-    referenceId: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
-    idempotencyKey
-  };
-  transactions.unshift(tx);
-  // Persist into Supabase PostgreSQL atomic wallet ledger
-  supabaseRepo.atomicCredit(currentUser.id, amount, 'payout', description, gameId, idempotencyKey).catch(() => {});
+async function debitForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string) {
+  const user = await getRequestUser(req);
+  return supabaseRepo.atomicDebit(user.id, amount, 'bet', description, gameId, idempotencyKey);
 }
 
-function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'>) {
-  gameHistories.unshift({
-    ...entry,
-    id: `gh_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    createdAt: new Date().toISOString()
-  });
+async function creditForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string) {
+  const user = await getRequestUser(req);
+  return supabaseRepo.atomicCredit(user.id, amount, 'payout', description, gameId, idempotencyKey);
 }
-
 // -------------------------------------------------------------
 // SSE STREAM FOR REAL-TIME EVENTS
 // -------------------------------------------------------------
@@ -215,112 +106,76 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// AUTH ENDPOINTS
-// -------------------------------------------------------------
-const otps: Record<string, string> = {
-  '9876543210': '1234'
-};
+ // AUTH ENDPOINTS
+ // -------------------------------------------------------------
+const otps = new Map<string, { codeHash: string; expiresAt: number; attempts: number }>();
+
+function normalizeMobile(value: unknown): string {
+  const digits = String(value || '').replace(/\\D/g, '');
+  if (digits.length < 10 || digits.length > 15) throw new Error('Invalid mobile number');
+  return digits;
+}
 
 app.post('/api/auth/send-otp', (req: Request, res: Response) => {
-  const { mobile } = req.body;
-  if (!mobile || mobile.length < 10) {
-    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
+  try {
+    const mobile = normalizeMobile(req.body.mobile);
+    const code = crypto.randomInt(100000, 1000000).toString();
+    otps.set(mobile, { codeHash: crypto.createHash('sha256').update(code).digest('hex'), expiresAt: Date.now() + 5 * 60_000, attempts: 0 });
+    // Integrate an SMS provider here; never return the OTP from the API.
+    res.json({ success: true, message: 'OTP sent successfully.' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
-  // Generate demo 4-digit OTP
-  const code = '1234';
-  otps[mobile.slice(-10)] = code;
-  return res.json({
-    success: true,
-    message: 'OTP sent successfully! (Demo OTP: 1234)',
-    demoOtp: '1234'
-  });
 });
 
 app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
-  const { mobile, otp } = req.body;
-  const cleanMobile = mobile ? mobile.slice(-10) : '';
-  const validOtp = otps[cleanMobile] || '1234';
-
-  if (otp !== validOtp && otp !== '1234') {
-    return res.status(400).json({ error: 'Invalid OTP code. Try entering 1234 for Demo.' });
+  try {
+    const mobile = normalizeMobile(req.body.mobile);
+    const otp = String(req.body.otp || '');
+    const record = otps.get(mobile);
+    if (!record || Date.now() > record.expiresAt || record.attempts >= 5) return res.status(400).json({ error: 'Invalid or expired OTP' });
+    record.attempts++;
+    const hash = crypto.createHash('sha256').update(otp).digest('hex');
+    if (hash !== record.codeHash) return res.status(400).json({ error: 'Invalid or expired OTP' });
+    otps.delete(mobile);
+    const session = await authService.login(mobile, otp);
+    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
-
-  const session = await authService.login(cleanMobile || '9876543210', otp);
-  currentUser.id = session.user.id;
-  currentUser.mobile = session.user.mobile;
-  currentUser.username = session.user.username;
-  currentUser.role = session.user.role;
-  currentUser.parentId = session.user.parentId;
-  userWallet.balance = session.wallet.balance;
-  userWallet.bonus = session.wallet.bonus;
-
-  return res.json({
-    success: true,
-    token: session.token,
-    user: session.user,
-    wallet: session.wallet
-  });
 });
 
 app.post('/api/auth/register', async (req: Request, res: Response) => {
-  const { mobile, otp, username, role = 'PLAYER' } = req.body;
-  if (!username || username.trim().length < 3) {
-    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  try {
+    const mobile = normalizeMobile(req.body.mobile);
+    const username = String(req.body.username || '').trim();
+    if (username.length < 3 || username.length > 50) return res.status(400).json({ error: 'Username must be 3-50 characters' });
+    const session = await authService.register(mobile, username, 'PLAYER');
+    res.status(201).json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
-  const cleanMobile = mobile ? mobile.slice(-10) : '9876543210';
-  const session = await authService.register(cleanMobile, username.trim(), role);
-  currentUser.id = session.user.id;
-  currentUser.mobile = session.user.mobile;
-  currentUser.username = session.user.username;
-  currentUser.role = session.user.role;
-  currentUser.parentId = session.user.parentId;
-  userWallet.balance = session.wallet.balance;
-  userWallet.bonus = session.wallet.bonus;
-
-  return res.json({
-    success: true,
-    token: session.token,
-    user: session.user,
-    wallet: session.wallet
-  });
 });
 
-app.post('/api/auth/switch-role', async (req: Request, res: Response) => {
-  const { role } = req.body;
-  if (!role || !['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role' });
+app.post('/api/auth/switch-role', requireAuth, requireRoles(['OWNER']), async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEV_ROLE_SWITCH !== 'true') {
+    return res.status(403).json({ error: 'Role switching is disabled.' });
   }
-
-  const session = await authService.switchRole(currentUser.id, role);
-  currentUser.role = session.user.role;
-
-  return res.json({
-    success: true,
-    token: session.token,
-    user: session.user,
-    wallet: session.wallet
-  });
+  try {
+    const { role } = req.body;
+    if (!['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+    const session = await authService.switchRole(req.user!.id, role);
+    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
-app.get('/api/auth/me', async (req: Request, res: Response) => {
-  const token = authService.extractToken(req);
-  if (token) {
-    const resolvedUser = await authService.resolveUserFromToken(token);
-    if (resolvedUser) {
-      currentUser.id = resolvedUser.id;
-      currentUser.username = resolvedUser.username;
-      currentUser.role = resolvedUser.role;
-      currentUser.parentId = resolvedUser.parentId;
-      currentUser.mobile = resolvedUser.mobile;
-    }
-  }
-  const wallet = await supabaseRepo.getWallet(currentUser.id);
-  userWallet.balance = wallet.balance;
-  userWallet.bonus = wallet.bonus;
-  res.json({ user: currentUser, wallet: userWallet });
+app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
+  res.json({ user: req.user, wallet: req.wallet });
 });
 
-app.post('/api/auth/logout', (_req: Request, res: Response) => {
+app.post('/api/auth/logout', requireAuth, (_req: Request, res: Response) => {
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
