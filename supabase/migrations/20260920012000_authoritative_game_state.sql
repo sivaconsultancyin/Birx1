@@ -18,3 +18,17 @@ begin
   return coalesce(claimed,false);
 end $$;
 revoke all on function public.claim_game_lease(text,text,timestamptz) from public,anon,authenticated;
+
+-- Defense in depth: client roles can never access authoritative state directly.
+ALTER TABLE public.authoritative_game_states ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.game_state_leases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_policies ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_client_access" ON public.authoritative_game_states;
+DROP POLICY IF EXISTS "deny_all_client_access" ON public.game_state_leases;
+DROP POLICY IF EXISTS "deny_all_client_access" ON public.platform_claims;
+DROP POLICY IF EXISTS "deny_all_client_access" ON public.platform_policies;
+CREATE POLICY "deny_all_client_access" ON public.authoritative_game_states FOR ALL TO anon, authenticated USING (false) WITH CHECK (false);
+CREATE POLICY "deny_all_client_access" ON public.game_state_leases FOR ALL TO anon, authenticated USING (false) WITH CHECK (false);
+CREATE POLICY "deny_all_client_access" ON public.platform_claims FOR ALL TO anon, authenticated USING (false) WITH CHECK (false);
+CREATE POLICY "deny_all_client_access" ON public.platform_policies FOR ALL TO anon, authenticated USING (false) WITH CHECK (false);
