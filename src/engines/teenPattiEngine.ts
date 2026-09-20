@@ -17,7 +17,7 @@ export const TEEN_PATTI_PAYOUT_MULTIPLIERS: Record<TeenPattiHandRank, number> = 
   'High Card': 1
 };
 
-export const MAX_PLAYERS = 16;
+export const MAX_PLAYERS = 1;
 export const BETTING_DURATION_SEC = 15;
 export const LOCK_DURATION_SEC = 1;
 export const DEAL_DURATION_SEC = 5;
@@ -358,14 +358,9 @@ export function createAuthoritativeTeenPattiRound(
     handRankName: dealerEval.rankName
   };
 
-  // Up to 16 total players (1 user + 15 bots)
-  const players: TeenPattiPlayer[] = [];
-
-  // Player 0: User
-  const userCards: Card[] = [shuffledDeck.pop()!, shuffledDeck.pop()!, shuffledDeck.pop()!];
-  const userEval = evaluateTeenPattiHand(userCards);
-
-  players.push({
+  // Single-player mode: exactly one human player versus the dealer.
+  // No multiplayer table and no bot opponents.
+  const players: TeenPattiPlayer[] = [{
     id: 'user_me',
     name: userUsername,
     avatar: userAvatar,
@@ -375,31 +370,9 @@ export function createAuthoritativeTeenPattiRound(
     folded: false,
     currentBet: defaultStake,
     handRankName: userEval.rankName
-  });
+  }];
 
-  // Players 1 to 15: Multiplayer bots
-  let pot = defaultStake;
-  const botBetOptions = [20, 50, 50, 100, 100, 200];
-
-  for (let i = 0; i < 15; i++) {
-    const botInfo = BOT_NAMES_AND_AVATARS[i];
-    const bCards: Card[] = [shuffledDeck.pop()!, shuffledDeck.pop()!, shuffledDeck.pop()!];
-    const bEval = evaluateTeenPattiHand(bCards);
-    const botBet = botBetOptions[i % botBetOptions.length];
-    pot += botBet;
-
-    players.push({
-      id: `bot_${botInfo.name.toLowerCase()}_${i + 1}`,
-      name: botInfo.name,
-      avatar: botInfo.avatar,
-      isUser: false,
-      cards: bCards,
-      seen: false,
-      folded: false,
-      currentBet: botBet,
-      handRankName: bEval.rankName
-    });
-  }
+  const pot = defaultStake;
 
   const now = Date.now();
   const roundId = 'TP-' + Math.floor(1000 + Math.random() * 9000);
@@ -420,12 +393,7 @@ export function createAuthoritativeTeenPattiRound(
     bettingEndsAt: now + BETTING_DURATION_SEC * 1000,
     phaseEndsAt: now + BETTING_DURATION_SEC * 1000,
     serverTime: now,
-    recentWinners: [
-      { name: 'Vikram', amount: 1250, hand: 'Pure Sequence' },
-      { name: 'LuckyBrix', amount: 2500, hand: 'Trail / Trio' },
-      { name: 'Ananya', amount: 800, hand: 'Color / Flush' }
-    ]
-  };
+    recentWinners: []  };
 }
 
 // -------------------------------------------------------------
