@@ -57,6 +57,46 @@ let activeTeenPattiUser: User | null = null;
 // -------------------------------------------------------------
 
 // -------------------------------------------------------------
+// AUTH API
+// -------------------------------------------------------------
+app.post('/api/auth/send-otp', async (req: Request, res: Response) => {
+  try {
+    const mobile = String(req.body?.mobile || '');
+    return res.json(await authService.sendOtp(mobile));
+  } catch (error) {
+    return res.status(400).json({ error: error instanceof Error ? error.message : 'OTP send failed' });
+  }
+});
+
+app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
+  try {
+    const mobile = String(req.body?.mobile || '');
+    const otp = String(req.body?.otp || '');
+    if (!mobile || !otp) return res.status(400).json({ error: 'Mobile and OTP are required' });
+    return res.json(await authService.verifyOtp(mobile, otp));
+  } catch (error) {
+    return res.status(401).json({ error: error instanceof Error ? error.message : 'OTP verification failed' });
+  }
+});
+
+app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
+  const user = requireActor(req);
+  return res.json({ user, wallet: await getRequestWallet(req) });
+});
+
+app.post('/api/auth/logout', requireAuth, async (_req: Request, res: Response) => {
+  return res.json({ success: true, message: 'Sign out on the client using Supabase Auth.' });
+});
+
+app.post('/api/auth/register', (_req: Request, res: Response) => {
+  return res.status(410).json({ error: 'Legacy registration disabled. Use Supabase phone OTP.' });
+});
+
+app.post('/api/auth/switch-role', (_req: Request, res: Response) => {
+  return res.status(410).json({ error: 'Role switching disabled.' });
+});
+
+// -------------------------------------------------------------
 // 2. TEEN PATTI ENGINE (SERVER-AUTHORITATIVE MULTIPLAYER)
 // -------------------------------------------------------------
 let teenPattiState: TeenPattiState = createAuthoritativeTeenPattiRound(
@@ -210,10 +250,10 @@ const handleGetTeenPattiState = (req: Request, res: Response) => {
   });
 };
 
-app.get('/api/games/teen-patti/state', requireAuth, handleGetTeenPattiState);
-app.get('/games/teen-patti/state', requireAuth, handleGetTeenPattiState);
+app.get('/api/games/teen-patti/state', requireAuth, requirePlayerForGames,  requireAuth, handleGetTeenPattiState);
+app.get('/games/teen-patti/state', requireAuth, requirePlayerForGames,  requireAuth, handleGetTeenPattiState);
 
-const handlePostTeenPattiBet = (req: Request, res: Response) => {
+const handlePostTeenPattiBet = async (req: Request, res: Response) => {
   activeTeenPattiUser = requireActor(req);
   const { amount }: { amount: number } = req.body;
   const betAmount = Number(amount);
@@ -257,10 +297,10 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
   });
 };
 
-app.post('/api/games/teen-patti/bet', handlePostTeenPattiBet);
-app.post('/games/teen-patti/bet', handlePostTeenPattiBet);
+app.post('/api/games/teen-patti/bet', requireAuth, requirePlayerForGames, handlePostTeenPattiBet);
+app.post('/games/teen-patti/bet', requireAuth, requirePlayerForGames, handlePostTeenPattiBet);
 
-const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
+const handlePostTeenPattiNewRound = async (req: Request, res: Response) => {
   activeTeenPattiUser = requireActor(req);
   const bootAmount = Number(req.body?.bootAmount || 50);
   const userPlayer = teenPattiState.players.find((p) => p.isUser);
@@ -281,10 +321,10 @@ const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
   });
 };
 
-app.post('/api/games/teen-patti/new-round', handlePostTeenPattiNewRound);
-app.post('/games/teen-patti/new-round', handlePostTeenPattiNewRound);
+app.post('/api/games/teen-patti/new-round', requireAuth, requirePlayerForGames, handlePostTeenPattiNewRound);
+app.post('/games/teen-patti/new-round', requireAuth, requirePlayerForGames, handlePostTeenPattiNewRound);
 
-const handlePostTeenPattiAction = (req: Request, res: Response) => {
+const handlePostTeenPattiAction = async (req: Request, res: Response) => {
   activeTeenPattiUser = requireActor(req);
   const { action, betAmount = 0 }: { action: 'see' | 'blind' | 'chaal' | 'fold' | 'show' | 'bet'; betAmount?: number } =
     req.body;
@@ -322,8 +362,8 @@ const handlePostTeenPattiAction = (req: Request, res: Response) => {
   return res.status(400).json({ error: 'Unknown action' });
 };
 
-app.post('/api/games/teen-patti/action', handlePostTeenPattiAction);
-app.post('/games/teen-patti/action', handlePostTeenPattiAction);
+app.post('/api/games/teen-patti/action', requireAuth, requirePlayerForGames, handlePostTeenPattiAction);
+app.post('/games/teen-patti/action', requireAuth, requirePlayerForGames, handlePostTeenPattiAction);
 
 // -------------------------------------------------------------
 // 3. AVIATOR ENGINE (SERVER-AUTHORITATIVE)
@@ -425,7 +465,7 @@ function startAviatorFlight() {
 // Start initial aviator flight cycle
 runAviatorCycle();
 
-app.get('/api/games/aviator/state', (_req: Request, res: Response) => {
+app.get('/api/games/aviator/state', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
   res.json({
     state: {
       ...aviatorState,
@@ -434,7 +474,7 @@ app.get('/api/games/aviator/state', (_req: Request, res: Response) => {
   });
 });
 
-app.post('/api/games/aviator/bet', (req: Request, res: Response) => {
+app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { amount } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 10) {
@@ -462,7 +502,7 @@ app.post('/api/games/aviator/bet', (req: Request, res: Response) => {
   });
 });
 
-app.post('/api/games/aviator/cashout', (_req: Request, res: Response) => {
+app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async (_req: Request, res: Response) => {
   if (!currentAviatorBet || currentAviatorBet.cashedOut) {
     return res.status(400).json({ error: 'No active bet to cash out' });
   }
@@ -512,11 +552,11 @@ let diceState: DiceState = {
   countdown: 10
 };
 
-app.get('/api/games/dice/state', (_req: Request, res: Response) => {
+app.get('/api/games/dice/state', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
   res.json({ state: diceState });
 });
 
-app.post('/api/games/dice/roll', (req: Request, res: Response) => {
+app.post('/api/games/dice/roll', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betType, amount }: { betType: 'under7' | 'exact7' | 'over7' | 'even' | 'odd' | 'doubles'; amount: number } =
     req.body;
   const numAmount = Number(amount);
@@ -591,11 +631,11 @@ let dragonTigerState: DragonTigerState = {
   countdown: 10
 };
 
-app.get('/api/games/dragon-tiger/state', (_req: Request, res: Response) => {
+app.get('/api/games/dragon-tiger/state', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
   res.json({ state: dragonTigerState });
 });
 
-app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
+app.post('/api/games/dragon-tiger/deal', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: DragonTigerBetSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
@@ -812,7 +852,7 @@ setInterval(() => {
   }
 }, 1000);
 
-app.get('/api/games/andar-bahar/state', (_req: Request, res: Response) => {
+app.get('/api/games/andar-bahar/state', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
   res.json({
     state: {
       ...andarBaharState,
@@ -821,7 +861,7 @@ app.get('/api/games/andar-bahar/state', (_req: Request, res: Response) => {
   });
 });
 
-app.post('/api/games/andar-bahar/deal', (req: Request, res: Response) => {
+app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: AndarBaharSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
