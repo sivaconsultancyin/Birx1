@@ -20,7 +20,7 @@ const isConfigured = Boolean(
   SUPABASE_URL &&
   SUPABASE_URL.startsWith('http') &&
   !SUPABASE_URL.includes('your-project') &&
-  (SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY)
+  SUPABASE_SERVICE_ROLE_KEY && SUPABASE_ANON_KEY
 );
 
 // Lazy initialized clients
@@ -30,7 +30,7 @@ let cachedPublicClient: SupabaseClient | null = null;
 export function getSupabaseAdmin(): SupabaseClient | null {
   if (!isConfigured) return null;
   if (!cachedAdminClient) {
-    const key = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+    const key = SUPABASE_SERVICE_ROLE_KEY;
     cachedAdminClient = createClient(SUPABASE_URL, key, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
@@ -39,9 +39,9 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 }
 
 export function getSupabasePublic(): SupabaseClient | null {
-  if (!isConfigured) return null;
+  if (!isConfigured || !SUPABASE_ANON_KEY) return null;
   if (!cachedPublicClient) {
-    cachedPublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY);
+    cachedPublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
   return cachedPublicClient;
 }
