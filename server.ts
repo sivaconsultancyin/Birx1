@@ -1201,7 +1201,7 @@ setInterval(async () => {
         grossPayout: settlement.grossPayout,
         netResult: settlement.netResult,
         settlementStatus: 'settled',
-        wallet: await supabaseRepo.getWallet(req.user!.id),
+        wallet: undefined,
         recentResults: rouletteState.recentResults
       };
 
