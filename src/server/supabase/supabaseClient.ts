@@ -88,111 +88,6 @@ const dbStore: DbStore = {
   settlements: new Map()
 };
 
-// Seed initial hierarchy
-function seedInitialStore() {
-  const seedUsers: User[] = [
-    {
-      id: 'usr_owner_001',
-      email: 'owner@brix.casino',
-      mobile: '+91 99999 00001',
-      username: 'BrixOwner',
-      role: 'OWNER',
-      vipTier: 'Platinum',
-      isDemo: false,
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'usr_super_001',
-      email: 'superadmin@brix.casino',
-      mobile: '+91 99999 00002',
-      username: 'ChiefSuperAdmin',
-      role: 'SUPER_ADMIN',
-      parentId: 'usr_owner_001',
-      vipTier: 'Platinum',
-      isDemo: false,
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'usr_admin_001',
-      email: 'admin@brix.casino',
-      mobile: '+91 99999 00003',
-      username: 'MasterAdmin',
-      role: 'ADMIN',
-      parentId: 'usr_super_001',
-      vipTier: 'Gold',
-      isDemo: false,
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'usr_brix_8849',
-      email: 'player@brix.casino',
-      mobile: '+91 98765 43210',
-      username: 'LuckyBrix',
-      role: 'PLAYER',
-      parentId: 'usr_admin_001',
-      vipTier: 'Gold',
-      isDemo: true,
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'usr_player_002',
-      email: 'alex.highroller@brix.casino',
-      mobile: '+91 98111 22334',
-      username: 'HighRollerAlex',
-      role: 'PLAYER',
-      parentId: 'usr_admin_001',
-      vipTier: 'Platinum',
-      isDemo: false,
-      createdAt: new Date(Date.now() - 3600000 * 48).toISOString()
-    }
-  ];
-
-  seedUsers.forEach((u) => dbStore.users.set(u.id, u));
-
-  dbStore.wallets.set('usr_owner_001', { balance: 5000000, bonus: 0, currency: 'INR', isDemo: false });
-  dbStore.wallets.set('usr_super_001', { balance: 1000000, bonus: 0, currency: 'INR', isDemo: false });
-  dbStore.wallets.set('usr_admin_001', { balance: 250000, bonus: 0, currency: 'INR', isDemo: false });
-  dbStore.wallets.set('usr_brix_8849', { balance: 25000, bonus: 1000, lockedAmount: 0, currency: 'INR', isDemo: true });
-  dbStore.wallets.set('usr_player_002', { balance: 75000, bonus: 5000, lockedAmount: 0, currency: 'INR', isDemo: false });
-
-  dbStore.transactions.push(
-    {
-      id: 'tx_init_1001',
-      userId: 'usr_brix_8849',
-      type: 'deposit',
-      amount: 25000,
-      status: 'success',
-      description: 'Welcome Reserve Credits',
-      referenceId: 'UPI-DEMO-99887711',
-      createdAt: new Date(Date.now() - 3600000 * 24).toISOString()
-    },
-    {
-      id: 'tx_init_1002',
-      userId: 'usr_brix_8849',
-      type: 'bonus',
-      amount: 1000,
-      status: 'success',
-      description: 'First Login Gold Bonus',
-      referenceId: 'BONUS-GOLD-772',
-      createdAt: new Date(Date.now() - 3600000 * 20).toISOString()
-    }
-  );
-
-  dbStore.recharges.push({
-    id: 'rch_1001',
-    userId: 'usr_brix_8849',
-    username: 'LuckyBrix',
-    amount: 10000,
-    method: 'UPI',
-    status: 'approved',
-    approvedBy: 'usr_admin_001',
-    createdAt: new Date(Date.now() - 3600000 * 12).toISOString()
-  });
-}
-
-seedInitialStore();
-
 // ---------------------------------------------------------------------
 // AUTHORITATIVE SUPABASE REPOSITORY
 // ---------------------------------------------------------------------
@@ -217,7 +112,8 @@ export const supabaseRepo = {
         };
       }
     }
-    return dbStore.users.get(id) || null;
+    if (!admin) return dbStore.users.get(id) || null;
+    return null;
   },
 
   async getUserByEmailOrMobile(identifier: string): Promise<User | null> {
@@ -245,13 +141,13 @@ export const supabaseRepo = {
       }
     }
 
-    for (const u of dbStore.users.values()) {
-      if (
-        (u.email && u.email.toLowerCase() === clean) ||
-        (u.mobile && u.mobile.replace(/\D/g, '').includes(clean.replace(/\D/g, ''))) ||
-        u.username.toLowerCase() === clean
-      ) {
-        return u;
+    if (!admin) {
+      for (const u of dbStore.users.values()) {
+        if (
+          (u.email && u.email.toLowerCase() === clean) ||
+          (u.mobile && u.mobile.replace(/\D/g, '').includes(clean.replace(/\D/g, ''))) ||
+          u.username.toLowerCase() === clean
+        ) return u;
       }
     }
     return null;
@@ -283,15 +179,17 @@ export const supabaseRepo = {
       if (walletError) throw new Error(`Wallet creation failed: ${walletError.message}`);
     }
 
-    dbStore.users.set(user.id, user);
-    if (!dbStore.wallets.has(user.id)) {
-      dbStore.wallets.set(user.id, {
-        balance: 0,
-        bonus: 0,
-        lockedAmount: 0,
-        currency: 'INR',
-        isDemo: false
-      });
+    if (!admin) {
+      dbStore.users.set(user.id, user);
+      if (!dbStore.wallets.has(user.id)) {
+        dbStore.wallets.set(user.id, {
+          balance: 0,
+          bonus: 0,
+          lockedAmount: 0,
+          currency: 'INR',
+          isDemo: false
+        });
+      }
     }
     return user;
   },
@@ -305,7 +203,7 @@ export const supabaseRepo = {
     if (admin) {
       await admin.from('users').update({ role: newRole }).eq('id', targetUserId);
     }
-    dbStore.users.set(targetUserId, user);
+    if (!admin) dbStore.users.set(targetUserId, user);
     return user;
   },
 
@@ -331,7 +229,7 @@ export const supabaseRepo = {
       }
     }
 
-    const sourceUsers = allUsers.length > 0 ? allUsers : Array.from(dbStore.users.values());
+    const sourceUsers = admin ? allUsers : Array.from(dbStore.users.values());
 
     // Role Hierarchy Visibility Filtering:
     // - OWNER can view ALL users
@@ -399,6 +297,7 @@ export const supabaseRepo = {
     if (error) throw new Error(`Atomic wallet debit failed: ${error.message}`);
     if (!data || !data.success) throw new Error('Atomic wallet debit failed without a successful result.');
     return data;
+  },
 
   // ATOMIC WALLET CREDIT
   async atomicCredit(
@@ -430,6 +329,7 @@ export const supabaseRepo = {
     if (error) throw new Error(`Atomic wallet credit failed: ${error.message}`);
     if (!data || !data.success) throw new Error('Atomic wallet credit failed without a successful result.');
     return data;
+  },
 
   // COIN RECHARGE
   async createRecharge(userId: string, amount: number, method = 'UPI'): Promise<CoinRecharge> {
