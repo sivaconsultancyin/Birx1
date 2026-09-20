@@ -53,8 +53,6 @@ app.use((_req: Request, res: Response, next) => {
 // Request-scoped identity only. Never use process-global user/wallet state for authorization.
 const gameHistories: GameHistoryEntry[] = [];
 const transactions: Transaction[] = [];
-const currentUser = {} as User;
-const userWallet = {} as Wallet;
 
 async function getRequestUser(req: Request): Promise<User> {
   if (!req.user) throw new Error('Authentication required');
@@ -261,10 +259,6 @@ app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER',
     const actor = req.user!;
     const recharge = await walletService.approveCoinRecharge(req.params.id, actor.id);
     // Sync local wallet if it was for current user
-    if (recharge.userId === currentUser.id) {
-      userWallet.balance += recharge.amount;
-      broadcastSSE('wallet_updated', { wallet: userWallet });
-    }
     res.json({ success: true, recharge });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -301,10 +295,6 @@ app.post('/api/admin/withdrawals/:id/reject', requireAuth, requireRoles(['OWNER'
   try {
     const actor = req.user!;
     const withdrawal = await walletService.rejectWithdrawal(req.params.id, actor.id);
-    if (withdrawal.userId === currentUser.id) {
-      userWallet.balance += withdrawal.amount;
-      broadcastSSE('wallet_updated', { wallet: userWallet });
-    }
     res.json({ success: true, withdrawal });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -359,7 +349,7 @@ app.post('/api/storage/documents/upload', requireAuth, requireRoles(['OWNER', 'S
       category,
       url: url || `/assets/docs/${name}`,
       size: Number(size) || 125000,
-      uploadedBy: uploadedBy || (req.user?.id || currentUser.id)
+      uploadedBy: req.user!.id
     });
     res.json({ success: true, document: doc });
   } catch (err: any) {
@@ -903,7 +893,7 @@ setInterval(() => {
         grossPayout: settlement.grossPayout,
         netResult: settlement.netResult,
         settlementStatus: 'settled',
-        wallet: userWallet,
+        wallet: await supabaseRepo.getWallet(req.user!.id),
         recentResults: rouletteState.recentResults
       };
 
@@ -914,7 +904,7 @@ setInterval(() => {
         winningCategory: settlement.winningCategory
       });
       broadcastSSE('roulette_settlement', roundSettlements[rouletteState.roundId]);
-      broadcastSSE('roulette_wallet_updated', { wallet: userWallet });
+      broadcastSSE('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
     }
   } else if (rouletteState.phase === 'result') {
     rouletteState.countdown -= 1;
@@ -1060,7 +1050,7 @@ const handlePostRouletteBets = (req: Request, res: Response) => {
     roundId: rouletteState.roundId,
     bets: currentRoundBets[rouletteState.roundId],
     totalBetPlaced: totalBet,
-    wallet: userWallet,
+    wallet: await supabaseRepo.getWallet(req.user!.id),
     countdown: rouletteState.countdown
   };
 
@@ -1068,7 +1058,7 @@ const handlePostRouletteBets = (req: Request, res: Response) => {
     processedRouletteIdempotency.set(idempotencyKey, responsePayload);
   }
 
-  broadcastSSE('roulette_wallet_updated', { wallet: userWallet });
+  broadcastSSE('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
   return res.json(responsePayload);
 };
 app.post('/api/games/roulette/bets', handlePostRouletteBets);
@@ -1186,7 +1176,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
     netProfit: settlement.netResult,
     netResult: settlement.netResult,
     settlementStatus: 'settled',
-    wallet: userWallet,
+    wallet: await supabaseRepo.getWallet(req.user!.id),
     recentResults: rouletteState.recentResults
   };
 
@@ -1199,7 +1189,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
   broadcastSSE('roulette_spin_started', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor });
   broadcastSSE('roulette_result', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, category: settlement.winningCategory });
   broadcastSSE('roulette_settlement', fullSettlementResult);
-  broadcastSSE('roulette_wallet_updated', { wallet: userWallet });
+  broadcastSSE('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
 
   return res.json(fullSettlementResult);
 };
@@ -1210,11 +1200,7 @@ app.post('/games/roulette/spin', handlePostRouletteSpin);
 // -------------------------------------------------------------
 // 2. TEEN PATTI ENGINE (SERVER-AUTHORITATIVE MULTIPLAYER)
 // -------------------------------------------------------------
-let teenPattiState: TeenPattiState = createAuthoritativeTeenPattiRound(
-  currentUser.username,
-  currentUser.avatarUrl,
-  50
-);
+let teenPattiState: TeenPattiState = createAuthoritativeTeenPattiRound('Player', undefined, 50);
 
 // Background Authoritative Teen Patti Round Cycle
 setInterval(() => {
@@ -1334,12 +1320,12 @@ setInterval(() => {
       if (userSettlementDetail) {
         broadcastSSE('teen_patti_settlement', userSettlementDetail);
       }
-      broadcastSSE('wallet_updated', { wallet: userWallet });
+      broadcastSSE('wallet_updated', { userId: userPlayer?.id });
     }
   } else if (teenPattiState.phase === 'result') {
     teenPattiState.countdown -= 1;
     if (teenPattiState.countdown <= 0) {
-      teenPattiState = createAuthoritativeTeenPattiRound(currentUser.username, currentUser.avatarUrl, 50);
+      teenPattiState = createAuthoritativeTeenPattiRound('Player', undefined, 50);
       broadcastSSE('teen_patti_round_started', {
         roundId: teenPattiState.roundId,
         countdown: 15,
@@ -1402,7 +1388,7 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
   return res.json({
     success: true,
     state: sanitizeTeenPattiState(teenPattiState),
-    wallet: userWallet
+    wallet: await supabaseRepo.getWallet(req.user!.id)
   });
 };
 
@@ -1425,7 +1411,7 @@ const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
   return res.json({
     success: true,
     state: sanitizeTeenPattiState(teenPattiState),
-    wallet: userWallet
+    wallet: await supabaseRepo.getWallet(req.user!.id)
   });
 };
 
@@ -1446,7 +1432,7 @@ const handlePostTeenPattiAction = (req: Request, res: Response) => {
 
   if (action === 'fold') {
     userPlayer.folded = true;
-    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: userWallet });
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: await supabaseRepo.getWallet(req.user!.id) });
   }
 
   if (action === 'blind' || action === 'chaal' || action === 'bet') {
@@ -1459,11 +1445,11 @@ const handlePostTeenPattiAction = (req: Request, res: Response) => {
     }
     userPlayer.currentBet += stake;
     teenPattiState.pot += stake;
-    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: userWallet });
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: await supabaseRepo.getWallet(req.user!.id) });
   }
 
   if (action === 'show') {
-    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: userWallet });
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: await supabaseRepo.getWallet(req.user!.id) });
   }
 
   return res.status(400).json({ error: 'Unknown action' });
@@ -1604,7 +1590,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, (req: Req
   return res.json({
     success: true,
     bet: currentAviatorBet,
-    wallet: userWallet
+    wallet: await supabaseRepo.getWallet(req.user!.id)
   });
 });
 
@@ -1643,7 +1629,7 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, (req:
     success: true,
     cashMultiplier,
     winAmount: payout,
-    wallet: userWallet
+    wallet: await supabaseRepo.getWallet(req.user!.id)
   });
 });
 
@@ -1721,7 +1707,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
     isDoubles,
     multiplier,
     winAmount,
-    wallet: userWallet,
+    wallet: await supabaseRepo.getWallet(req.user!.id),
     recentSums: diceState.recentSums
   });
 });
@@ -1799,7 +1785,7 @@ app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
     winner,
     multiplier,
     winAmount,
-    wallet: userWallet,
+    wallet: await supabaseRepo.getWallet(req.user!.id),
     recentResults: dragonTigerState.recentResults
   });
 });
@@ -2000,7 +1986,7 @@ app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req
     winningSide: andarBaharFinalWinner,
     multiplier,
     winAmount,
-    wallet: userWallet,
+    wallet: await supabaseRepo.getWallet(req.user!.id),
     recentWinners: andarBaharState.recentWinners,
     state: andarBaharState
   });
