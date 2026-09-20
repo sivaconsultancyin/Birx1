@@ -390,7 +390,8 @@ export const supabaseRepo = {
       p_type: type,
       p_description: description,
       p_game_id: gameId || null,
-      p_idempotency_key: idempotencyKey || null
+      p_idempotency_key: idempotencyKey || null,
+      p_reference_id: `REF-${Date.now()}-${Math.floor(Math.random() * 1000000)}`
     });
     if (error) throw new Error(`Atomic wallet debit failed: ${error.message}`);
     if (!data || !data.success) throw new Error('Atomic wallet debit failed without a successful result.');
@@ -420,7 +421,8 @@ export const supabaseRepo = {
       p_type: type,
       p_description: description,
       p_game_id: gameId || null,
-      p_idempotency_key: idempotencyKey || null
+      p_idempotency_key: idempotencyKey || null,
+      p_reference_id: `REF-${Date.now()}-${Math.floor(Math.random() * 1000000)}`
     });
     if (error) throw new Error(`Atomic wallet credit failed: ${error.message}`);
     if (!data || !data.success) throw new Error('Atomic wallet credit failed without a successful result.');
