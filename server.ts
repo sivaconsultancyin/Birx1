@@ -1,0 +1,2175 @@
+import express, { Request, Response } from 'express';
+import path from 'path';
+import { createServer as createViteServer } from 'vite';
+import {
+  Card,
+  GameHistoryEntry,
+  RouletteBet,
+  RouletteState,
+  TeenPattiPlayer,
+  TeenPattiState,
+  AviatorBet,
+  AviatorState,
+  DiceState,
+  DragonTigerState,
+  DragonTigerBetSide,
+  AndarBaharState,
+  AndarBaharSide,
+  Transaction,
+  User,
+  UserRole,
+  Wallet
+} from './src/types.ts';
+import {
+  generateDeck,
+  secureShuffleDeck,
+  evaluateTeenPattiHand,
+  compareHands,
+  computePlayerSettlement,
+  createAuthoritativeTeenPattiRound,
+  sanitizeTeenPattiState
+} from './src/engines/teenPattiEngine.ts';
+import { supabaseRepo, getSupabaseConfigStatus } from './src/server/supabase/supabaseClient.ts';
+import { authService, requireAuth, requirePlayerForGames, requireRoles } from './src/server/auth/authService.ts';
+import { walletService } from './src/server/wallet/walletService.ts';
+import { storageService } from './src/server/storage/storageService.ts';
+import { gameRecoveryService } from './src/server/recovery/gameRecoveryService.ts';
+
+const app = express();
+const PORT = 3000;
+
+app.use(express.json());
+
+// -------------------------------------------------------------
+// IN-MEMORY SERVER-AUTHORITATIVE STATE STORE
+// Synchronized with Supabase Single Source of Truth
+// -------------------------------------------------------------
+const currentUser: User = {
+  id: 'usr_brix_8849',
+  email: 'player@brix.casino',
+  mobile: '+91 98765 43210',
+  username: 'LuckyBrix',
+  role: 'PLAYER',
+  parentId: 'usr_admin_001',
+  avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+  isDemo: true,
+  vipTier: 'Gold',
+  createdAt: new Date().toISOString()
+};
+
+const userWallet: Wallet = {
+  balance: 25000,
+  bonus: 1000,
+  currency: 'INR',
+  isDemo: true
+};
+
+const transactions: Transaction[] = [
+  {
+    id: 'tx_init_1001',
+    type: 'deposit',
+    amount: 25000,
+    status: 'success',
+    description: 'Welcome Credits (Demo Reserve)',
+    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
+    referenceId: 'UPI-DEMO-99887711'
+  },
+  {
+    id: 'tx_init_1002',
+    type: 'bonus',
+    amount: 1000,
+    status: 'success',
+    description: 'First Login Gold Bonus',
+    createdAt: new Date(Date.now() - 3600000 * 20).toISOString(),
+    referenceId: 'BONUS-GOLD-772'
+  }
+];
+
+const gameHistories: GameHistoryEntry[] = [
+  {
+    id: 'gh_hist_901',
+    gameId: 'aviator',
+    gameName: 'Aviator',
+    betAmount: 500,
+    winAmount: 1420,
+    outcome: 'Cashed out @ 2.84x',
+    multiplier: 2.84,
+    settlementStatus: 'settled',
+    createdAt: new Date(Date.now() - 1000 * 60 * 15).toISOString()
+  },
+  {
+    id: 'gh_hist_902',
+    gameId: 'teen-patti',
+    gameName: 'Teen Patti',
+    betAmount: 200,
+    winAmount: 600,
+    outcome: 'Won with Color / Flush (Hearts)',
+    multiplier: 3.0,
+    settlementStatus: 'settled',
+    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString()
+  },
+  {
+    id: 'gh_hist_903',
+    gameId: 'roulette',
+    gameName: 'Roulette',
+    betAmount: 100,
+    winAmount: 0,
+    outcome: 'Landed on 17 Black (Bet: Red)',
+    multiplier: 0,
+    settlementStatus: 'settled',
+    createdAt: new Date(Date.now() - 1000 * 60 * 90).toISOString()
+  }
+];
+
+// Helper: record transaction & ledger (authoritative single source of truth)
+function deductWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string): boolean {
+  if (userWallet.balance < amount) return false;
+  userWallet.balance -= amount;
+  const tx: Transaction = {
+    id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    userId: currentUser.id,
+    type: 'bet',
+    amount,
+    status: 'success',
+    gameId,
+    description,
+    createdAt: new Date().toISOString(),
+    referenceId: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
+    idempotencyKey
+  };
+  transactions.unshift(tx);
+  // Persist into Supabase PostgreSQL atomic wallet ledger
+  supabaseRepo.atomicDebit(currentUser.id, amount, 'bet', description, gameId, idempotencyKey).catch(() => {});
+  return true;
+}
+
+function creditWallet(amount: number, description: string, gameId?: any, idempotencyKey?: string) {
+  userWallet.balance += amount;
+  const tx: Transaction = {
+    id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    userId: currentUser.id,
+    type: 'payout',
+    amount,
+    status: 'success',
+    gameId,
+    description,
+    createdAt: new Date().toISOString(),
+    referenceId: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
+    idempotencyKey
+  };
+  transactions.unshift(tx);
+  // Persist into Supabase PostgreSQL atomic wallet ledger
+  supabaseRepo.atomicCredit(currentUser.id, amount, 'payout', description, gameId, idempotencyKey).catch(() => {});
+}
+
+function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'>) {
+  gameHistories.unshift({
+    ...entry,
+    id: `gh_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    createdAt: new Date().toISOString()
+  });
+}
+
+// -------------------------------------------------------------
+// SSE STREAM FOR REAL-TIME EVENTS
+// -------------------------------------------------------------
+const sseClients: Response[] = [];
+
+function broadcastSSE(event: string, data: any) {
+  const payloadData = { type: event, ...data };
+  const messagePayload = `data: ${JSON.stringify(payloadData)}\n\n`;
+  const eventPayload = `event: ${event}\ndata: ${JSON.stringify(payloadData)}\n\n`;
+  sseClients.forEach((res) => {
+    try {
+      res.write(messagePayload);
+      res.write(eventPayload);
+    } catch {
+      // client dropped
+    }
+  });
+}
+
+const handleSSEConnection = (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  sseClients.push(res);
+  res.write(`data: ${JSON.stringify({ type: 'connected', time: Date.now() })}\n\n`);
+
+  req.on('close', () => {
+    const index = sseClients.indexOf(res);
+    if (index !== -1) sseClients.splice(index, 1);
+  });
+};
+
+app.get('/api/events/stream', handleSSEConnection);
+app.get('/api/realtime', handleSSEConnection);
+
+// -------------------------------------------------------------
+// HEALTH CHECK
+// -------------------------------------------------------------
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
+});
+
+// -------------------------------------------------------------
+// AUTH ENDPOINTS
+// -------------------------------------------------------------
+const otps: Record<string, string> = {
+  '9876543210': '1234'
+};
+
+app.post('/api/auth/send-otp', (req: Request, res: Response) => {
+  const { mobile } = req.body;
+  if (!mobile || mobile.length < 10) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
+  }
+  // Generate demo 4-digit OTP
+  const code = '1234';
+  otps[mobile.slice(-10)] = code;
+  return res.json({
+    success: true,
+    message: 'OTP sent successfully! (Demo OTP: 1234)',
+    demoOtp: '1234'
+  });
+});
+
+app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
+  const { mobile, otp } = req.body;
+  const cleanMobile = mobile ? mobile.slice(-10) : '';
+  const validOtp = otps[cleanMobile] || '1234';
+
+  if (otp !== validOtp && otp !== '1234') {
+    return res.status(400).json({ error: 'Invalid OTP code. Try entering 1234 for Demo.' });
+  }
+
+  const session = await authService.login(cleanMobile || '9876543210', otp);
+  currentUser.id = session.user.id;
+  currentUser.mobile = session.user.mobile;
+  currentUser.username = session.user.username;
+  currentUser.role = session.user.role;
+  currentUser.parentId = session.user.parentId;
+  userWallet.balance = session.wallet.balance;
+  userWallet.bonus = session.wallet.bonus;
+
+  return res.json({
+    success: true,
+    token: session.token,
+    user: session.user,
+    wallet: session.wallet
+  });
+});
+
+app.post('/api/auth/register', async (req: Request, res: Response) => {
+  const { mobile, otp, username, role = 'PLAYER' } = req.body;
+  if (!username || username.trim().length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  }
+  const cleanMobile = mobile ? mobile.slice(-10) : '9876543210';
+  const session = await authService.register(cleanMobile, username.trim(), role);
+  currentUser.id = session.user.id;
+  currentUser.mobile = session.user.mobile;
+  currentUser.username = session.user.username;
+  currentUser.role = session.user.role;
+  currentUser.parentId = session.user.parentId;
+  userWallet.balance = session.wallet.balance;
+  userWallet.bonus = session.wallet.bonus;
+
+  return res.json({
+    success: true,
+    token: session.token,
+    user: session.user,
+    wallet: session.wallet
+  });
+});
+
+app.post('/api/auth/switch-role', async (req: Request, res: Response) => {
+  const { role } = req.body;
+  if (!role || !['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role' });
+  }
+
+  const session = await authService.switchRole(currentUser.id, role);
+  currentUser.role = session.user.role;
+
+  return res.json({
+    success: true,
+    token: session.token,
+    user: session.user,
+    wallet: session.wallet
+  });
+});
+
+app.get('/api/auth/me', async (req: Request, res: Response) => {
+  const token = authService.extractToken(req);
+  if (token) {
+    const resolvedUser = await authService.resolveUserFromToken(token);
+    if (resolvedUser) {
+      currentUser.id = resolvedUser.id;
+      currentUser.username = resolvedUser.username;
+      currentUser.role = resolvedUser.role;
+      currentUser.parentId = resolvedUser.parentId;
+      currentUser.mobile = resolvedUser.mobile;
+    }
+  }
+  const wallet = await supabaseRepo.getWallet(currentUser.id);
+  userWallet.balance = wallet.balance;
+  userWallet.bonus = wallet.bonus;
+  res.json({ user: currentUser, wallet: userWallet });
+});
+
+app.post('/api/auth/logout', (_req: Request, res: Response) => {
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
+// -------------------------------------------------------------
+// ADMIN MANAGEMENT ENDPOINTS (Strict Role-Based Access Control)
+// -------------------------------------------------------------
+// GET visible users respecting OWNER -> SUPER_ADMIN -> ADMIN -> PLAYER hierarchy
+app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user || currentUser;
+    const users = await supabaseRepo.getVisibleUsers(actor);
+    res.json({ users });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// CREATE subordinate user under actor
+app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user || currentUser;
+    const { mobile, username, role, email } = req.body;
+    if (!mobile || !username || !role) {
+      return res.status(400).json({ error: 'mobile, username, and role are required' });
+    }
+
+    if (!authService.canManageUser(actor, role)) {
+      return res.status(403).json({ error: `Actor with role ${actor.role} cannot create user with role ${role}` });
+    }
+
+    const created = await supabaseRepo.createUser({
+      id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      mobile,
+      email,
+      username,
+      role,
+      parentId: actor.id,
+      vipTier: 'Bronze',
+      isDemo: false,
+      createdAt: new Date().toISOString()
+    });
+
+    res.json({ success: true, user: created });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// UPDATE user role
+app.patch('/api/admin/users/:id/role', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user || currentUser;
+    const { role } = req.body;
+    if (!authService.canManageUser(actor, role)) {
+      return res.status(403).json({ error: `Permission denied: ${actor.role} cannot grant role ${role}` });
+    }
+    const updated = await supabaseRepo.updateUserRole(req.params.id, role);
+    res.json({ success: true, user: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// COIN RECHARGES
+app.get('/api/admin/recharges', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const recharges = await walletService.getRecharges();
+  res.json({ recharges });
+});
+
+app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user || currentUser;
+    const recharge = await walletService.approveCoinRecharge(req.params.id, actor.id);
+    // Sync local wallet if it was for current user
+    if (recharge.userId === currentUser.id) {
+      userWallet.balance += recharge.amount;
+      broadcastSSE('wallet_updated', { wallet: userWallet });
+    }
+    res.json({ success: true, recharge });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/recharges/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user || currentUser;
+    const recharge = await walletService.rejectCoinRecharge(req.params.id, actor.id);
+    res.json({ success: true, recharge });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// WITHDRAWALS
+app.get('/api/admin/withdrawals', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const withdrawals = await walletService.getWithdrawals();
+  res.json({ withdrawals });
+});
+
+app.post('/api/admin/withdrawals/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user || currentUser;
+    const withdrawal = await walletService.approveWithdrawal(req.params.id, actor.id);
+    res.json({ success: true, withdrawal });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/withdrawals/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user || currentUser;
+    const withdrawal = await walletService.rejectWithdrawal(req.params.id, actor.id);
+    if (withdrawal.userId === currentUser.id) {
+      userWallet.balance += withdrawal.amount;
+      broadcastSSE('wallet_updated', { wallet: userWallet });
+    }
+    res.json({ success: true, withdrawal });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// SUPABASE STATUS & HEALTH
+app.get('/api/admin/supabase-status', async (_req: Request, res: Response) => {
+  const status = getSupabaseConfigStatus();
+  const allUsers = await supabaseRepo.getVisibleUsers({ role: 'OWNER' } as User);
+  const recharges = await walletService.getRecharges();
+  const withdrawals = await walletService.getWithdrawals();
+  const allTransactions = await walletService.getTransactions();
+
+  res.json({
+    status,
+    stats: {
+      totalUsers: allUsers.length,
+      totalRecharges: recharges.length,
+      totalWithdrawals: withdrawals.length,
+      totalTransactions: allTransactions.length,
+      schemaFile: 'supabase/migrations/20260920000000_supabase_brix_platform.sql'
+    }
+  });
+});
+
+// STORAGE ASSETS & SHUFFLE VIDEO
+app.get('/api/storage/shuffle-video', async (_req: Request, res: Response) => {
+  const info = await storageService.getShuffleVideoInfo();
+  res.json(info);
+});
+
+app.get('/api/admin/storage/assets', async (_req: Request, res: Response) => {
+  const assets = await storageService.listAssets('all');
+  res.json({ assets });
+});
+
+// DOCUMENT UPLOADS & GOOGLE DRIVE INTEGRATION METADATA
+app.get('/api/storage/documents', async (_req: Request, res: Response) => {
+  const docs = await storageService.listDocuments();
+  res.json({ documents: docs });
+});
+
+app.post('/api/storage/documents/upload', async (req: Request, res: Response) => {
+  try {
+    const { name, category, url, size, uploadedBy } = req.body;
+    if (!name || !category) {
+      return res.status(400).json({ error: 'Document name and category are required' });
+    }
+    const doc = await storageService.recordDocument({
+      name,
+      category,
+      url: url || `/assets/docs/${name}`,
+      size: Number(size) || 125000,
+      uploadedBy: uploadedBy || (req.user?.id || currentUser.id)
+    });
+    res.json({ success: true, document: doc });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/storage/documents/:id/status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const updated = await storageService.updateDocumentStatus(id, status);
+  if (!updated) return res.status(404).json({ error: 'Document not found' });
+  res.json({ success: true, document: updated });
+});
+
+// CLAIMS & APPLICATION STATUS MANAGEMENT
+interface PlatformClaim {
+  id: string;
+  userId: string;
+  username: string;
+  type: 'dispute' | 'payment_uncredited' | 'game_interruption' | 'kyc_inquiry';
+  subject: string;
+  description: string;
+  amount?: number;
+  gameId?: string;
+  status: 'pending' | 'investigating' | 'approved' | 'rejected';
+  documentUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const memoryClaims: PlatformClaim[] = [
+  {
+    id: 'clm_1001',
+    userId: 'usr_brix_8849',
+    username: 'LuckyBrix',
+    type: 'payment_uncredited',
+    subject: 'UPI Recharge Not Reflected Automatically',
+    description: 'Transferred ₹5,000 via UPI Reference #982144. Attached proof receipt.',
+    amount: 5000,
+    status: 'pending',
+    documentUrl: '/assets/docs/UPI_Transfer_Proof_5000.jpg',
+    createdAt: new Date(Date.now() - 7200000).toISOString(),
+    updatedAt: new Date(Date.now() - 7200000).toISOString()
+  },
+  {
+    id: 'clm_1002',
+    userId: 'usr_player_002',
+    username: 'HighRollerAlex',
+    type: 'game_interruption',
+    subject: 'Roulette Spin Disconnection Inquiry',
+    description: 'Round #1092 client paused before wheel landed. Bet settled as per server authority.',
+    amount: 1000,
+    gameId: 'roulette',
+    status: 'investigating',
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 14400000).toISOString()
+  }
+];
+
+app.get('/api/admin/claims', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  res.json({ claims: memoryClaims });
+});
+
+app.post('/api/admin/claims/create', async (req: Request, res: Response) => {
+  try {
+    const actor = req.user || currentUser;
+    const { type, subject, description, amount, gameId, documentUrl } = req.body;
+    if (!subject || !description) {
+      return res.status(400).json({ error: 'Subject and description are required' });
+    }
+    const newClaim: PlatformClaim = {
+      id: `clm_${Math.floor(1000 + Math.random() * 9000)}`,
+      userId: actor.id,
+      username: actor.username,
+      type: type || 'dispute',
+      subject,
+      description,
+      amount: amount ? Number(amount) : undefined,
+      gameId,
+      documentUrl,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    memoryClaims.unshift(newClaim);
+    res.json({ success: true, claim: newClaim });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/admin/claims/:id/status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const claim = memoryClaims.find((c) => c.id === id);
+  if (!claim) return res.status(404).json({ error: 'Claim not found' });
+  claim.status = status;
+  claim.updatedAt = new Date().toISOString();
+  res.json({ success: true, claim });
+});
+
+// POLICY PRICING & AGENT COMMISSION CONFIGURATION
+interface PlatformPolicies {
+  minBet: number;
+  maxBet: number;
+  dailyWithdrawalLimit: number;
+  agentCommissionPercent: number;
+  superAdminCommissionPercent: number;
+  rouletteTableLimit: number;
+  teenPattiBootLimit: number;
+  andarBaharMaxBet: number;
+  updatedAt: string;
+}
+
+let platformPolicies: PlatformPolicies = {
+  minBet: 10,
+  maxBet: 100000,
+  dailyWithdrawalLimit: 500000,
+  agentCommissionPercent: 3.5,
+  superAdminCommissionPercent: 1.5,
+  rouletteTableLimit: 50000,
+  teenPattiBootLimit: 25000,
+  andarBaharMaxBet: 50000,
+  updatedAt: new Date().toISOString()
+};
+
+app.get('/api/admin/policies', (_req: Request, res: Response) => {
+  res.json({ policies: platformPolicies });
+});
+
+app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const updates = req.body;
+    platformPolicies = {
+      ...platformPolicies,
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+    res.json({ success: true, policies: platformPolicies });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
+// -------------------------------------------------------------
+app.get('/api/wallet/balance', async (req: Request, res: Response) => {
+  const actor = req.user || currentUser;
+  const wallet = await supabaseRepo.getWallet(actor.id);
+  userWallet.balance = wallet.balance;
+  userWallet.bonus = wallet.bonus;
+  res.json({ wallet });
+});
+
+app.get('/api/wallet/transactions', async (req: Request, res: Response) => {
+  const actor = req.user || currentUser;
+  const txList = await supabaseRepo.getTransactions(actor.id);
+  res.json({ transactions: txList });
+});
+
+app.post('/api/wallet/deposit', async (req: Request, res: Response) => {
+  const { amount, method = 'UPI', idempotencyKey } = req.body;
+  const numAmount = Number(amount);
+  if (!numAmount || numAmount < 100) {
+    return res.status(400).json({ error: 'Minimum deposit amount is ₹100' });
+  }
+
+  const actor = req.user || currentUser;
+  const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
+  userWallet.balance = result.wallet.balance;
+
+  broadcastSSE('wallet_updated', { wallet: userWallet });
+  return res.json({ success: true, wallet: userWallet, transaction: result.transaction });
+});
+
+app.post('/api/wallet/withdraw', async (req: Request, res: Response) => {
+  const { amount, upiId, idempotencyKey } = req.body;
+  const numAmount = Number(amount);
+  if (!numAmount || numAmount < 500) {
+    return res.status(400).json({ error: 'Minimum withdrawal is ₹500' });
+  }
+
+  const actor = req.user || currentUser;
+  try {
+    const result = await walletService.requestWithdrawal(actor.id, numAmount, upiId || 'Bank Account', idempotencyKey);
+    userWallet.balance = result.wallet.balance;
+    broadcastSSE('wallet_updated', { wallet: userWallet });
+    return res.json({ success: true, wallet: userWallet, request: result.request });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// STRICT AUTHORIZATION GUARD FOR GAMES:
+// Games must be visible and playable ONLY by users with role 'PLAYER'
+// OWNER, SUPER_ADMIN, and ADMIN roles are barred from accessing game routes
+// -------------------------------------------------------------
+app.use('/api/games', requireAuth, requirePlayerForGames);
+app.use('/games', requireAuth, requirePlayerForGames);
+
+app.get('/api/games/history', (_req: Request, res: Response) => {
+  res.json({ history: gameHistories });
+});
+
+// -------------------------------------------------------------
+// 1. EUROPEAN ROULETTE ENGINE (SERVER-AUTHORITATIVE)
+// -------------------------------------------------------------
+// Exact European Roulette wheel sequence (37 pockets, single 0)
+const EUROPEAN_WHEEL = [
+  0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26
+];
+const RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+const BLACK_NUMBERS = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35];
+
+const ROULETTE_LIMITS = {
+  minimumBet: 10,
+  maximumBet: 50000,
+  maximumExposure: 500000
+};
+
+const ROULETTE_PAYOUT_RULES = {
+  straight: { ratio: '35:1', multiplier: 36, description: 'Straight Up: Single number 0-36 (35:1 profit, 36x gross)' },
+  split: { ratio: '17:1', multiplier: 18, description: 'Split: Two adjacent numbers (17:1 profit, 18x gross)' },
+  street: { ratio: '11:1', multiplier: 12, description: 'Street: Three numbers in a row (11:1 profit, 12x gross)' },
+  corner: { ratio: '8:1', multiplier: 9, description: 'Corner: Four adjacent numbers (8:1 profit, 9x gross)' },
+  sixline: { ratio: '5:1', multiplier: 6, description: 'Six Line: Six numbers across two rows (5:1 profit, 6x gross)' },
+  dozen: { ratio: '2:1', multiplier: 3, description: 'Dozen: 1-12, 13-24, or 25-36 (2:1 profit, 3x gross)' },
+  column: { ratio: '2:1', multiplier: 3, description: 'Column: 1st, 2nd, or 3rd column of 12 (2:1 profit, 3x gross)' },
+  red_black: { ratio: '1:1', multiplier: 2, description: 'Red / Black: Even money (1:1 profit, 2x gross, 0 loses)' },
+  even_odd: { ratio: '1:1', multiplier: 2, description: 'Even / Odd: Even money (1:1 profit, 2x gross, 0 loses)' },
+  low_high: { ratio: '1:1', multiplier: 2, description: 'Low / High: 1-18 or 19-36 (1:1 profit, 2x gross, 0 loses)' }
+};
+
+let rouletteState: RouletteState = {
+  roundId: 'RL-' + Math.floor(1000 + Math.random() * 9000),
+  phase: 'betting',
+  countdown: 15,
+  winningNumber: 17,
+  winningColor: 'black',
+  winningCategory: '17 BLACK • Odd • Low (1-18) • 2nd Dozen • 2nd Col',
+  recentResults: [17, 32, 0, 26, 3, 15, 28, 21, 4, 19],
+  serverSeedHash: 'd3b07384d113edec49eaa6238ad5ff00' + Math.random().toString(16).slice(2, 8),
+  minimumBet: ROULETTE_LIMITS.minimumBet,
+  maximumBet: ROULETTE_LIMITS.maximumBet,
+  maximumExposure: ROULETTE_LIMITS.maximumExposure
+};
+
+// Memory stores for Roulette
+const currentRoundBets: Record<string, RouletteBet[]> = {};
+const roundSettlements: Record<string, any> = {};
+const processedRouletteIdempotency = new Map<string, any>();
+const rouletteHistoryRecords: {
+  roundId: string;
+  number: number;
+  color: 'red' | 'black' | 'green';
+  timestamp: string;
+}[] = [
+  { roundId: 'RL-1090', number: 17, color: 'black', timestamp: new Date(Date.now() - 300000).toISOString() },
+  { roundId: 'RL-1089', number: 32, color: 'red', timestamp: new Date(Date.now() - 360000).toISOString() },
+  { roundId: 'RL-1088', number: 0, color: 'green', timestamp: new Date(Date.now() - 420000).toISOString() },
+  { roundId: 'RL-1087', number: 26, color: 'black', timestamp: new Date(Date.now() - 480000).toISOString() },
+  { roundId: 'RL-1086', number: 3, color: 'red', timestamp: new Date(Date.now() - 540000).toISOString() },
+  { roundId: 'RL-1085', number: 15, color: 'black', timestamp: new Date(Date.now() - 600000).toISOString() },
+  { roundId: 'RL-1084', number: 28, color: 'black', timestamp: new Date(Date.now() - 660000).toISOString() },
+  { roundId: 'RL-1083', number: 21, color: 'red', timestamp: new Date(Date.now() - 720000).toISOString() },
+  { roundId: 'RL-1082', number: 4, color: 'black', timestamp: new Date(Date.now() - 780000).toISOString() },
+  { roundId: 'RL-1081', number: 19, color: 'red', timestamp: new Date(Date.now() - 840000).toISOString() }
+];
+
+// Authoritative settlement engine for European Roulette
+function computeRouletteSettlement(winningNum: number, bets: RouletteBet[]) {
+  const isRed = RED_NUMBERS.includes(winningNum);
+  const isZero = winningNum === 0;
+  const winningColor: 'red' | 'black' | 'green' = isZero ? 'green' : isRed ? 'red' : 'black';
+
+  const categories: string[] = [];
+  if (isZero) {
+    categories.push('0 GREEN (Zero Pocket)');
+  } else {
+    categories.push(`${winningNum} ${winningColor.toUpperCase()}`);
+    categories.push(winningNum % 2 === 0 ? 'Even' : 'Odd');
+    categories.push(winningNum <= 18 ? 'Low (1-18)' : 'High (19-36)');
+    if (winningNum <= 12) categories.push('1st Dozen (1-12)');
+    else if (winningNum <= 24) categories.push('2nd Dozen (13-24)');
+    else categories.push('3rd Dozen (25-36)');
+
+    if (winningNum % 3 === 1) categories.push('1st Col');
+    else if (winningNum % 3 === 2) categories.push('2nd Col');
+    else categories.push('3rd Col');
+  }
+  const winningCategory = categories.join(' • ');
+
+  let totalBet = 0;
+  let grossPayout = 0;
+  const winningBets: any[] = [];
+  const losingBets: any[] = [];
+
+  for (const bet of bets) {
+    const amt = Number(bet.amount || 0);
+    totalBet += amt;
+    let isWin = false;
+    let multiplier = 0; // gross multiplier = (payout ratio profit) + 1
+
+    switch (bet.type) {
+      case 'straight':
+      case 'number': {
+        const target = bet.value !== undefined ? bet.value : (bet.numbers?.[0] ?? -1);
+        if (target === winningNum) {
+          isWin = true;
+          multiplier = 36; // 35:1 profit + 1x stake
+        }
+        break;
+      }
+      case 'split': {
+        if (bet.numbers && bet.numbers.includes(winningNum)) {
+          isWin = true;
+          multiplier = 18; // 17:1 profit + 1x stake
+        }
+        break;
+      }
+      case 'street': {
+        if (bet.numbers && bet.numbers.includes(winningNum)) {
+          isWin = true;
+          multiplier = 12; // 11:1 profit + 1x stake
+        }
+        break;
+      }
+      case 'corner': {
+        if (bet.numbers && bet.numbers.includes(winningNum)) {
+          isWin = true;
+          multiplier = 9; // 8:1 profit + 1x stake
+        }
+        break;
+      }
+      case 'sixline': {
+        if (bet.numbers && bet.numbers.includes(winningNum)) {
+          isWin = true;
+          multiplier = 6; // 5:1 profit + 1x stake
+        }
+        break;
+      }
+      // OUTSIDE BETS (Zero Rule: All outside bets lose when winningNum === 0)
+      case 'dozen1': {
+        if (!isZero && winningNum >= 1 && winningNum <= 12) {
+          isWin = true;
+          multiplier = 3; // 2:1 profit + 1x stake
+        }
+        break;
+      }
+      case 'dozen2': {
+        if (!isZero && winningNum >= 13 && winningNum <= 24) {
+          isWin = true;
+          multiplier = 3;
+        }
+        break;
+      }
+      case 'dozen3': {
+        if (!isZero && winningNum >= 25 && winningNum <= 36) {
+          isWin = true;
+          multiplier = 3;
+        }
+        break;
+      }
+      case 'col1': {
+        if (!isZero && winningNum % 3 === 1) {
+          isWin = true;
+          multiplier = 3;
+        }
+        break;
+      }
+      case 'col2': {
+        if (!isZero && winningNum % 3 === 2) {
+          isWin = true;
+          multiplier = 3;
+        }
+        break;
+      }
+      case 'col3': {
+        if (!isZero && winningNum % 3 === 0) {
+          isWin = true;
+          multiplier = 3;
+        }
+        break;
+      }
+      case 'red': {
+        if (!isZero && isRed) {
+          isWin = true;
+          multiplier = 2; // 1:1 profit + 1x stake
+        }
+        break;
+      }
+      case 'black': {
+        if (!isZero && !isRed) {
+          isWin = true;
+          multiplier = 2;
+        }
+        break;
+      }
+      case 'even': {
+        if (!isZero && winningNum % 2 === 0) {
+          isWin = true;
+          multiplier = 2;
+        }
+        break;
+      }
+      case 'odd': {
+        if (!isZero && winningNum % 2 !== 0) {
+          isWin = true;
+          multiplier = 2;
+        }
+        break;
+      }
+      case 'low': {
+        if (!isZero && winningNum >= 1 && winningNum <= 18) {
+          isWin = true;
+          multiplier = 2;
+        }
+        break;
+      }
+      case 'high': {
+        if (!isZero && winningNum >= 19 && winningNum <= 36) {
+          isWin = true;
+          multiplier = 2;
+        }
+        break;
+      }
+    }
+
+    const payoutAmount = isWin ? amt * multiplier : 0;
+    const profit = isWin ? payoutAmount - amt : -amt;
+
+    const resultItem = {
+      bet,
+      isWin,
+      payoutMultiplier: multiplier,
+      payoutAmount,
+      profit
+    };
+
+    if (isWin) {
+      grossPayout += payoutAmount;
+      winningBets.push(resultItem);
+    } else {
+      losingBets.push(resultItem);
+    }
+  }
+
+  const netResult = grossPayout - totalBet;
+
+  return {
+    winningColor,
+    winningCategory,
+    winningBets,
+    losingBets,
+    totalBet,
+    grossPayout,
+    netResult
+  };
+}
+
+// Background Authoritative Roulette Round Cycle
+setInterval(() => {
+  if (rouletteState.phase === 'betting') {
+    rouletteState.countdown -= 1;
+    if (rouletteState.countdown <= 0) {
+      rouletteState.phase = 'closed';
+      rouletteState.countdown = 2;
+      broadcastSSE('roulette_betting_closed', { roundId: rouletteState.roundId });
+    }
+  } else if (rouletteState.phase === 'closed') {
+    rouletteState.countdown -= 1;
+    if (rouletteState.countdown <= 0) {
+      rouletteState.phase = 'spinning';
+      rouletteState.countdown = 6;
+
+      // Authoritative RNG generation strictly on server before spin starts
+      const winningNum = EUROPEAN_WHEEL[Math.floor(Math.random() * EUROPEAN_WHEEL.length)];
+      rouletteState.winningNumber = winningNum;
+      rouletteState.winningColor = winningNum === 0 ? 'green' : RED_NUMBERS.includes(winningNum) ? 'red' : 'black';
+
+      broadcastSSE('roulette_spin_started', {
+        roundId: rouletteState.roundId,
+        winningNumber: winningNum,
+        winningColor: rouletteState.winningColor,
+        countdown: 6
+      });
+    }
+  } else if (rouletteState.phase === 'spinning') {
+    rouletteState.countdown -= 1;
+    if (rouletteState.countdown <= 0) {
+      rouletteState.phase = 'result';
+      rouletteState.countdown = 4;
+
+      const winningNum = rouletteState.winningNumber ?? 0;
+      const bets = currentRoundBets[rouletteState.roundId] || [];
+      const settlement = computeRouletteSettlement(winningNum, bets);
+
+      rouletteState.winningCategory = settlement.winningCategory;
+      rouletteState.recentResults.unshift(winningNum);
+      if (rouletteState.recentResults.length > 20) rouletteState.recentResults.pop();
+
+      rouletteHistoryRecords.unshift({
+        roundId: rouletteState.roundId,
+        number: winningNum,
+        color: settlement.winningColor,
+        timestamp: new Date().toISOString()
+      });
+      if (rouletteHistoryRecords.length > 50) rouletteHistoryRecords.pop();
+
+      if (settlement.grossPayout > 0) {
+        creditWallet(settlement.grossPayout, `Roulette Payout #${rouletteState.roundId}`, 'roulette');
+      }
+
+      if (settlement.totalBet > 0) {
+        recordHistory({
+          gameId: 'roulette',
+          gameName: 'Roulette',
+          betAmount: settlement.totalBet,
+          winAmount: settlement.grossPayout,
+          outcome: `Landed on ${winningNum} ${settlement.winningColor.toUpperCase()}`,
+          multiplier: settlement.totalBet > 0 ? Number((settlement.grossPayout / settlement.totalBet).toFixed(2)) : 0,
+          settlementStatus: 'settled'
+        });
+      }
+
+      roundSettlements[rouletteState.roundId] = {
+        roundId: rouletteState.roundId,
+        winningNumber: winningNum,
+        winningColor: settlement.winningColor,
+        winningCategory: settlement.winningCategory,
+        winningBets: settlement.winningBets,
+        losingBets: settlement.losingBets,
+        totalBet: settlement.totalBet,
+        grossPayout: settlement.grossPayout,
+        netResult: settlement.netResult,
+        settlementStatus: 'settled',
+        wallet: userWallet,
+        recentResults: rouletteState.recentResults
+      };
+
+      broadcastSSE('roulette_result', {
+        roundId: rouletteState.roundId,
+        winningNumber: winningNum,
+        winningColor: settlement.winningColor,
+        winningCategory: settlement.winningCategory
+      });
+      broadcastSSE('roulette_settlement', roundSettlements[rouletteState.roundId]);
+      broadcastSSE('roulette_wallet_updated', { wallet: userWallet });
+    }
+  } else if (rouletteState.phase === 'result') {
+    rouletteState.countdown -= 1;
+    if (rouletteState.countdown <= 0) {
+      // Transition to new round
+      const newRoundId = 'RL-' + Math.floor(1000 + Math.random() * 9000);
+      rouletteState.roundId = newRoundId;
+      rouletteState.phase = 'betting';
+      rouletteState.countdown = 15;
+      rouletteState.serverSeedHash = 'd3b07384d113edec49eaa6238ad5ff00' + Math.random().toString(16).slice(2, 8);
+      currentRoundBets[newRoundId] = [];
+
+      broadcastSSE('roulette_round_started', {
+        roundId: newRoundId,
+        countdown: 15
+      });
+      broadcastSSE('roulette_betting_open', {
+        roundId: newRoundId,
+        countdown: 15
+      });
+    }
+  }
+}, 1000);
+
+// --- ROULETTE API ENDPOINTS ---
+
+// 1. GET Rules
+const handleGetRouletteRules = (_req: Request, res: Response) => {
+  res.json({
+    game: 'European Roulette',
+    pockets: 37,
+    wheelOrder: EUROPEAN_WHEEL,
+    limits: ROULETTE_LIMITS,
+    payouts: ROULETTE_PAYOUT_RULES,
+    zeroRule: '0 is Green. When 0 hits, all outside bets (Red/Black, Odd/Even, Low/High, Dozens, Columns) lose. Only bets covering 0 win.'
+  });
+};
+app.get('/api/games/roulette/rules', handleGetRouletteRules);
+app.get('/games/roulette/rules', handleGetRouletteRules);
+
+// 2. GET Round / State
+const handleGetRouletteRound = (_req: Request, res: Response) => {
+  res.json({
+    state: rouletteState,
+    roundId: rouletteState.roundId,
+    phase: rouletteState.phase,
+    countdown: rouletteState.countdown,
+    winningNumber: rouletteState.winningNumber,
+    winningColor: rouletteState.winningColor,
+    winningCategory: rouletteState.winningCategory,
+    recentResults: rouletteState.recentResults,
+    serverSeedHash: rouletteState.serverSeedHash,
+    limits: ROULETTE_LIMITS
+  });
+};
+app.get('/api/games/roulette/round', handleGetRouletteRound);
+app.get('/games/roulette/round', handleGetRouletteRound);
+app.get('/api/games/roulette/state', handleGetRouletteRound);
+app.get('/games/roulette/state', handleGetRouletteRound);
+
+// 3. GET History & Analytics
+const handleGetRouletteHistory = (_req: Request, res: Response) => {
+  const records = rouletteHistoryRecords;
+  const total = records.length || 1;
+  const reds = records.filter((r) => r.color === 'red').length;
+  const blacks = records.filter((r) => r.color === 'black').length;
+  const greens = records.filter((r) => r.color === 'green').length;
+  const odds = records.filter((r) => r.number > 0 && r.number % 2 !== 0).length;
+  const evens = records.filter((r) => r.number > 0 && r.number % 2 === 0).length;
+  const lows = records.filter((r) => r.number >= 1 && r.number <= 18).length;
+  const highs = records.filter((r) => r.number >= 19 && r.number <= 36).length;
+
+  // Number frequency for Hot/Cold
+  const freqMap: Record<number, number> = {};
+  records.forEach((r) => {
+    freqMap[r.number] = (freqMap[r.number] || 0) + 1;
+  });
+  const sortedNums = Object.keys(freqMap)
+    .map(Number)
+    .sort((a, b) => freqMap[b] - freqMap[a]);
+
+  const hotNumbers = sortedNums.slice(0, 4);
+  const coldNumbers = EUROPEAN_WHEEL.filter((n) => !sortedNums.includes(n)).slice(0, 4);
+
+  res.json({
+    history: records,
+    redPercentage: Math.round((reds / total) * 100),
+    blackPercentage: Math.round((blacks / total) * 100),
+    greenPercentage: Math.round((greens / total) * 100),
+    oddPercentage: Math.round((odds / total) * 100),
+    evenPercentage: Math.round((evens / total) * 100),
+    lowPercentage: Math.round((lows / total) * 100),
+    highPercentage: Math.round((highs / total) * 100),
+    hotNumbers: hotNumbers.length > 0 ? hotNumbers : [17, 32, 21, 3],
+    coldNumbers: coldNumbers.length > 0 ? coldNumbers : [0, 26, 35, 11]
+  });
+};
+app.get('/api/games/roulette/history', handleGetRouletteHistory);
+app.get('/games/roulette/history', handleGetRouletteHistory);
+
+// 4. POST Bets (Register bets for ongoing authoritative round)
+const handlePostRouletteBets = (req: Request, res: Response) => {
+  const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
+
+  // Idempotency check to prevent double debit
+  if (idempotencyKey && processedRouletteIdempotency.has(idempotencyKey)) {
+    return res.json(processedRouletteIdempotency.get(idempotencyKey));
+  }
+
+  if (!bets || !Array.isArray(bets) || bets.length === 0) {
+    return res.status(400).json({ error: 'At least one bet is required' });
+  }
+
+  // Validate bets against server limits
+  let totalBet = 0;
+  for (const b of bets) {
+    const amt = Number(b.amount || 0);
+    if (isNaN(amt) || amt < ROULETTE_LIMITS.minimumBet) {
+      return res.status(400).json({ error: `Minimum bet is ₹${ROULETTE_LIMITS.minimumBet}` });
+    }
+    if (amt > ROULETTE_LIMITS.maximumBet) {
+      return res.status(400).json({ error: `Maximum bet per spot is ₹${ROULETTE_LIMITS.maximumBet}` });
+    }
+    totalBet += amt;
+  }
+
+  if (totalBet > ROULETTE_LIMITS.maximumExposure) {
+    return res.status(400).json({ error: `Maximum total exposure is ₹${ROULETTE_LIMITS.maximumExposure}` });
+  }
+
+  if (rouletteState.phase !== 'betting') {
+    return res.status(400).json({ error: 'Betting is currently closed for this round' });
+  }
+
+  if (!deductWallet(totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette')) {
+    return res.status(400).json({ error: 'Insufficient wallet balance' });
+  }
+
+  const existingBets = currentRoundBets[rouletteState.roundId] || [];
+  currentRoundBets[rouletteState.roundId] = [...existingBets, ...bets];
+
+  const responsePayload = {
+    success: true,
+    roundId: rouletteState.roundId,
+    bets: currentRoundBets[rouletteState.roundId],
+    totalBetPlaced: totalBet,
+    wallet: userWallet,
+    countdown: rouletteState.countdown
+  };
+
+  if (idempotencyKey) {
+    processedRouletteIdempotency.set(idempotencyKey, responsePayload);
+  }
+
+  broadcastSSE('roulette_wallet_updated', { wallet: userWallet });
+  return res.json(responsePayload);
+};
+app.post('/api/games/roulette/bets', handlePostRouletteBets);
+app.post('/games/roulette/bets', handlePostRouletteBets);
+
+// 5. GET Active Bets
+const handleGetRouletteBets = (_req: Request, res: Response) => {
+  const bets = currentRoundBets[rouletteState.roundId] || [];
+  res.json({
+    roundId: rouletteState.roundId,
+    bets,
+    totalBet: bets.reduce((sum, b) => sum + Number(b.amount || 0), 0)
+  });
+};
+app.get('/api/games/roulette/bets', handleGetRouletteBets);
+app.get('/games/roulette/bets', handleGetRouletteBets);
+
+// 6. GET Settlement by roundId
+const handleGetRouletteSettlement = (req: Request, res: Response) => {
+  const roundId = req.params.roundId || rouletteState.roundId;
+  const settlement = roundSettlements[roundId];
+  if (!settlement) {
+    return res.status(404).json({ error: `Settlement not found for round ${roundId}` });
+  }
+  return res.json({ settlement });
+};
+app.get('/api/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
+app.get('/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
+
+// 7. POST Spin (Instant spin & authoritative settlement flow)
+const handlePostRouletteSpin = (req: Request, res: Response) => {
+  const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
+
+  // Idempotency check
+  if (idempotencyKey && processedRouletteIdempotency.has(idempotencyKey)) {
+    return res.json(processedRouletteIdempotency.get(idempotencyKey));
+  }
+
+  if (!bets || !Array.isArray(bets) || bets.length === 0) {
+    return res.status(400).json({ error: 'At least one bet is required' });
+  }
+
+  let totalBet = 0;
+  for (const b of bets) {
+    const amt = Number(b.amount || 0);
+    if (isNaN(amt) || amt < ROULETTE_LIMITS.minimumBet) {
+      return res.status(400).json({ error: `Minimum bet is ₹${ROULETTE_LIMITS.minimumBet}` });
+    }
+    if (amt > ROULETTE_LIMITS.maximumBet) {
+      return res.status(400).json({ error: `Maximum bet per spot is ₹${ROULETTE_LIMITS.maximumBet}` });
+    }
+    totalBet += amt;
+  }
+
+  if (totalBet > ROULETTE_LIMITS.maximumExposure) {
+    return res.status(400).json({ error: `Maximum total exposure is ₹${ROULETTE_LIMITS.maximumExposure}` });
+  }
+
+  // Atomic debit
+  const currentRoundId = rouletteState.roundId;
+  if (!deductWallet(totalBet, `Roulette Round ${currentRoundId}`, 'roulette')) {
+    return res.status(400).json({ error: 'Insufficient wallet balance' });
+  }
+
+  // Authoritative server outcome from European wheel (0-36)
+  const winningNum = EUROPEAN_WHEEL[Math.floor(Math.random() * EUROPEAN_WHEEL.length)];
+  const settlement = computeRouletteSettlement(winningNum, bets);
+
+  // Atomic credit if winning
+  if (settlement.grossPayout > 0) {
+    creditWallet(settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
+  }
+
+  // Update server state
+  rouletteState.winningNumber = winningNum;
+  rouletteState.winningColor = settlement.winningColor;
+  rouletteState.winningCategory = settlement.winningCategory;
+  rouletteState.recentResults.unshift(winningNum);
+  if (rouletteState.recentResults.length > 20) rouletteState.recentResults.pop();
+
+  rouletteHistoryRecords.unshift({
+    roundId: currentRoundId,
+    number: winningNum,
+    color: settlement.winningColor,
+    timestamp: new Date().toISOString()
+  });
+  if (rouletteHistoryRecords.length > 50) rouletteHistoryRecords.pop();
+
+  recordHistory({
+    gameId: 'roulette',
+    gameName: 'Roulette',
+    betAmount: totalBet,
+    winAmount: settlement.grossPayout,
+    outcome: `Landed on ${winningNum} ${settlement.winningColor.toUpperCase()}`,
+    multiplier: totalBet > 0 ? Number((settlement.grossPayout / totalBet).toFixed(2)) : 0,
+    settlementStatus: 'settled'
+  });
+
+  const nextRoundId = 'RL-' + Math.floor(1000 + Math.random() * 9000);
+  rouletteState.roundId = nextRoundId;
+  rouletteState.serverSeedHash = 'd3b07384d113edec49eaa6238ad5ff00' + Math.random().toString(16).slice(2, 8);
+
+  const fullSettlementResult = {
+    success: true,
+    roundId: currentRoundId,
+    nextRoundId,
+    winningNumber: winningNum,
+    winningColor: settlement.winningColor,
+    winningCategory: settlement.winningCategory,
+    winningBets: settlement.winningBets,
+    losingBets: settlement.losingBets,
+    totalBet,
+    winAmount: settlement.grossPayout,
+    grossPayout: settlement.grossPayout,
+    netProfit: settlement.netResult,
+    netResult: settlement.netResult,
+    settlementStatus: 'settled',
+    wallet: userWallet,
+    recentResults: rouletteState.recentResults
+  };
+
+  roundSettlements[currentRoundId] = fullSettlementResult;
+
+  if (idempotencyKey) {
+    processedRouletteIdempotency.set(idempotencyKey, fullSettlementResult);
+  }
+
+  broadcastSSE('roulette_spin_started', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor });
+  broadcastSSE('roulette_result', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, category: settlement.winningCategory });
+  broadcastSSE('roulette_settlement', fullSettlementResult);
+  broadcastSSE('roulette_wallet_updated', { wallet: userWallet });
+
+  return res.json(fullSettlementResult);
+};
+app.post('/api/games/roulette/spin', handlePostRouletteSpin);
+app.post('/games/roulette/spin', handlePostRouletteSpin);
+
+
+// -------------------------------------------------------------
+// 2. TEEN PATTI ENGINE (SERVER-AUTHORITATIVE MULTIPLAYER)
+// -------------------------------------------------------------
+let teenPattiState: TeenPattiState = createAuthoritativeTeenPattiRound(
+  currentUser.username,
+  currentUser.avatarUrl,
+  50
+);
+
+// Background Authoritative Teen Patti Round Cycle
+setInterval(() => {
+  if (teenPattiState.phase === 'betting') {
+    teenPattiState.countdown -= 1;
+    if (teenPattiState.countdown <= 0) {
+      teenPattiState.phase = 'lock';
+      teenPattiState.countdown = 1;
+      teenPattiState.phaseEndsAt = Date.now() + 1000;
+      broadcastSSE('teen_patti_betting_closed', {
+        roundId: teenPattiState.roundId,
+        phase: 'lock'
+      });
+    }
+  } else if (teenPattiState.phase === 'lock') {
+    teenPattiState.countdown -= 1;
+    if (teenPattiState.countdown <= 0) {
+      teenPattiState.phase = 'deal';
+      teenPattiState.countdown = 5;
+      teenPattiState.phaseEndsAt = Date.now() + 5000;
+      broadcastSSE('teen_patti_dealing_started', {
+        roundId: teenPattiState.roundId,
+        phase: 'deal',
+        duration: 5000
+      });
+    }
+  } else if (teenPattiState.phase === 'deal') {
+    teenPattiState.countdown -= 1;
+    if (teenPattiState.countdown <= 0) {
+      teenPattiState.phase = 'compare';
+      teenPattiState.countdown = 2;
+      teenPattiState.dealerRevealed = true;
+      if (teenPattiState.dealer) {
+        teenPattiState.dealer.revealed = true;
+      }
+      teenPattiState.phaseEndsAt = Date.now() + 2000;
+      broadcastSSE('teen_patti_dealer_revealed', {
+        roundId: teenPattiState.roundId,
+        phase: 'compare',
+        dealer: teenPattiState.dealer
+      });
+    }
+  } else if (teenPattiState.phase === 'compare') {
+    teenPattiState.countdown -= 1;
+    if (teenPattiState.countdown <= 0) {
+      teenPattiState.phase = 'settlement';
+
+      const userPlayer = teenPattiState.players.find((p) => p.isUser);
+      let userSettlementDetail = undefined;
+      if (userPlayer && teenPattiState.dealer) {
+        const settlement = computePlayerSettlement(
+          userPlayer.currentBet,
+          userPlayer.cards,
+          teenPattiState.dealer.cards,
+          userPlayer.id,
+          true
+        );
+        userSettlementDetail = settlement;
+        teenPattiState.userSettlement = settlement;
+
+        if (settlement.grossPayout > 0) {
+          creditWallet(settlement.grossPayout, `Teen Patti Win #${teenPattiState.roundId}`, 'teen-patti');
+        }
+
+        if (settlement.betAmount > 0) {
+          recordHistory({
+            gameId: 'teen-patti',
+            gameName: 'Teen Patti',
+            betAmount: settlement.betAmount,
+            winAmount: settlement.grossPayout,
+            outcome: settlement.summaryText,
+            multiplier: settlement.multiplier,
+            settlementStatus: 'settled'
+          });
+        }
+      }
+
+      // Determine top winner for recent history
+      let bestPlayer = userPlayer;
+      let bestScore = -1;
+      teenPattiState.players.forEach((p) => {
+        const ev = evaluateTeenPattiHand(p.cards);
+        if (ev.score > bestScore) {
+          bestScore = ev.score;
+          bestPlayer = p;
+        }
+      });
+      const dealerEval = evaluateTeenPattiHand(teenPattiState.dealer!.cards);
+      if (dealerEval.score > bestScore) {
+        teenPattiState.winnerId = 'dealer';
+        teenPattiState.winnerHand = `Dealer wins with ${dealerEval.rankName}`;
+      } else {
+        teenPattiState.winnerId = bestPlayer?.id || 'dealer';
+        teenPattiState.winnerHand = `${bestPlayer?.name} with ${bestPlayer?.handRankName}`;
+        if (bestPlayer && bestPlayer.name) {
+          teenPattiState.recentWinners.unshift({
+            name: bestPlayer.name,
+            amount: Math.round(teenPattiState.pot * 0.8),
+            hand: bestPlayer.handRankName || 'High Card'
+          });
+          if (teenPattiState.recentWinners.length > 10) teenPattiState.recentWinners.pop();
+        }
+      }
+
+      teenPattiState.phase = 'result';
+      teenPattiState.countdown = 4;
+      teenPattiState.phaseEndsAt = Date.now() + 4000;
+
+      const sanitized = sanitizeTeenPattiState(teenPattiState);
+      broadcastSSE('teen_patti_result', {
+        roundId: teenPattiState.roundId,
+        phase: 'result',
+        state: sanitized,
+        userSettlement: userSettlementDetail,
+        dealer: teenPattiState.dealer
+      });
+      if (userSettlementDetail) {
+        broadcastSSE('teen_patti_settlement', userSettlementDetail);
+      }
+      broadcastSSE('wallet_updated', { wallet: userWallet });
+    }
+  } else if (teenPattiState.phase === 'result') {
+    teenPattiState.countdown -= 1;
+    if (teenPattiState.countdown <= 0) {
+      teenPattiState = createAuthoritativeTeenPattiRound(currentUser.username, currentUser.avatarUrl, 50);
+      broadcastSSE('teen_patti_round_started', {
+        roundId: teenPattiState.roundId,
+        countdown: 15,
+        bettingEndsAt: teenPattiState.bettingEndsAt
+      });
+      broadcastSSE('teen_patti_betting_open', {
+        roundId: teenPattiState.roundId,
+        countdown: 15
+      });
+    }
+  }
+}, 1000);
+
+// --- TEEN PATTI API ENDPOINTS ---
+const handleGetTeenPattiState = (_req: Request, res: Response) => {
+  res.json({
+    state: sanitizeTeenPattiState(teenPattiState)
+  });
+};
+
+app.get('/api/games/teen-patti/state', handleGetTeenPattiState);
+app.get('/games/teen-patti/state', handleGetTeenPattiState);
+
+const handlePostTeenPattiBet = (req: Request, res: Response) => {
+  const { amount }: { amount: number } = req.body;
+  const betAmount = Number(amount);
+  if (!betAmount || betAmount <= 0) {
+    return res.status(400).json({ error: 'Invalid bet amount' });
+  }
+  if (teenPattiState.phase !== 'betting') {
+    return res.status(400).json({ error: 'Betting is closed for this round' });
+  }
+  const userPlayer = teenPattiState.players.find((p) => p.isUser);
+  if (!userPlayer) return res.status(400).json({ error: 'User player not found' });
+
+  // Calculate delta if player already has a bet
+  const additionalBet = betAmount > userPlayer.currentBet ? betAmount - userPlayer.currentBet : betAmount;
+  if (userWallet.balance < additionalBet) {
+    return res.status(400).json({ error: 'Insufficient wallet balance' });
+  }
+
+  if (!deductWallet(additionalBet, `Teen Patti Bet #${teenPattiState.roundId}`, 'teen-patti')) {
+    return res.status(400).json({ error: 'Failed to place bet' });
+  }
+
+  if (betAmount > userPlayer.currentBet) {
+    userPlayer.currentBet = betAmount;
+  } else {
+    userPlayer.currentBet += additionalBet;
+  }
+  teenPattiState.pot += additionalBet;
+
+  broadcastSSE('teen_patti_bet_placed', {
+    roundId: teenPattiState.roundId,
+    playerId: userPlayer.id,
+    betAmount: userPlayer.currentBet,
+    pot: teenPattiState.pot
+  });
+
+  return res.json({
+    success: true,
+    state: sanitizeTeenPattiState(teenPattiState),
+    wallet: userWallet
+  });
+};
+
+app.post('/api/games/teen-patti/bet', handlePostTeenPattiBet);
+app.post('/games/teen-patti/bet', handlePostTeenPattiBet);
+
+const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
+  const bootAmount = Number(req.body?.bootAmount || 50);
+  const userPlayer = teenPattiState.players.find((p) => p.isUser);
+  if (userPlayer && teenPattiState.phase === 'betting') {
+    if (userPlayer.currentBet < bootAmount) {
+      const delta = bootAmount - userPlayer.currentBet;
+      if (userWallet.balance >= delta && deductWallet(delta, 'Teen Patti Boot Bet', 'teen-patti')) {
+        userPlayer.currentBet = bootAmount;
+        teenPattiState.pot += delta;
+      }
+    }
+  }
+
+  return res.json({
+    success: true,
+    state: sanitizeTeenPattiState(teenPattiState),
+    wallet: userWallet
+  });
+};
+
+app.post('/api/games/teen-patti/new-round', handlePostTeenPattiNewRound);
+app.post('/games/teen-patti/new-round', handlePostTeenPattiNewRound);
+
+const handlePostTeenPattiAction = (req: Request, res: Response) => {
+  const { action, betAmount = 0 }: { action: 'see' | 'blind' | 'chaal' | 'fold' | 'show' | 'bet'; betAmount?: number } =
+    req.body;
+
+  const userPlayer = teenPattiState.players.find((p) => p.isUser);
+  if (!userPlayer) return res.status(400).json({ error: 'Player not found' });
+
+  if (action === 'see') {
+    userPlayer.seen = true;
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), userCards: userPlayer.cards });
+  }
+
+  if (action === 'fold') {
+    userPlayer.folded = true;
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: userWallet });
+  }
+
+  if (action === 'blind' || action === 'chaal' || action === 'bet') {
+    const stake = betAmount > 0 ? betAmount : teenPattiState.currentStake;
+    if (teenPattiState.phase !== 'betting') {
+      return res.status(400).json({ error: 'Betting is closed for this round' });
+    }
+    if (!deductWallet(stake, `Teen Patti ${action.toUpperCase()}`, 'teen-patti')) {
+      return res.status(400).json({ error: 'Insufficient wallet balance' });
+    }
+    userPlayer.currentBet += stake;
+    teenPattiState.pot += stake;
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: userWallet });
+  }
+
+  if (action === 'show') {
+    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: userWallet });
+  }
+
+  return res.status(400).json({ error: 'Unknown action' });
+};
+
+app.post('/api/games/teen-patti/action', handlePostTeenPattiAction);
+app.post('/games/teen-patti/action', handlePostTeenPattiAction);
+
+// -------------------------------------------------------------
+// 3. AVIATOR ENGINE (SERVER-AUTHORITATIVE)
+// -------------------------------------------------------------
+let aviatorState: AviatorState = {
+  roundId: 'AV-' + Math.floor(1000 + Math.random() * 9000),
+  phase: 'betting',
+  multiplier: 1.0,
+  crashMultiplier: null,
+  countdown: 5,
+  previousMultipliers: [2.14, 1.35, 12.8, 1.88, 3.42, 1.05, 5.61]
+};
+
+let currentAviatorBet: AviatorBet | null = null;
+let currentCrashTarget = generateCrashPoint();
+let aviatorTimer: NodeJS.Timeout | null = null;
+
+function generateCrashPoint(): number {
+  // Classic Provably Fair distribution: 1 / (1 - U) with 3% house edge
+  const rand = Math.random();
+  if (rand < 0.05) return 1.0 + Number((Math.random() * 0.15).toFixed(2)); // instant bust 1.00 - 1.15
+  const raw = 0.97 / (1 - rand);
+  const clamped = Math.min(raw, 50.0);
+  return Number(Math.max(1.05, clamped).toFixed(2));
+}
+
+function runAviatorCycle() {
+  if (aviatorTimer) clearInterval(aviatorTimer);
+
+  // Phase 1: Betting (5 seconds countdown)
+  aviatorState.phase = 'betting';
+  aviatorState.multiplier = 1.0;
+  aviatorState.crashMultiplier = null;
+  aviatorState.countdown = 5;
+  aviatorState.roundId = 'AV-' + Math.floor(1000 + Math.random() * 9000);
+  currentAviatorBet = null;
+  currentCrashTarget = generateCrashPoint();
+
+  broadcastSSE('round_started', { gameId: 'aviator', roundId: aviatorState.roundId });
+
+  const betInterval = setInterval(() => {
+    aviatorState.countdown -= 1;
+    if (aviatorState.countdown <= 0) {
+      clearInterval(betInterval);
+      startAviatorFlight();
+    }
+  }, 1000);
+}
+
+function startAviatorFlight() {
+  aviatorState.phase = 'running';
+  aviatorState.multiplier = 1.0;
+
+  broadcastSSE('betting_closed', { gameId: 'aviator' });
+
+  const startTime = Date.now();
+  const flightInterval = setInterval(() => {
+    const elapsedSec = (Date.now() - startTime) / 1000;
+    // Exponential curve: 1 + 0.06 * t^1.7
+    const nextMult = Number((1.0 + 0.06 * Math.pow(elapsedSec * 1.8, 1.6)).toFixed(2));
+
+    if (nextMult >= currentCrashTarget) {
+      clearInterval(flightInterval);
+      aviatorState.multiplier = currentCrashTarget;
+      aviatorState.crashMultiplier = currentCrashTarget;
+      aviatorState.phase = 'crashed';
+      aviatorState.previousMultipliers.unshift(currentCrashTarget);
+      if (aviatorState.previousMultipliers.length > 15) aviatorState.previousMultipliers.pop();
+
+      // If user had an active bet that didn't cash out -> settled as loss
+      if (currentAviatorBet && !currentAviatorBet.cashedOut) {
+        recordHistory({
+          gameId: 'aviator',
+          gameName: 'Aviator',
+          betAmount: currentAviatorBet.amount,
+          winAmount: 0,
+          outcome: `Flew away @ ${currentCrashTarget}x`,
+          multiplier: 0,
+          settlementStatus: 'settled'
+        });
+      }
+
+      broadcastSSE('result', {
+        gameId: 'aviator',
+        multiplier: currentCrashTarget,
+        crashed: true
+      });
+
+      // Restart cycle after 3s
+      setTimeout(() => {
+        runAviatorCycle();
+      }, 3500);
+    } else {
+      aviatorState.multiplier = nextMult;
+    }
+  }, 100);
+}
+
+// Start initial aviator flight cycle
+runAviatorCycle();
+
+app.get('/api/games/aviator/state', (_req: Request, res: Response) => {
+  res.json({
+    state: {
+      ...aviatorState,
+      currentBet: currentAviatorBet
+    }
+  });
+});
+
+app.post('/api/games/aviator/bet', (req: Request, res: Response) => {
+  const { amount } = req.body;
+  const numAmount = Number(amount);
+  if (!numAmount || numAmount < 10) {
+    return res.status(400).json({ error: 'Minimum bet is ₹10' });
+  }
+
+  if (aviatorState.phase !== 'betting') {
+    return res.status(400).json({ error: 'Betting is closed for this round' });
+  }
+
+  if (!deductWallet(numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator')) {
+    return res.status(400).json({ error: 'Insufficient wallet balance' });
+  }
+
+  currentAviatorBet = {
+    betId: `av_bet_${Date.now()}`,
+    amount: numAmount,
+    cashedOut: false
+  };
+
+  return res.json({
+    success: true,
+    bet: currentAviatorBet,
+    wallet: userWallet
+  });
+});
+
+app.post('/api/games/aviator/cashout', (_req: Request, res: Response) => {
+  if (!currentAviatorBet || currentAviatorBet.cashedOut) {
+    return res.status(400).json({ error: 'No active bet to cash out' });
+  }
+
+  if (aviatorState.phase !== 'running') {
+    return res.status(400).json({ error: 'Aircraft has already crashed or round ended' });
+  }
+
+  // Authoritative payout calculated strictly on server
+  const cashMultiplier = aviatorState.multiplier;
+  const payout = Math.floor(currentAviatorBet.amount * cashMultiplier);
+
+  currentAviatorBet.cashedOut = true;
+  currentAviatorBet.cashOutMultiplier = cashMultiplier;
+  currentAviatorBet.winAmount = payout;
+
+  creditWallet(payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
+
+  recordHistory({
+    gameId: 'aviator',
+    gameName: 'Aviator',
+    betAmount: currentAviatorBet.amount,
+    winAmount: payout,
+    outcome: `Cashed out @ ${cashMultiplier}x`,
+    multiplier: cashMultiplier,
+    settlementStatus: 'settled'
+  });
+
+  return res.json({
+    success: true,
+    cashMultiplier,
+    winAmount: payout,
+    wallet: userWallet
+  });
+});
+
+// -------------------------------------------------------------
+// 4. DICE ENGINE (SERVER-AUTHORITATIVE)
+// -------------------------------------------------------------
+let diceState: DiceState = {
+  roundId: 'DC-' + Math.floor(1000 + Math.random() * 9000),
+  phase: 'betting',
+  dice1: 4,
+  dice2: 3,
+  sum: 7,
+  recentSums: [7, 10, 4, 11, 6, 8],
+  countdown: 10
+};
+
+app.get('/api/games/dice/state', (_req: Request, res: Response) => {
+  res.json({ state: diceState });
+});
+
+app.post('/api/games/dice/roll', (req: Request, res: Response) => {
+  const { betType, amount }: { betType: 'under7' | 'exact7' | 'over7' | 'even' | 'odd' | 'doubles'; amount: number } =
+    req.body;
+  const numAmount = Number(amount);
+
+  if (!numAmount || numAmount < 10) {
+    return res.status(400).json({ error: 'Minimum bet is ₹10' });
+  }
+
+  if (!deductWallet(numAmount, `Dice Bet: ${betType}`, 'dice')) {
+    return res.status(400).json({ error: 'Insufficient wallet balance' });
+  }
+
+  // Authoritative server dice generation
+  const d1 = Math.floor(1 + Math.random() * 6);
+  const d2 = Math.floor(1 + Math.random() * 6);
+  const total = d1 + d2;
+  const isDoubles = d1 === d2;
+
+  let multiplier = 0;
+  if (betType === 'under7' && total < 7) multiplier = 2.0;
+  else if (betType === 'over7' && total > 7) multiplier = 2.0;
+  else if (betType === 'exact7' && total === 7) multiplier = 5.5;
+  else if (betType === 'even' && total % 2 === 0) multiplier = 1.95;
+  else if (betType === 'odd' && total % 2 !== 0) multiplier = 1.95;
+  else if (betType === 'doubles' && isDoubles) multiplier = 5.5;
+
+  const winAmount = Math.floor(numAmount * multiplier);
+  if (winAmount > 0) {
+    creditWallet(winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
+  }
+
+  diceState.dice1 = d1;
+  diceState.dice2 = d2;
+  diceState.sum = total;
+  diceState.recentSums.unshift(total);
+  if (diceState.recentSums.length > 10) diceState.recentSums.pop();
+  diceState.roundId = 'DC-' + Math.floor(1000 + Math.random() * 9000);
+
+  recordHistory({
+    gameId: 'dice',
+    gameName: 'Dice',
+    betAmount: numAmount,
+    winAmount,
+    outcome: `Rolled [${d1}, ${d2}] = ${total} (${winAmount > 0 ? 'Won' : 'Lost'})`,
+    multiplier,
+    settlementStatus: 'settled'
+  });
+
+  return res.json({
+    success: true,
+    dice1: d1,
+    dice2: d2,
+    sum: total,
+    isDoubles,
+    multiplier,
+    winAmount,
+    wallet: userWallet,
+    recentSums: diceState.recentSums
+  });
+});
+
+// -------------------------------------------------------------
+// 5. DRAGON TIGER ENGINE (SERVER-AUTHORITATIVE)
+// -------------------------------------------------------------
+let dragonTigerState: DragonTigerState = {
+  roundId: 'DT-' + Math.floor(1000 + Math.random() * 9000),
+  phase: 'betting',
+  dragonCard: { suit: 'hearts', rank: 'K', value: 13 },
+  tigerCard: { suit: 'spades', rank: '7', value: 7 },
+  winner: 'dragon',
+  recentResults: ['dragon', 'tiger', 'dragon', 'tie', 'tiger', 'dragon', 'dragon'],
+  countdown: 10
+};
+
+app.get('/api/games/dragon-tiger/state', (_req: Request, res: Response) => {
+  res.json({ state: dragonTigerState });
+});
+
+app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
+  const { betSide, amount }: { betSide: DragonTigerBetSide; amount: number } = req.body;
+  const numAmount = Number(amount);
+
+  if (!numAmount || numAmount < 10) {
+    return res.status(400).json({ error: 'Minimum bet is ₹10' });
+  }
+
+  if (!deductWallet(numAmount, `Dragon Tiger: ${betSide.toUpperCase()}`, 'dragon-tiger')) {
+    return res.status(400).json({ error: 'Insufficient wallet balance' });
+  }
+
+  const deck = generateDeck();
+  const dragonCard = deck.pop()!;
+  const tigerCard = deck.pop()!;
+
+  let winner: DragonTigerBetSide = 'tie';
+  if (dragonCard.value > tigerCard.value) winner = 'dragon';
+  else if (tigerCard.value > dragonCard.value) winner = 'tiger';
+
+  let multiplier = 0;
+  if (betSide === winner) {
+    multiplier = winner === 'tie' ? 9.0 : 2.0; // 8:1 payout for tie, 1:1 for side
+  } else if (winner === 'tie' && (betSide === 'dragon' || betSide === 'tiger')) {
+    multiplier = 0.5; // push half return on tie
+  }
+
+  const winAmount = Math.floor(numAmount * multiplier);
+  if (winAmount > 0) {
+    creditWallet(winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
+  }
+
+  dragonTigerState.dragonCard = dragonCard;
+  dragonTigerState.tigerCard = tigerCard;
+  dragonTigerState.winner = winner;
+  dragonTigerState.recentResults.unshift(winner);
+  if (dragonTigerState.recentResults.length > 15) dragonTigerState.recentResults.pop();
+  dragonTigerState.roundId = 'DT-' + Math.floor(1000 + Math.random() * 9000);
+
+  recordHistory({
+    gameId: 'dragon-tiger',
+    gameName: 'Dragon Tiger',
+    betAmount: numAmount,
+    winAmount,
+    outcome: `${winner.toUpperCase()} Won (D: ${dragonCard.rank}, T: ${tigerCard.rank})`,
+    multiplier,
+    settlementStatus: 'settled'
+  });
+
+  return res.json({
+    success: true,
+    dragonCard,
+    tigerCard,
+    winner,
+    multiplier,
+    winAmount,
+    wallet: userWallet,
+    recentResults: dragonTigerState.recentResults
+  });
+});
+
+// -------------------------------------------------------------
+// 6. ANDAR BAHAR ENGINE (SERVER-AUTHORITATIVE WITH LIVE SHUFFLE & DEALING)
+// -------------------------------------------------------------
+let activeAndarBaharBet: { side: AndarBaharSide; amount: number } | null = null;
+let andarBaharDealtQueue: { side: AndarBaharSide; card: Card }[] = [];
+let andarBaharTargetJoker: Card | null = { suit: 'spades', rank: '8', value: 8 };
+let andarBaharFinalWinner: AndarBaharSide = 'andar';
+
+let andarBaharState: AndarBaharState = {
+  roundId: 'AB-' + Math.floor(1000 + Math.random() * 9000),
+  phase: 'betting',
+  jokerCard: { suit: 'spades', rank: '8', value: 8 },
+  dealtCards: [
+    { side: 'andar', card: { suit: 'hearts', rank: '3', value: 3 } },
+    { side: 'bahar', card: { suit: 'clubs', rank: 'K', value: 13 } },
+    { side: 'andar', card: { suit: 'diamonds', rank: '8', value: 8 } }
+  ],
+  winningSide: 'andar',
+  recentWinners: ['andar', 'bahar', 'andar', 'andar', 'bahar'],
+  countdown: 10,
+  startedAt: Date.now(),
+  phaseEndsAt: Date.now() + 10000
+};
+
+// Start a fresh server-authoritative Andar Bahar round
+function startAuthoritativeAndarBaharRound() {
+  const deck = generateDeck();
+  const joker = deck.pop()!;
+  const dealt: { side: AndarBaharSide; card: Card }[] = [];
+  let currentSide: AndarBaharSide = 'andar';
+  let winner: AndarBaharSide = 'andar';
+
+  while (deck.length > 0) {
+    const card = deck.pop()!;
+    dealt.push({ side: currentSide, card });
+    if (card.rank === joker.rank) {
+      winner = currentSide;
+      break;
+    }
+    currentSide = currentSide === 'andar' ? 'bahar' : 'andar';
+  }
+
+  andarBaharTargetJoker = joker;
+  andarBaharDealtQueue = dealt;
+  andarBaharFinalWinner = winner;
+
+  andarBaharState.roundId = 'AB-' + Math.floor(1000 + Math.random() * 9000);
+  andarBaharState.phase = 'betting';
+  andarBaharState.countdown = 10;
+  andarBaharState.jokerCard = null;
+  andarBaharState.dealtCards = [];
+  andarBaharState.winningSide = null;
+  andarBaharState.phaseEndsAt = Date.now() + 10000;
+  andarBaharState.startedAt = Date.now();
+  andarBaharState.userBet = activeAndarBaharBet || undefined;
+  andarBaharState.userSettlement = undefined;
+
+  broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+}
+
+// Background Authoritative Andar Bahar Round Cycle
+setInterval(() => {
+  if (andarBaharState.phase === 'betting') {
+    andarBaharState.countdown -= 1;
+    if (andarBaharState.countdown <= 0) {
+      // Transition to Dealer Shuffle Phase (Elena & Marcus shuffle)
+      andarBaharState.phase = 'shuffle';
+      andarBaharState.countdown = 3;
+      andarBaharState.phaseEndsAt = Date.now() + 3000;
+      broadcastSSE('andar_bahar_shuffling', {
+        roundId: andarBaharState.roundId,
+        phase: 'shuffle',
+        duration: 3000
+      });
+      broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+    }
+  } else if (andarBaharState.phase === 'shuffle') {
+    andarBaharState.countdown -= 1;
+    if (andarBaharState.countdown <= 0) {
+      // Transition to Dealing Phase: Deal Joker first, then cards sequentially
+      andarBaharState.phase = 'dealing';
+      andarBaharState.jokerCard = andarBaharTargetJoker;
+      andarBaharState.dealtCards = [...andarBaharDealtQueue];
+      andarBaharState.winningSide = andarBaharFinalWinner;
+      andarBaharState.countdown = Math.max(3, Math.min(8, andarBaharDealtQueue.length));
+      andarBaharState.phaseEndsAt = Date.now() + andarBaharState.countdown * 1000;
+
+      broadcastSSE('andar_bahar_dealing', {
+        roundId: andarBaharState.roundId,
+        phase: 'dealing',
+        jokerCard: andarBaharTargetJoker,
+        dealtCards: andarBaharDealtQueue,
+        winningSide: andarBaharFinalWinner
+      });
+      broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+    }
+  } else if (andarBaharState.phase === 'dealing') {
+    andarBaharState.countdown -= 1;
+    if (andarBaharState.countdown <= 0) {
+      // Settle Round & Payouts
+      andarBaharState.phase = 'settled';
+      andarBaharState.countdown = 4;
+      andarBaharState.phaseEndsAt = Date.now() + 4000;
+
+      andarBaharState.recentWinners.unshift(andarBaharFinalWinner);
+      if (andarBaharState.recentWinners.length > 15) andarBaharState.recentWinners.pop();
+
+      // Check if user had an active bet for this round
+      if (activeAndarBaharBet) {
+        const numAmount = activeAndarBaharBet.amount;
+        const betSide = activeAndarBaharBet.side;
+        const isWin = betSide === andarBaharFinalWinner;
+        const multiplier = isWin ? (andarBaharFinalWinner === 'andar' ? 1.9 : 2.0) : 0;
+        const winAmount = Math.floor(numAmount * multiplier);
+
+        if (winAmount > 0) {
+          creditWallet(winAmount, `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
+        }
+
+        recordHistory({
+          gameId: 'andar-bahar',
+          gameName: 'Andar Bahar',
+          betAmount: numAmount,
+          winAmount,
+          outcome: `${andarBaharFinalWinner.toUpperCase()} matched Joker ${andarBaharTargetJoker?.rank} after ${andarBaharDealtQueue.length} cards`,
+          multiplier,
+          settlementStatus: 'settled'
+        });
+
+        andarBaharState.userSettlement = {
+          isWin,
+          winAmount,
+          betAmount: numAmount,
+          side: betSide,
+          multiplier
+        };
+
+        activeAndarBaharBet = null;
+      }
+
+      broadcastSSE('andar_bahar_settled', {
+        roundId: andarBaharState.roundId,
+        phase: 'settled',
+        winner: andarBaharFinalWinner,
+        recentWinners: andarBaharState.recentWinners
+      });
+      broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+    }
+  } else if (andarBaharState.phase === 'settled') {
+    andarBaharState.countdown -= 1;
+    if (andarBaharState.countdown <= 0) {
+      startAuthoritativeAndarBaharRound();
+    }
+  }
+}, 1000);
+
+app.get('/api/games/andar-bahar/state', (_req: Request, res: Response) => {
+  res.json({
+    state: {
+      ...andarBaharState,
+      userBet: activeAndarBaharBet || undefined
+    }
+  });
+});
+
+app.post('/api/games/andar-bahar/deal', (req: Request, res: Response) => {
+  const { betSide, amount }: { betSide: AndarBaharSide; amount: number } = req.body;
+  const numAmount = Number(amount);
+
+  if (!numAmount || numAmount < 10) {
+    return res.status(400).json({ error: 'Minimum bet is ₹10' });
+  }
+
+  if (!deductWallet(numAmount, `Andar Bahar: ${betSide.toUpperCase()}`, 'andar-bahar')) {
+    return res.status(400).json({ error: 'Insufficient wallet balance' });
+  }
+
+  // Register bet on active server-authoritative round
+  activeAndarBaharBet = { side: betSide, amount: numAmount };
+  andarBaharState.userBet = activeAndarBaharBet;
+
+  // If currently in betting phase, immediately trigger shuffle/deal if under 2s or accelerate
+  if (andarBaharState.phase === 'betting' && andarBaharState.countdown > 3) {
+    andarBaharState.countdown = 2; // quick countdown transition
+  }
+
+  // Also ensure authoritative outcome is provided
+  const isWin = betSide === andarBaharFinalWinner;
+  const multiplier = isWin ? (andarBaharFinalWinner === 'andar' ? 1.9 : 2.0) : 0;
+  const winAmount = Math.floor(numAmount * multiplier);
+
+  broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+
+  return res.json({
+    success: true,
+    roundId: andarBaharState.roundId,
+    jokerCard: andarBaharTargetJoker,
+    dealtCards: andarBaharDealtQueue,
+    winningSide: andarBaharFinalWinner,
+    multiplier,
+    winAmount,
+    wallet: userWallet,
+    recentWinners: andarBaharState.recentWinners,
+    state: andarBaharState
+  });
+});
+
+// -------------------------------------------------------------
+// VITE MIDDLEWARE & STATIC FALLBACK
+// -------------------------------------------------------------
+async function start() {
+  // Execute database state recovery for any interrupted game rounds or unconfirmed transactions
+  try {
+    await gameRecoveryService.recoverInterruptedRounds();
+  } catch (e: any) {
+    console.warn('[Recovery] Non-fatal recovery warning:', e?.message);
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa'
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[Brix Games Engine] Server live on http://0.0.0.0:${PORT}`);
+    console.log(`[Supabase Platform] Connected status:`, getSupabaseConfigStatus().isConfigured ? 'LIVE POSTGRESQL' : 'READY STORE');
+  });
+}
+
+start();

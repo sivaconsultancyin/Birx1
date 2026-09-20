@@ -1,0 +1,7 @@
+{
+  "name": "Brix Games",
+  "description": "Premium mobile-first Indian gaming app featuring Roulette, Teen Patti, Aviator, Dice, Dragon Tiger, and Andar Bahar with server-authoritative gaming engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
