@@ -351,22 +351,18 @@ export const supabaseRepo = {
   async getWallet(userId: string): Promise<Wallet> {
     const admin = getSupabaseAdmin();
     if (admin) {
-      const { data } = await admin.from('wallets').select('*').eq('user_id', userId).single();
-      if (data) {
-        return {
-          balance: Number(data.balance),
-          bonus: Number(data.bonus),
-          lockedAmount: Number(data.locked_amount || 0),
-          currency: data.currency,
-          isDemo: data.is_demo
-        };
-      }
+      const { data, error } = await admin.from('wallets').select('*').eq('user_id', userId).single();
+      if (error) throw new Error(`Wallet read failed: ${error.message}`);
+      if (!data) throw new Error(`Wallet not found for user ${userId}`);
+      return {
+        balance: Number(data.balance),
+        bonus: Number(data.bonus),
+        lockedAmount: Number(data.locked_amount || 0),
+        currency: data.currency,
+        isDemo: data.is_demo
+      };
     }
-
-    if (!dbStore.wallets.has(userId)) {
-      dbStore.wallets.set(userId, { balance: 10000, bonus: 500, lockedAmount: 0, currency: 'INR', isDemo: false });
-    }
-    return dbStore.wallets.get(userId)!;
+    throw new Error('Supabase is not configured; authoritative wallet access is unavailable.');
   },
 
   // ATOMIC WALLET DEBIT
@@ -386,53 +382,19 @@ export const supabaseRepo = {
     }
 
     const admin = getSupabaseAdmin();
-    if (admin) {
-      try {
-        const { data, error } = await admin.rpc('atomic_wallet_debit', {
-          p_user_id: userId,
-          p_amount: amount,
-          p_type: type,
-          p_description: description,
-          p_game_id: gameId || null,
-          p_idempotency_key: idempotencyKey || null
-        });
-        if (!error && data && data.success) {
-          return data;
-        }
-      } catch {
-        // Fall back to transactional memory lock
-      }
-    }
+    if (!admin) throw new Error('Supabase is not configured; wallet debit is unavailable.');
 
-    // Atomic local transaction
-    const wallet = await this.getWallet(userId);
-    if (wallet.balance < amount) {
-      throw new Error(`Insufficient wallet balance. Available: ₹${wallet.balance}, Required: ₹${amount}`);
-    }
-
-    wallet.balance -= amount;
-    dbStore.wallets.set(userId, wallet);
-
-    const tx: Transaction = {
-      id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      userId,
-      type,
-      amount,
-      status: 'success',
-      gameId: gameId as any,
-      description,
-      referenceId: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
-      idempotencyKey,
-      createdAt: new Date().toISOString()
-    };
-    dbStore.transactions.unshift(tx);
-
-    const result = { success: true, wallet, transaction: tx };
-    if (idempotencyKey) {
-      dbStore.idempotency.set(idempotencyKey, result);
-    }
-    return result;
-  },
+    const { data, error } = await admin.rpc('atomic_wallet_debit', {
+      p_user_id: userId,
+      p_amount: amount,
+      p_type: type,
+      p_description: description,
+      p_game_id: gameId || null,
+      p_idempotency_key: idempotencyKey || null
+    });
+    if (error) throw new Error(`Atomic wallet debit failed: ${error.message}`);
+    if (!data || !data.success) throw new Error('Atomic wallet debit failed without a successful result.');
+    return data;
 
   // ATOMIC WALLET CREDIT
   async atomicCredit(
@@ -450,48 +412,19 @@ export const supabaseRepo = {
     }
 
     const admin = getSupabaseAdmin();
-    if (admin) {
-      try {
-        const { data, error } = await admin.rpc('atomic_wallet_credit', {
-          p_user_id: userId,
-          p_amount: amount,
-          p_type: type,
-          p_description: description,
-          p_game_id: gameId || null,
-          p_idempotency_key: idempotencyKey || null
-        });
-        if (!error && data && data.success) {
-          return data;
-        }
-      } catch {
-        // Fall back to memory
-      }
-    }
+    if (!admin) throw new Error('Supabase is not configured; wallet credit is unavailable.');
 
-    const wallet = await this.getWallet(userId);
-    wallet.balance += amount;
-    dbStore.wallets.set(userId, wallet);
-
-    const tx: Transaction = {
-      id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      userId,
-      type,
-      amount,
-      status: 'success',
-      gameId: gameId as any,
-      description,
-      referenceId: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
-      idempotencyKey,
-      createdAt: new Date().toISOString()
-    };
-    dbStore.transactions.unshift(tx);
-
-    const result = { success: true, wallet, transaction: tx };
-    if (idempotencyKey) {
-      dbStore.idempotency.set(idempotencyKey, result);
-    }
-    return result;
-  },
+    const { data, error } = await admin.rpc('atomic_wallet_credit', {
+      p_user_id: userId,
+      p_amount: amount,
+      p_type: type,
+      p_description: description,
+      p_game_id: gameId || null,
+      p_idempotency_key: idempotencyKey || null
+    });
+    if (error) throw new Error(`Atomic wallet credit failed: ${error.message}`);
+    if (!data || !data.success) throw new Error('Atomic wallet credit failed without a successful result.');
+    return data;
 
   // COIN RECHARGE
   async createRecharge(userId: string, amount: number, method = 'UPI'): Promise<CoinRecharge> {
