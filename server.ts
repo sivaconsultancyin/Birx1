@@ -1490,8 +1490,8 @@ let aviatorTimer: NodeJS.Timeout | null = null;
 
 function generateCrashPoint(): number {
   // Classic Provably Fair distribution: 1 / (1 - U) with 3% house edge
-  const rand = Math.random();
-  if (rand < 0.05) return 1.0 + Number((Math.random() * 0.15).toFixed(2)); // instant bust 1.00 - 1.15
+  const rand = crypto.randomInt(1, 1_000_000_000) / 1_000_000_000;
+  if (rand < 0.05) return 1.0 + Number(((crypto.randomInt(0, 1_000_000) / 1_000_000) * 0.15).toFixed(2)); // instant bust 1.00 - 1.15
   const raw = 0.97 / (1 - rand);
   const clamped = Math.min(raw, 50.0);
   return Number(Math.max(1.05, clamped).toFixed(2));
@@ -1677,7 +1677,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
   }
 
   // Authoritative server dice generation
-  const d1 = Math.floor(1 + Math.random() * 6);
+  const d1 = crypto.randomInt(1, 7);
   const d2 = Math.floor(1 + Math.random() * 6);
   const total = d1 + d2;
   const isDoubles = d1 === d2;
