@@ -1484,7 +1484,7 @@ let aviatorState: AviatorState = {
   previousMultipliers: [2.14, 1.35, 12.8, 1.88, 3.42, 1.05, 5.61]
 };
 
-let currentAviatorBet: AviatorBet | null = null;
+const aviatorBets = new Map<string, AviatorBet>();
 let currentCrashTarget = generateCrashPoint();
 let aviatorTimer: NodeJS.Timeout | null = null;
 
@@ -1506,7 +1506,7 @@ function runAviatorCycle() {
   aviatorState.crashMultiplier = null;
   aviatorState.countdown = 5;
   aviatorState.roundId = 'AV-' + crypto.randomInt(1000, 10000);
-  currentAviatorBet = null;
+  // Bets are keyed by authenticated user and survive the round reset independently.
   currentCrashTarget = generateCrashPoint();
 
   broadcastSSE('round_started', { gameId: 'aviator', roundId: aviatorState.roundId });
@@ -1541,8 +1541,9 @@ function startAviatorFlight() {
       if (aviatorState.previousMultipliers.length > 15) aviatorState.previousMultipliers.pop();
 
       // If user had an active bet that didn't cash out -> settled as loss
-      if (currentAviatorBet && !currentAviatorBet.cashedOut) {
-        recordHistory({
+      for (const [userId, currentAviatorBet] of aviatorBets) {
+        if (!currentAviatorBet.cashedOut) {
+          recordHistory({
           gameId: 'aviator',
           gameName: 'Aviator',
           betAmount: currentAviatorBet.amount,
@@ -1551,6 +1552,8 @@ function startAviatorFlight() {
           multiplier: 0,
           settlementStatus: 'settled'
         });
+        aviatorBets.delete(userId);
+        }
       }
 
       broadcastSSE('result', {
@@ -1572,16 +1575,11 @@ function startAviatorFlight() {
 // Start initial aviator flight cycle
 runAviatorCycle();
 
-app.get('/api/games/aviator/state', (_req: Request, res: Response) => {
-  res.json({
-    state: {
-      ...aviatorState,
-      currentBet: currentAviatorBet
-    }
-  });
+app.get('/api/games/aviator/state', requireAuth, (req: Request, res: Response) => {
+  res.json({ state: { ...aviatorState, currentBet: aviatorBets.get(req.user!.id) ?? null } });
 });
 
-app.post('/api/games/aviator/bet', (req: Request, res: Response) => {
+app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
   const { amount } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 10) {
@@ -1596,11 +1594,12 @@ app.post('/api/games/aviator/bet', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
-  currentAviatorBet = {
+  const currentAviatorBet: AviatorBet = {
     betId: `av_bet_${Date.now()}`,
     amount: numAmount,
     cashedOut: false
   };
+  aviatorBets.set(req.user!.id, currentAviatorBet);
 
   return res.json({
     success: true,
@@ -1609,7 +1608,8 @@ app.post('/api/games/aviator/bet', (req: Request, res: Response) => {
   });
 });
 
-app.post('/api/games/aviator/cashout', (_req: Request, res: Response) => {
+app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+  const currentAviatorBet = aviatorBets.get(req.user!.id);
   if (!currentAviatorBet || currentAviatorBet.cashedOut) {
     return res.status(400).json({ error: 'No active bet to cash out' });
   }
@@ -1625,6 +1625,7 @@ app.post('/api/games/aviator/cashout', (_req: Request, res: Response) => {
   currentAviatorBet.cashedOut = true;
   currentAviatorBet.cashOutMultiplier = cashMultiplier;
   currentAviatorBet.winAmount = payout;
+  aviatorBets.delete(req.user!.id);
 
   creditWallet(payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
 
@@ -1806,7 +1807,7 @@ app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // 6. ANDAR BAHAR ENGINE (SERVER-AUTHORITATIVE WITH LIVE SHUFFLE & DEALING)
 // -------------------------------------------------------------
-let activeAndarBaharBet: { side: AndarBaharSide; amount: number } | null = null;
+const andarBaharBets = new Map<string, { side: AndarBaharSide; amount: number }>();
 let andarBaharDealtQueue: { side: AndarBaharSide; card: Card }[] = [];
 let andarBaharTargetJoker: Card | null = { suit: 'spades', rank: '8', value: 8 };
 let andarBaharFinalWinner: AndarBaharSide = 'andar';
@@ -1857,7 +1858,7 @@ function startAuthoritativeAndarBaharRound() {
   andarBaharState.winningSide = null;
   andarBaharState.phaseEndsAt = Date.now() + 10000;
   andarBaharState.startedAt = Date.now();
-  andarBaharState.userBet = activeAndarBaharBet || undefined;
+  andarBaharState.userBet = undefined;
   andarBaharState.userSettlement = undefined;
 
   broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
@@ -1911,7 +1912,7 @@ setInterval(() => {
       if (andarBaharState.recentWinners.length > 15) andarBaharState.recentWinners.pop();
 
       // Check if user had an active bet for this round
-      if (activeAndarBaharBet) {
+      for (const [userId, activeAndarBaharBet] of andarBaharBets) {
         const numAmount = activeAndarBaharBet.amount;
         const betSide = activeAndarBaharBet.side;
         const isWin = betSide === andarBaharFinalWinner;
@@ -1940,7 +1941,7 @@ setInterval(() => {
           multiplier
         };
 
-        activeAndarBaharBet = null;
+        andarBaharBets.delete(userId);
       }
 
       broadcastSSE('andar_bahar_settled', {
@@ -1959,16 +1960,11 @@ setInterval(() => {
   }
 }, 1000);
 
-app.get('/api/games/andar-bahar/state', (_req: Request, res: Response) => {
-  res.json({
-    state: {
-      ...andarBaharState,
-      userBet: activeAndarBaharBet || undefined
-    }
-  });
+app.get('/api/games/andar-bahar/state', requireAuth, (req: Request, res: Response) => {
+  res.json({ state: { ...andarBaharState, userBet: andarBaharBets.get(req.user!.id) ?? undefined } });
 });
 
-app.post('/api/games/andar-bahar/deal', (req: Request, res: Response) => {
+app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: AndarBaharSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
@@ -1981,8 +1977,8 @@ app.post('/api/games/andar-bahar/deal', (req: Request, res: Response) => {
   }
 
   // Register bet on active server-authoritative round
-  activeAndarBaharBet = { side: betSide, amount: numAmount };
-  andarBaharState.userBet = activeAndarBaharBet;
+  const activeAndarBaharBet = { side: betSide, amount: numAmount };
+  andarBaharBets.set(req.user!.id, activeAndarBaharBet);
 
   // If currently in betting phase, immediately trigger shuffle/deal if under 2s or accelerate
   if (andarBaharState.phase === 'betting' && andarBaharState.countdown > 3) {
