@@ -184,7 +184,9 @@ app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
   res.json({ user: req.user, wallet: req.wallet });
 });
 
-app.post('/api/auth/logout', requireAuth, (_req: Request, res: Response) => {
+app.post('/api/auth/logout', requireAuth, (req: Request, res: Response) => {
+  const token = authService.extractToken(req);
+  if (token) authService.logout(token);
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
