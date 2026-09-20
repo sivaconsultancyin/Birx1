@@ -312,7 +312,7 @@ app.post('/api/admin/withdrawals/:id/reject', requireAuth, requireRoles(['OWNER'
 });
 
 // SUPABASE STATUS & HEALTH
-app.get('/api/admin/supabase-status', async (_req: Request, res: Response) => {
+app.get('/api/admin/supabase-status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
   const status = getSupabaseConfigStatus();
   const allUsers = await supabaseRepo.getVisibleUsers({ role: 'OWNER' } as User);
   const recharges = await walletService.getRecharges();
@@ -337,18 +337,18 @@ app.get('/api/storage/shuffle-video', async (_req: Request, res: Response) => {
   res.json(info);
 });
 
-app.get('/api/admin/storage/assets', async (_req: Request, res: Response) => {
+app.get('/api/admin/storage/assets', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
   const assets = await storageService.listAssets('all');
   res.json({ assets });
 });
 
 // DOCUMENT UPLOADS & GOOGLE DRIVE INTEGRATION METADATA
-app.get('/api/storage/documents', async (_req: Request, res: Response) => {
+app.get('/api/storage/documents', requireAuth, async (_req: Request, res: Response) => {
   const docs = await storageService.listDocuments();
   res.json({ documents: docs });
 });
 
-app.post('/api/storage/documents/upload', async (req: Request, res: Response) => {
+app.post('/api/storage/documents/upload', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
     const { name, category, url, size, uploadedBy } = req.body;
     if (!name || !category) {
@@ -424,7 +424,7 @@ app.get('/api/admin/claims', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 
   res.json({ claims: memoryClaims });
 });
 
-app.post('/api/admin/claims/create', async (req: Request, res: Response) => {
+app.post('/api/admin/claims/create', requireAuth, async (req: Request, res: Response) => {
   try {
     const actor = req.user!;
     const { type, subject, description, amount, gameId, documentUrl } = req.body;
@@ -487,7 +487,7 @@ let platformPolicies: PlatformPolicies = {
   updatedAt: new Date().toISOString()
 };
 
-app.get('/api/admin/policies', (_req: Request, res: Response) => {
+app.get('/api/admin/policies', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), (_req: Request, res: Response) => {
   res.json({ policies: platformPolicies });
 });
 
