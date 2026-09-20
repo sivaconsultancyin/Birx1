@@ -200,24 +200,14 @@ export const supabaseRepo = {
   // USER QUERIES
   async getUserById(id: string): Promise<User | null> {
     const admin = getSupabaseAdmin();
-    if (admin) {
-      const { data } = await admin.from('users').select('*').eq('id', id).single();
-      if (data) {
-        return {
-          id: data.id,
-          email: data.email,
-          mobile: data.mobile,
-          username: data.username,
-          role: data.role as UserRole,
-          parentId: data.parent_id,
-          vipTier: data.vip_tier,
-          avatarUrl: data.avatar_url,
-          isDemo: data.is_demo,
-          createdAt: data.created_at
-        };
-      }
-    }
-    return dbStore.users.get(id) || null;
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('users').select('*').eq('id', id).single();
+    if (error || !data) return null;
+    return {
+      id: data.id, email: data.email, mobile: data.mobile, username: data.username,
+      role: data.role as UserRole, parentId: data.parent_id, vipTier: data.vip_tier,
+      avatarUrl: data.avatar_url, isDemo: data.is_demo, createdAt: data.created_at
+    };
   },
 
   async getUserByEmailOrMobile(identifier: string): Promise<User | null> {
