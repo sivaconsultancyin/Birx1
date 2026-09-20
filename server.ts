@@ -53,6 +53,11 @@ app.use((_req: Request, res: Response, next) => {
 // Request-scoped identity only. Never use process-global user/wallet state for authorization.
 const gameHistories: GameHistoryEntry[] = [];
 const transactions: Transaction[] = [];
+const PROCESS_OWNER_ID = `brix-${process.pid}-${crypto.randomUUID()}`;
+async function acquireGameLease(gameId: string): Promise<boolean> {
+  try { return await supabaseRepo.claimGameLease(gameId, PROCESS_OWNER_ID, 4000); }
+  catch (e) { console.error(`[GameLease:${gameId}]`, e); return false; }
+}
 
 async function getRequestUser(req: Request): Promise<User> {
   if (!req.user) throw new Error('Authentication required');
@@ -1118,7 +1123,10 @@ function computeRouletteSettlement(winningNum: number, bets: RouletteBet[]) {
 }
 
 // Background Authoritative Roulette Round Cycle
-setInterval(() => {
+setInterval(async () => {
+  if (!(await acquireGameLease('roulette'))) return;
+  const persistedRoulette = await supabaseRepo.getAuthoritativeGameState('roulette');
+  if (persistedRoulette) rouletteState = persistedRoulette as RouletteState;
   if (rouletteState.phase === 'betting') {
     rouletteState.countdown -= 1;
     if (rouletteState.countdown <= 0) {
@@ -1204,7 +1212,7 @@ setInterval(() => {
         winningCategory: settlement.winningCategory
       });
       broadcastSSE('roulette_settlement', roundSettlements[rouletteState.roundId]);
-      broadcastSSE('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
+      broadcastSSE('roulette_wallet_updated', { gameId: 'roulette' });
     }
   } else if (rouletteState.phase === 'result') {
     rouletteState.countdown -= 1;
@@ -1227,6 +1235,7 @@ setInterval(() => {
       });
     }
   }
+  await supabaseRepo.saveAuthoritativeGameState('roulette', rouletteState);
 }, 1000);
 
 
@@ -1503,7 +1512,10 @@ app.post('/games/roulette/spin', handlePostRouletteSpin);
 let teenPattiState: TeenPattiState = createAuthoritativeTeenPattiRound('Player', undefined, 50);
 
 // Background Authoritative Teen Patti Round Cycle
-setInterval(() => {
+setInterval(async () => {
+  if (!(await acquireGameLease('teen-patti'))) return;
+  const persistedTeen = await supabaseRepo.getAuthoritativeGameState('teen-patti');
+  if (persistedTeen) teenPattiState = persistedTeen as TeenPattiState;
   if (teenPattiState.phase === 'betting') {
     teenPattiState.countdown -= 1;
     if (teenPattiState.countdown <= 0) {
