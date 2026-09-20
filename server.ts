@@ -39,7 +39,16 @@ import { gameRecoveryService } from './src/server/recovery/gameRecoveryService.t
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
+app.disable('x-powered-by');
+app.use((_req: Request, res: Response, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
 
 // Request-scoped identity only. Never use process-global user/wallet state for authorization.
 const gameHistories: GameHistoryEntry[] = [];
@@ -111,7 +120,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 const otps = new Map<string, { codeHash: string; expiresAt: number; attempts: number }>();
 
 function normalizeMobile(value: unknown): string {
-  const digits = String(value || '').replace(/\\D/g, '');
+  const digits = String(value || '').replace(/\D/g, '');
   if (digits.length < 10 || digits.length > 15) throw new Error('Invalid mobile number');
   return digits;
 }
@@ -923,6 +932,13 @@ setInterval(() => {
     }
   }
 }, 1000);
+
+// All wagering/game mutation endpoints require an authenticated PLAYER.
+// Read-only game state/rules remain public.
+app.use('/api/games', (req: Request, res: Response, next) => {
+  if (req.method === 'GET') return next();
+  return requireAuth(req, res, () => requirePlayerForGames(req, res, next));
+});
 
 // --- ROULETTE API ENDPOINTS ---
 
