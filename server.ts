@@ -250,7 +250,7 @@ const handleGetTeenPattiState = (req: Request, res: Response) => {
   });
 };
 
-app.get('/api/games/teen-patti/state', requireAuth, requirePlayerForGames,  requireAuth, handleGetTeenPattiState);
+app.get('/api/games/teen-patti/state', requireAuth, requirePlayerForGames, handleGetTeenPattiState);
 app.get('/games/teen-patti/state', requireAuth, requirePlayerForGames,  requireAuth, handleGetTeenPattiState);
 
 const handlePostTeenPattiBet = async (req: Request, res: Response) => {
