@@ -260,7 +260,7 @@ export const supabaseRepo = {
   async createUser(user: User): Promise<User> {
     const admin = getSupabaseAdmin();
     if (admin) {
-      await admin.from('users').insert({
+      const { error: userError } = await admin.from('users').insert({
         id: user.id,
         email: user.email,
         mobile: user.mobile,
@@ -268,26 +268,29 @@ export const supabaseRepo = {
         role: user.role,
         parent_id: user.parentId,
         vip_tier: user.vipTier,
-        is_demo: user.isDemo,
+        is_demo: false,
         created_at: user.createdAt
       });
-      await admin.from('wallets').insert({
+      if (userError) throw new Error(`User creation failed: ${userError.message}`);
+
+      const { error: walletError } = await admin.from('wallets').insert({
         user_id: user.id,
-        balance: 5000,
-        bonus: 500,
+        balance: 0,
+        bonus: 0,
         currency: 'INR',
-        is_demo: user.isDemo
+        is_demo: false
       });
+      if (walletError) throw new Error(`Wallet creation failed: ${walletError.message}`);
     }
 
     dbStore.users.set(user.id, user);
     if (!dbStore.wallets.has(user.id)) {
       dbStore.wallets.set(user.id, {
-        balance: 5000,
-        bonus: 500,
+        balance: 0,
+        bonus: 0,
         lockedAmount: 0,
         currency: 'INR',
-        isDemo: user.isDemo
+        isDemo: false
       });
     }
     return user;
