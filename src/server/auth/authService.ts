@@ -65,7 +65,7 @@ export const authService = {
 
     const user = await supabaseRepo.createUser({
       id: `usr_${crypto.randomUUID()}`,
-      mobile: mobile.startsWith('+') ? mobile : `+91${mobile.replace(/\\D/g, '')}`,
+      mobile: mobile.startsWith('+') ? mobile : `+91${mobile.replace(/\D/g, '')}`,
       username,
       role: 'PLAYER',
       parentId,
