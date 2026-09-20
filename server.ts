@@ -561,6 +561,14 @@ app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response
 app.use('/api/games', requireAuth, requirePlayerForGames);
 app.use('/games', requireAuth, requirePlayerForGames);
 
+// All wagering/game mutation endpoints require an authenticated PLAYER.
+// Read-only game state/rules remain public.
+const requireGameMutationAuth = (req: Request, res: Response, next: NextFunction) => {
+  if (req.method === 'GET') return next();
+  return requireAuth(req, res, () => requirePlayerForGames(req, res, next));
+};
+app.use('/api/games', requireGameMutationAuth);
+
 app.get('/api/games/history', (_req: Request, res: Response) => {
   res.json({ history: gameHistories });
 });
@@ -933,14 +941,6 @@ setInterval(() => {
   }
 }, 1000);
 
-// All wagering/game mutation endpoints require an authenticated PLAYER.
-// Read-only game state/rules remain public.
-app.use('/api/games', (req: Request, res: Response, next) => {
-  if (req.method === 'GET') return next();
-  return requireAuth(req, res, () => requirePlayerForGames(req, res, next));
-});
-
-// --- ROULETTE API ENDPOINTS ---
 
 // 1. GET Rules
 const handleGetRouletteRules = (_req: Request, res: Response) => {
