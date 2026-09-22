@@ -84,6 +84,15 @@ async function tryCreditForUser(req: Request, amount: number, description: strin
 // -------------------------------------------------------------
 // SSE STREAM FOR REAL-TIME EVENTS
 // -------------------------------------------------------------
+function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'>): void {
+  gameHistories.unshift({
+    ...entry,
+    id: `hist_${crypto.randomUUID()}`,
+    createdAt: new Date().toISOString()
+  });
+  if (gameHistories.length > 500) gameHistories.pop();
+}
+
 const sseClients: Response[] = [];
 
 function broadcastSSE(event: string, data: any) {
@@ -847,7 +856,7 @@ setInterval(async () => {
       if (rouletteHistoryRecords.length > 50) rouletteHistoryRecords.pop();
 
       if (settlement.grossPayout > 0) {
-        creditWallet(settlement.grossPayout, `Roulette Payout #${rouletteState.roundId}`, 'roulette');
+        tryCreditForUser(req, settlement.grossPayout, `Roulette Payout #${rouletteState.roundId}`, 'roulette');
       }
 
       if (settlement.totalBet > 0) {
@@ -1019,7 +1028,7 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Betting is currently closed for this round' });
   }
 
-  if (!deductWallet(totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette')) {
+  if (!tryDebitForUser(req, totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette')) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1100,7 +1109,7 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
 
   // Atomic debit
   const currentRoundId = rouletteState.roundId;
-  if (!deductWallet(totalBet, `Roulette Round ${currentRoundId}`, 'roulette')) {
+  if (!tryDebitForUser(req, totalBet, `Roulette Round ${currentRoundId}`, 'roulette')) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1110,7 +1119,7 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
 
   // Atomic credit if winning
   if (settlement.grossPayout > 0) {
-    creditWallet(settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
+    tryCreditForUser(req, settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
   }
 
   // Update server state
@@ -1246,7 +1255,7 @@ setInterval(async () => {
         teenPattiState.userSettlement = settlement;
 
         if (settlement.grossPayout > 0) {
-          creditWallet(settlement.grossPayout, `Teen Patti Win #${teenPattiState.roundId}`, 'teen-patti');
+          tryCreditForUser(req, settlement.grossPayout, `Teen Patti Win #${teenPattiState.roundId}`, 'teen-patti');
         }
 
         if (settlement.betAmount > 0) {
@@ -1352,7 +1361,7 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
-  if (!deductWallet(additionalBet, `Teen Patti Bet #${teenPattiState.roundId}`, 'teen-patti')) {
+  if (!tryDebitForUser(req, additionalBet, `Teen Patti Bet #${teenPattiState.roundId}`, 'teen-patti')) {
     return res.status(400).json({ error: 'Failed to place bet' });
   }
 
@@ -1385,7 +1394,7 @@ const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
   if (userPlayer && teenPattiState.phase === 'betting') {
     if (userPlayer.currentBet < bootAmount) {
       const delta = bootAmount - userPlayer.currentBet;
-      if (userWallet.balance >= delta && deductWallet(delta, 'Teen Patti Boot Bet', 'teen-patti')) {
+      if (userWallet.balance >= delta && tryDebitForUser(req, delta, 'Teen Patti Boot Bet', 'teen-patti')) {
         userPlayer.currentBet = bootAmount;
         teenPattiState.pot += delta;
       }
@@ -1424,7 +1433,7 @@ const handlePostTeenPattiAction = (req: Request, res: Response) => {
     if (teenPattiState.phase !== 'betting') {
       return res.status(400).json({ error: 'Betting is closed for this round' });
     }
-    if (!deductWallet(stake, `Teen Patti ${action.toUpperCase()}`, 'teen-patti')) {
+    if (!tryDebitForUser(req, stake, `Teen Patti ${action.toUpperCase()}`, 'teen-patti')) {
       return res.status(400).json({ error: 'Insufficient wallet balance' });
     }
     userPlayer.currentBet += stake;
@@ -1574,7 +1583,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, (req: Req
     return res.status(400).json({ error: 'Betting is closed for this round' });
   }
 
-  if (!deductWallet(numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator')) {
+  if (!tryDebitForUser(req, numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator')) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1611,7 +1620,7 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, (req:
   currentAviatorBet.winAmount = payout;
   aviatorBets.delete(req.user!.id);
 
-  creditWallet(payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
+  tryCreditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
 
   recordHistory({
     gameId: 'aviator',
@@ -1657,7 +1666,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Minimum bet is ₹10' });
   }
 
-  if (!deductWallet(numAmount, `Dice Bet: ${betType}`, 'dice')) {
+  if (!tryDebitForUser(req, numAmount, `Dice Bet: ${betType}`, 'dice')) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1676,7 +1685,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
 
   const winAmount = Math.floor(numAmount * multiplier);
   if (winAmount > 0) {
-    creditWallet(winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
+    tryCreditForUser(req, winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
   }
 
   diceState.dice1 = d1;
@@ -1734,7 +1743,7 @@ app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Minimum bet is ₹10' });
   }
 
-  if (!deductWallet(numAmount, `Dragon Tiger: ${betSide.toUpperCase()}`, 'dragon-tiger')) {
+  if (!tryDebitForUser(req, numAmount, `Dragon Tiger: ${betSide.toUpperCase()}`, 'dragon-tiger')) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1755,7 +1764,7 @@ app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
 
   const winAmount = Math.floor(numAmount * multiplier);
   if (winAmount > 0) {
-    creditWallet(winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
+    tryCreditForUser(req, winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
   }
 
   dragonTigerState.dragonCard = dragonCard;
@@ -1903,7 +1912,7 @@ setInterval(() => {
         const winAmount = Math.floor(numAmount * multiplier);
 
         if (winAmount > 0) {
-          creditWallet(winAmount, `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
+          tryCreditForUser(req, winAmount, `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
         }
 
         recordHistory({
@@ -1955,7 +1964,7 @@ app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req
     return res.status(400).json({ error: 'Minimum bet is ₹10' });
   }
 
-  if (!deductWallet(numAmount, `Andar Bahar: ${betSide.toUpperCase()}`, 'andar-bahar')) {
+  if (!tryDebitForUser(req, numAmount, `Andar Bahar: ${betSide.toUpperCase()}`, 'andar-bahar')) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
