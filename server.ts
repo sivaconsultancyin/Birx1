@@ -465,49 +465,6 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER
   } catch(e:any){res.status(500).json({error:e.message});}
 });
 
-// -------------------------------------------------------------
-// WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
-// -------------------------------------------------------------
-app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
-  const actor = req.user!;
-  const wallet = await supabaseRepo.getWallet(actor.id);
-  
-  res.json({ wallet });
-});
-
-app.get('/api/wallet/transactions', requireAuth, async (req: Request, res: Response) => {
-  const actor = req.user!;
-  const txList = await supabaseRepo.getTransactions(actor.id);
-  res.json({ transactions: txList });
-});
-
-app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response) => {
-  const { amount, method = 'UPI', idempotencyKey } = req.body;
-  const numAmount = Number(amount);
-  if (!numAmount || numAmount < 100) {
-    return res.status(400).json({ error: 'Minimum deposit amount is ₹100' });
-  }
-
-  const actor = req.user!;
-  const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
-  broadcastSSE('wallet_updated', { userId: actor.id, wallet: result.wallet });
-  return res.json({ success: true, wallet: result.wallet, transaction: result.transaction });
-});
-
-app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response) => {
-  const { amount, upiId, idempotencyKey } = req.body;
-  const numAmount = Number(amount);
-  if (!numAmount || numAmount < 500) {
-  }
-});
-
-// -------------------------------------------------------------
-// WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
-// -------------------------------------------------------------
-app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
-  const actor = req.user!;
-  const wallet = await supabaseRepo.getWallet(actor.id);
-  
   res.json({ wallet });
 });
 
