@@ -465,6 +465,13 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER
   } catch(e:any){res.status(500).json({error:e.message});}
 });
 
+// -------------------------------------------------------------
+// WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
+// -------------------------------------------------------------
+app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
+  const actor = req.user!;
+  const wallet = await supabaseRepo.getWallet(actor.id);
+  
   res.json({ wallet });
 });
 
