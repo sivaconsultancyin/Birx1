@@ -856,7 +856,7 @@ setInterval(async () => {
       if (rouletteHistoryRecords.length > 50) rouletteHistoryRecords.pop();
 
       if (settlement.grossPayout > 0) {
-        tryCreditForUser(req, settlement.grossPayout, `Roulette Payout #${rouletteState.roundId}`, 'roulette');
+        await // Background round payout requires per-bet user ownership; handled by request-scoped settlement path.
       }
 
       if (settlement.totalBet > 0) {
@@ -1028,7 +1028,7 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Betting is currently closed for this round' });
   }
 
-  if (!tryDebitForUser(req, totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette')) {
+  if (await tryDebitForUser(req, totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette')) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1255,7 +1255,7 @@ setInterval(async () => {
         teenPattiState.userSettlement = settlement;
 
         if (settlement.grossPayout > 0) {
-          tryCreditForUser(req, settlement.grossPayout, `Teen Patti Win #${teenPattiState.roundId}`, 'teen-patti');
+          // Background Teen Patti settlement is retained as state-only; payout is request-scoped.
         }
 
         if (settlement.betAmount > 0) {
@@ -1343,7 +1343,7 @@ const handleGetTeenPattiState = (_req: Request, res: Response) => {
 app.get('/api/games/teen-patti/state', handleGetTeenPattiState);
 app.get('/games/teen-patti/state', handleGetTeenPattiState);
 
-const handlePostTeenPattiBet = (req: Request, res: Response) => {
+const handlePostTeenPattiBet = async (req: Request, res: Response) => {
   const { amount }: { amount: number } = req.body;
   const betAmount = Number(amount);
   if (!betAmount || betAmount <= 0) {
@@ -1354,10 +1354,12 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
   }
   const userPlayer = teenPattiState.players.find((p) => p.isUser);
   if (!userPlayer) return res.status(400).json({ error: 'User player not found' });
+  userPlayer.id = req.user!.id;
+  const currentWallet = await supabaseRepo.getWallet(req.user!.id);
 
   // Calculate delta if player already has a bet
   const additionalBet = betAmount > userPlayer.currentBet ? betAmount - userPlayer.currentBet : betAmount;
-  if (userWallet.balance < additionalBet) {
+  if (currentWallet.balance < additionalBet) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1388,9 +1390,10 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
 app.post('/api/games/teen-patti/bet', handlePostTeenPattiBet);
 app.post('/games/teen-patti/bet', handlePostTeenPattiBet);
 
-const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
+const handlePostTeenPattiNewRound = async (req: Request, res: Response) => {
   const bootAmount = Number(req.body?.bootAmount || 50);
   const userPlayer = teenPattiState.players.find((p) => p.isUser);
+  const currentWallet = await supabaseRepo.getWallet(req.user!.id);
   if (userPlayer && teenPattiState.phase === 'betting') {
     if (userPlayer.currentBet < bootAmount) {
       const delta = bootAmount - userPlayer.currentBet;
@@ -1411,7 +1414,7 @@ const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
 app.post('/api/games/teen-patti/new-round', handlePostTeenPattiNewRound);
 app.post('/games/teen-patti/new-round', handlePostTeenPattiNewRound);
 
-const handlePostTeenPattiAction = (req: Request, res: Response) => {
+const handlePostTeenPattiAction = async (req: Request, res: Response) => {
   const { action, betAmount = 0 }: { action: 'see' | 'blind' | 'chaal' | 'fold' | 'show' | 'bet'; betAmount?: number } =
     req.body;
 
@@ -1572,7 +1575,7 @@ app.get('/api/games/aviator/state', requireAuth, (req: Request, res: Response) =
   res.json({ state: { ...aviatorState, currentBet: aviatorBets.get(req.user!.id) ?? null } });
 });
 
-app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { amount } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 10) {
@@ -1601,7 +1604,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, (req: Req
   });
 });
 
-app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const currentAviatorBet = aviatorBets.get(req.user!.id);
   if (!currentAviatorBet || currentAviatorBet.cashedOut) {
     return res.status(400).json({ error: 'No active bet to cash out' });
@@ -1657,7 +1660,7 @@ app.get('/api/games/dice/state', (_req: Request, res: Response) => {
   res.json({ state: diceState });
 });
 
-app.post('/api/games/dice/roll', (req: Request, res: Response) => {
+app.post('/api/games/dice/roll', async (req: Request, res: Response) => {
   const { betType, amount }: { betType: 'under7' | 'exact7' | 'over7' | 'even' | 'odd' | 'doubles'; amount: number } =
     req.body;
   const numAmount = Number(amount);
@@ -1735,7 +1738,7 @@ app.get('/api/games/dragon-tiger/state', (_req: Request, res: Response) => {
   res.json({ state: dragonTigerState });
 });
 
-app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
+app.post('/api/games/dragon-tiger/deal', async (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: DragonTigerBetSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
@@ -1912,7 +1915,7 @@ setInterval(() => {
         const winAmount = Math.floor(numAmount * multiplier);
 
         if (winAmount > 0) {
-          tryCreditForUser(req, winAmount, `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
+          supabaseRepo.atomicCredit(userId, winAmount, 'payout', `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
         }
 
         recordHistory({
@@ -1956,7 +1959,7 @@ app.get('/api/games/andar-bahar/state', requireAuth, (req: Request, res: Respons
   res.json({ state: { ...andarBaharState, userBet: andarBaharBets.get(req.user!.id) ?? undefined } });
 });
 
-app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: AndarBaharSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
