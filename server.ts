@@ -45,6 +45,10 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '256kb' }));
 app.disable('x-powered-by');
 app.use(requestId);
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('X-Server-Time', String(Date.now()));
+  next();
+});
 app.use(securityHeaders);
 app.use(requireHttps);
 app.use('/api', rateLimit({ windowMs: 60_000, max: 180, keyPrefix: 'api' }));
@@ -2358,7 +2362,15 @@ async function start() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      maxAge: '1y',
+      immutable: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+      }
+    }));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
