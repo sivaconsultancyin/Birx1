@@ -39,8 +39,3 @@ ALTER FUNCTION public.atomic_place_bets(
 ALTER FUNCTION public.atomic_settle_round(
   text,text,jsonb,jsonb,jsonb,text
 ) SET search_path = public, pg_temp;
-
--- Prevent duplicate bet rows when the same placement request is retried.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_bets_user_idempotency_key
-  ON public.bets(user_id, idempotency_key)
-  WHERE idempotency_key IS NOT NULL;
