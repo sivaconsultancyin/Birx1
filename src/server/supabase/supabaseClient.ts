@@ -12,8 +12,9 @@ import {
 
 // Environment credentials
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SECRET_KEY;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 
 const isConfigured = Boolean(
@@ -39,9 +40,9 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 }
 
 export function getSupabasePublic(): SupabaseClient | null {
-  if (!isConfigured) return null;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
   if (!cachedPublicClient) {
-    cachedPublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY);
+    cachedPublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
   }
   return cachedPublicClient;
 }
@@ -53,8 +54,8 @@ export function getSupabaseConfigStatus(): SupabaseConfigStatus {
     hasAnonKey: Boolean(SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('your-')),
     hasServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_SERVICE_ROLE_KEY.includes('your-')),
     hasDatabaseUrl: Boolean(DATABASE_URL && !DATABASE_URL.includes('your-')),
-    authProvider: isConfigured ? 'supabase_auth' : 'not_configured',
-    dbEngine: isConfigured ? 'supabase_postgresql' : 'not_configured',
+    authProvider: isConfigured ? 'supabase_auth' : 'local_authoritative_engine',
+    dbEngine: isConfigured ? 'supabase_postgresql' : 'authoritative_simulated_pg',
     storageAvailable: isConfigured
   };
 }
@@ -198,6 +199,26 @@ seedInitialStore();
 // ---------------------------------------------------------------------
 export const supabaseRepo = {
   // USER QUERIES
+  // AUTH MAPPING
+  async getUserByAuthUserId(authUserId: string): Promise<User | null> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('users').select('*').eq('auth_user_id', authUserId).maybeSingle();
+    if (error || !data) return null;
+    return {
+      id: data.id, email: data.email, mobile: data.mobile, username: data.username,
+      role: data.role as UserRole, parentId: data.parent_id, vipTier: data.vip_tier,
+      avatarUrl: data.avatar_url, isDemo: data.is_demo, createdAt: data.created_at
+    };
+  },
+
+  async linkAuthUser(userId: string, authUserId: string): Promise<void> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { error } = await admin.from('users').update({ auth_user_id: authUserId }).eq('id', userId);
+    if (error) throw new Error(error.message);
+  },
+
   async getUserById(id: string): Promise<User | null> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');

@@ -30,7 +30,7 @@ import {
   createAuthoritativeTeenPattiRound,
   sanitizeTeenPattiState
 } from './src/engines/teenPattiEngine.ts';
-import { supabaseRepo, getSupabaseConfigStatus } from './src/server/supabase/supabaseClient.ts';
+import { supabaseRepo, getSupabaseConfigStatus, getSupabasePublic } from './src/server/supabase/supabaseClient.ts';
 import { authService, requireAuth, requirePlayerForGames, requireRoles } from './src/server/auth/authService.ts';
 import { walletService } from './src/server/wallet/walletService.ts';
 import { storageService } from './src/server/storage/storageService.ts';
@@ -73,9 +73,26 @@ async function creditForUser(req: Request, amount: number, description: string, 
   const user = await getRequestUser(req);
   return supabaseRepo.atomicCredit(user.id, amount, 'payout', description, gameId, idempotencyKey);
 }
+
+async function tryDebitForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string): Promise<boolean> {
+  try { await debitForUser(req, amount, description, gameId, idempotencyKey); return true; } catch { return false; }
+}
+
+async function tryCreditForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string): Promise<boolean> {
+  try { await creditForUser(req, amount, description, gameId, idempotencyKey); return true; } catch { return false; }
+}
 // -------------------------------------------------------------
 // SSE STREAM FOR REAL-TIME EVENTS
 // -------------------------------------------------------------
+function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'>): void {
+  gameHistories.unshift({
+    ...entry,
+    id: `hist_${crypto.randomUUID()}`,
+    createdAt: new Date().toISOString()
+  });
+  if (gameHistories.length > 500) gameHistories.pop();
+}
+
 const sseClients: Response[] = [];
 
 function broadcastSSE(event: string, data: any) {
@@ -120,20 +137,30 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // -------------------------------------------------------------
  // AUTH ENDPOINTS
  // -------------------------------------------------------------
-const otps = new Map<string, { codeHash: string; expiresAt: number; attempts: number }>();
-
 function normalizeMobile(value: unknown): string {
-  const digits = String(value || '').replace(/\D/g, '');
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D/g, '');
   if (digits.length < 10 || digits.length > 15) throw new Error('Invalid mobile number');
-  return digits;
+  return digits.length === 10 ? `+91${digits}` : `+${digits.replace(/^\+/, '')}`;
 }
 
-app.post('/api/auth/send-otp', (req: Request, res: Response) => {
+async function requireSupabaseAuthClient() {
+  const client = getSupabasePublic();
+  if (!client) throw new Error('Supabase Auth is not configured. Set SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY).');
+  return client;
+}
+
+// Supabase Auth owns OTP generation, delivery, expiry and brute-force controls.
+app.post('/api/auth/send-otp', async (req: Request, res: Response) => {
   try {
-    const mobile = normalizeMobile(req.body.mobile);
-    const code = crypto.randomInt(100000, 1000000).toString();
-    otps.set(mobile, { codeHash: crypto.createHash('sha256').update(code).digest('hex'), expiresAt: Date.now() + 5 * 60_000, attempts: 0 });
-    // Integrate an SMS provider here; never return the OTP from the API.
+    const phone = normalizeMobile(req.body.mobile);
+    const mode = req.body.mode === 'register' ? 'register' : 'login';
+    const client = await requireSupabaseAuthClient();
+    const { error } = await client.auth.signInWithOtp({
+      phone,
+      options: { shouldCreateUser: mode === 'register' }
+    });
+    if (error) return res.status(400).json({ error: error.message });
     res.json({ success: true, message: 'OTP sent successfully.' });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -142,16 +169,24 @@ app.post('/api/auth/send-otp', (req: Request, res: Response) => {
 
 app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
   try {
-    const mobile = normalizeMobile(req.body.mobile);
-    const otp = String(req.body.otp || '');
-    const record = otps.get(mobile);
-    if (!record || Date.now() > record.expiresAt || record.attempts >= 5) return res.status(400).json({ error: 'Invalid or expired OTP' });
-    record.attempts++;
-    const hash = crypto.createHash('sha256').update(otp).digest('hex');
-    if (hash !== record.codeHash) return res.status(400).json({ error: 'Invalid or expired OTP' });
-    otps.delete(mobile);
-    const session = await authService.login(mobile, otp);
-    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+    const phone = normalizeMobile(req.body.mobile);
+    const otp = String(req.body.otp || '').trim();
+    if (!/^\d{6}$/.test(otp)) return res.status(400).json({ error: 'OTP must be 6 digits' });
+
+    const client = await requireSupabaseAuthClient();
+    const { data, error } = await client.auth.verifyOtp({ phone, token: otp, type: 'sms' });
+    if (error || !data.session || !data.user) return res.status(400).json({ error: error?.message || 'Invalid or expired OTP' });
+
+    let user = await supabaseRepo.getUserByAuthUserId(data.user.id);
+    if (!user) {
+      const existing = await supabaseRepo.getUserByEmailOrMobile(phone);
+      if (!existing) return res.status(403).json({ error: 'Account not registered. Please use Register first.' });
+      await supabaseRepo.linkAuthUser(existing.id, data.user.id);
+      user = existing;
+    }
+
+    const wallet = await supabaseRepo.getWallet(user.id);
+    res.json({ success: true, token: data.session.access_token, user, wallet });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -159,11 +194,38 @@ app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
 
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
-    const mobile = normalizeMobile(req.body.mobile);
+    const phone = normalizeMobile(req.body.mobile);
     const username = String(req.body.username || '').trim();
+    const otp = String(req.body.otp || '').trim();
     if (username.length < 3 || username.length > 50) return res.status(400).json({ error: 'Username must be 3-50 characters' });
-    const session = await authService.register(mobile, username, 'PLAYER');
-    res.status(201).json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+    if (!/^\d{6}$/.test(otp)) return res.status(400).json({ error: 'OTP must be 6 digits' });
+
+    const client = await requireSupabaseAuthClient();
+    const { data, error } = await client.auth.verifyOtp({ phone, token: otp, type: 'sms' });
+    if (error || !data.session || !data.user) return res.status(400).json({ error: error?.message || 'Invalid or expired OTP' });
+
+    let user = await supabaseRepo.getUserByAuthUserId(data.user.id);
+    if (!user) {
+      const existing = await supabaseRepo.getUserByEmailOrMobile(phone);
+      if (existing) {
+        await supabaseRepo.linkAuthUser(existing.id, data.user.id);
+        user = existing;
+      } else {
+        user = await supabaseRepo.createUser({
+          id: `usr_${crypto.randomUUID()}`,
+          mobile: phone,
+          username,
+          role: 'PLAYER',
+          vipTier: 'Bronze',
+          isDemo: false,
+          createdAt: new Date().toISOString()
+        });
+        await supabaseRepo.linkAuthUser(user.id, data.user.id);
+      }
+    }
+
+    const wallet = await supabaseRepo.getWallet(user.id);
+    res.status(201).json({ success: true, token: data.session.access_token, user, wallet });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -177,7 +239,8 @@ app.post('/api/auth/switch-role', requireAuth, requireRoles(['OWNER']), async (r
     const { role } = req.body;
     if (!['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
     const session = await authService.switchRole(req.user!.id, role);
-    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+    const token = authService.extractToken(req)!;
+    res.json({ success: true, token, user: session.user, wallet: session.wallet });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -187,9 +250,18 @@ app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
   res.json({ user: req.user, wallet: req.wallet });
 });
 
-app.post('/api/auth/logout', requireAuth, (req: Request, res: Response) => {
+app.post('/api/auth/logout', requireAuth, async (req: Request, res: Response) => {
   const token = authService.extractToken(req);
-  if (token) authService.logout(token);
+  if (token) {
+    const admin = getSupabasePublic();
+    if (admin) {
+      try {
+        await admin.auth.signOut({ scope: 'global' });
+      } catch {
+        // Access tokens expire server-side; logout remains idempotent.
+      }
+    }
+  }
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
@@ -410,396 +482,6 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER
   } catch(e:any){res.status(500).json({error:e.message});}
 });
 
-// HEALTH CHECK
-
-// -------------------------------------------------------------
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
-});
-
-// -------------------------------------------------------------
- // AUTH ENDPOINTS
- // -------------------------------------------------------------
-const otps = new Map<string, { codeHash: string; expiresAt: number; attempts: number }>();
-
-function normalizeMobile(value: unknown): string {
-  const digits = String(value || '').replace(/\D/g, '');
-  if (digits.length < 10 || digits.length > 15) throw new Error('Invalid mobile number');
-  return digits;
-}
-
-app.post('/api/auth/send-otp', (req: Request, res: Response) => {
-  try {
-    const mobile = normalizeMobile(req.body.mobile);
-    const code = crypto.randomInt(100000, 1000000).toString();
-    otps.set(mobile, { codeHash: crypto.createHash('sha256').update(code).digest('hex'), expiresAt: Date.now() + 5 * 60_000, attempts: 0 });
-    // Integrate an SMS provider here; never return the OTP from the API.
-    res.json({ success: true, message: 'OTP sent successfully.' });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
-  try {
-    const mobile = normalizeMobile(req.body.mobile);
-    const otp = String(req.body.otp || '');
-    const record = otps.get(mobile);
-    if (!record || Date.now() > record.expiresAt || record.attempts >= 5) return res.status(400).json({ error: 'Invalid or expired OTP' });
-    record.attempts++;
-    const hash = crypto.createHash('sha256').update(otp).digest('hex');
-    if (hash !== record.codeHash) return res.status(400).json({ error: 'Invalid or expired OTP' });
-    otps.delete(mobile);
-    const session = await authService.login(mobile, otp);
-    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/auth/register', async (req: Request, res: Response) => {
-  try {
-    const mobile = normalizeMobile(req.body.mobile);
-    const username = String(req.body.username || '').trim();
-    if (username.length < 3 || username.length > 50) return res.status(400).json({ error: 'Username must be 3-50 characters' });
-    const session = await authService.register(mobile, username, 'PLAYER');
-    res.status(201).json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/auth/switch-role', requireAuth, requireRoles(['OWNER']), async (req: Request, res: Response) => {
-  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEV_ROLE_SWITCH !== 'true') {
-    return res.status(403).json({ error: 'Role switching is disabled.' });
-  }
-  try {
-    const { role } = req.body;
-    if (!['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
-    const session = await authService.switchRole(req.user!.id, role);
-    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
-  res.json({ user: req.user, wallet: req.wallet });
-});
-
-app.post('/api/auth/logout', requireAuth, (req: Request, res: Response) => {
-  const token = authService.extractToken(req);
-  if (token) authService.logout(token);
-  res.json({ success: true, message: 'Logged out successfully' });
-});
-
-// -------------------------------------------------------------
-// ADMIN MANAGEMENT ENDPOINTS (Strict Role-Based Access Control)
-// -------------------------------------------------------------
-// GET visible users respecting OWNER -> SUPER_ADMIN -> ADMIN -> PLAYER hierarchy
-app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const users = await supabaseRepo.getVisibleUsers(actor);
-    res.json({ users });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// CREATE subordinate user under actor
-app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const { mobile, username, role, email } = req.body;
-    if (!mobile || !username || !role) {
-      return res.status(400).json({ error: 'mobile, username, and role are required' });
-    }
-
-    if (!authService.canManageUser(actor, role)) {
-      return res.status(403).json({ error: `Actor with role ${actor.role} cannot create user with role ${role}` });
-    }
-
-    const created = await supabaseRepo.createUser({
-      id: `usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-      mobile,
-      email,
-      username,
-      role,
-      parentId: actor.id,
-      vipTier: 'Bronze',
-      isDemo: false,
-      createdAt: new Date().toISOString()
-    });
-
-    res.json({ success: true, user: created });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// UPDATE user role
-app.patch('/api/admin/users/:id/role', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const { role } = req.body;
-    if (!authService.canManageUser(actor, role)) {
-      return res.status(403).json({ error: `Permission denied: ${actor.role} cannot grant role ${role}` });
-    }
-    const updated = await supabaseRepo.updateUserRole(req.params.id, role);
-    res.json({ success: true, user: updated });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// COIN RECHARGES
-app.get('/api/admin/recharges', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  const recharges = await walletService.getRecharges();
-  res.json({ recharges });
-});
-
-app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const recharge = await walletService.approveCoinRecharge(req.params.id, actor.id);
-    // Sync local wallet if it was for current user
-    res.json({ success: true, recharge });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/admin/recharges/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const recharge = await walletService.rejectCoinRecharge(req.params.id, actor.id);
-    res.json({ success: true, recharge });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// WITHDRAWALS
-app.get('/api/admin/withdrawals', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  const withdrawals = await walletService.getWithdrawals();
-  res.json({ withdrawals });
-});
-
-app.post('/api/admin/withdrawals/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const withdrawal = await walletService.approveWithdrawal(req.params.id, actor.id);
-    res.json({ success: true, withdrawal });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/admin/withdrawals/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const withdrawal = await walletService.rejectWithdrawal(req.params.id, actor.id);
-    res.json({ success: true, withdrawal });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// SUPABASE STATUS & HEALTH
-app.get('/api/admin/supabase-status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  const status = getSupabaseConfigStatus();
-  const allUsers = await supabaseRepo.getVisibleUsers({ role: 'OWNER' } as User);
-  const recharges = await walletService.getRecharges();
-  const withdrawals = await walletService.getWithdrawals();
-  const allTransactions = await walletService.getTransactions();
-
-  res.json({
-    status,
-    stats: {
-      totalUsers: allUsers.length,
-      totalRecharges: recharges.length,
-      totalWithdrawals: withdrawals.length,
-      totalTransactions: allTransactions.length,
-      schemaFile: 'supabase/migrations/20260920000000_supabase_brix_platform.sql'
-    }
-  });
-});
-
-// STORAGE ASSETS & SHUFFLE VIDEO
-app.get('/api/storage/shuffle-video', async (_req: Request, res: Response) => {
-  const info = await storageService.getShuffleVideoInfo();
-  res.json(info);
-});
-
-app.get('/api/admin/storage/assets', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  const assets = await storageService.listAssets('all');
-  res.json({ assets });
-});
-
-// DOCUMENT UPLOADS & GOOGLE DRIVE INTEGRATION METADATA
-app.get('/api/storage/documents', requireAuth, async (_req: Request, res: Response) => {
-  const docs = await storageService.listDocuments();
-  res.json({ documents: docs });
-});
-
-app.post('/api/storage/documents/upload', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const { name, category, url, size, uploadedBy } = req.body;
-    if (!name || !category) {
-      return res.status(400).json({ error: 'Document name and category are required' });
-    }
-    const doc = await storageService.recordDocument({
-      name,
-      category,
-      url: url || `/assets/docs/${name}`,
-      size: Number(size) || 125000,
-      uploadedBy: req.user!.id
-    });
-    res.json({ success: true, document: doc });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.patch('/api/storage/documents/:id/status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { status } = req.body;
-  const updated = await storageService.updateDocumentStatus(id, status);
-  if (!updated) return res.status(404).json({ error: 'Document not found' });
-  res.json({ success: true, document: updated });
-});
-
-// CLAIMS & APPLICATION STATUS MANAGEMENT
-interface PlatformClaim {
-  id: string;
-  userId: string;
-  username: string;
-  type: 'dispute' | 'payment_uncredited' | 'game_interruption' | 'kyc_inquiry';
-  subject: string;
-  description: string;
-  amount?: number;
-  gameId?: string;
-  status: 'pending' | 'investigating' | 'approved' | 'rejected';
-  documentUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-const memoryClaims: PlatformClaim[] = [
-  {
-    id: 'clm_1001',
-    userId: 'usr_brix_8849',
-    username: 'LuckyBrix',
-    type: 'payment_uncredited',
-    subject: 'UPI Recharge Not Reflected Automatically',
-    description: 'Transferred ₹5,000 via UPI Reference #982144. Attached proof receipt.',
-    amount: 5000,
-    status: 'pending',
-    documentUrl: '/assets/docs/UPI_Transfer_Proof_5000.jpg',
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-    updatedAt: new Date(Date.now() - 7200000).toISOString()
-  },
-  {
-    id: 'clm_1002',
-    userId: 'usr_player_002',
-    username: 'HighRollerAlex',
-    type: 'game_interruption',
-    subject: 'Roulette Spin Disconnection Inquiry',
-    description: 'Round #1092 client paused before wheel landed. Bet settled as per server authority.',
-    amount: 1000,
-    gameId: 'roulette',
-    status: 'investigating',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 14400000).toISOString()
-  }
-];
-
-app.get('/api/admin/claims', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  res.json({ claims: memoryClaims });
-});
-
-app.post('/api/admin/claims/create', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const { type, subject, description, amount, gameId, documentUrl } = req.body;
-    if (!subject || !description) {
-      return res.status(400).json({ error: 'Subject and description are required' });
-    }
-    const newClaim: PlatformClaim = {
-      id: `clm_${crypto.randomInt(1000, 10000)}`,
-      userId: actor.id,
-      username: actor.username,
-      type: type || 'dispute',
-      subject,
-      description,
-      amount: amount ? Number(amount) : undefined,
-      gameId,
-      documentUrl,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    memoryClaims.unshift(newClaim);
-    res.json({ success: true, claim: newClaim });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.patch('/api/admin/claims/:id/status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { status } = req.body;
-  const claim = memoryClaims.find((c) => c.id === id);
-  if (!claim) return res.status(404).json({ error: 'Claim not found' });
-  claim.status = status;
-  claim.updatedAt = new Date().toISOString();
-  res.json({ success: true, claim });
-});
-
-// POLICY PRICING & AGENT COMMISSION CONFIGURATION
-interface PlatformPolicies {
-  minBet: number;
-  maxBet: number;
-  dailyWithdrawalLimit: number;
-  agentCommissionPercent: number;
-  superAdminCommissionPercent: number;
-  rouletteTableLimit: number;
-  teenPattiBootLimit: number;
-  andarBaharMaxBet: number;
-  updatedAt: string;
-}
-
-let platformPolicies: PlatformPolicies = {
-  minBet: 10,
-  maxBet: 100000,
-  dailyWithdrawalLimit: 500000,
-  agentCommissionPercent: 3.5,
-  superAdminCommissionPercent: 1.5,
-  rouletteTableLimit: 50000,
-  teenPattiBootLimit: 25000,
-  andarBaharMaxBet: 50000,
-  updatedAt: new Date().toISOString()
-};
-
-app.get('/api/admin/policies', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), (_req: Request, res: Response) => {
-  res.json({ policies: platformPolicies });
-});
-
-app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const updates = req.body;
-    platformPolicies = {
-      ...platformPolicies,
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-    res.json({ success: true, policies: platformPolicies });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // -------------------------------------------------------------
 // WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
 // -------------------------------------------------------------
@@ -826,7 +508,7 @@ app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response)
   const actor = req.user!;
   const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
   broadcastSSE('wallet_updated', { userId: actor.id, wallet: result.wallet });
-  return res.json({ success: true, wallet: result.wallet, transaction: result.transaction });
+  return res.json({ success: true, wallet: result.wallet, request: result.request });
 });
 
 app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response) => {
@@ -1097,8 +779,7 @@ function computeRouletteSettlement(winningNum: number, bets: RouletteBet[]) {
       bet,
       isWin,
       payoutMultiplier: multiplier,
-      payoutAmount,
-      profit
+      payoutAmount,      profit
     };
 
     if (isWin) {
@@ -1174,8 +855,12 @@ setInterval(async () => {
       });
       if (rouletteHistoryRecords.length > 50) rouletteHistoryRecords.pop();
 
-      if (settlement.grossPayout > 0) {
-        creditWallet(settlement.grossPayout, `Roulette Payout #${rouletteState.roundId}`, 'roulette');
+      // Credit each winning bet to its authenticated owner.
+      for (const winning of settlement.winningBets) {
+        const ownerId = (winning.bet as RouletteBet & { userId?: string }).userId;
+        if (ownerId && winning.payoutAmount > 0) {
+          await supabaseRepo.atomicCredit(ownerId, winning.payoutAmount, 'payout', `Roulette Payout #${rouletteState.roundId}`, 'roulette');
+        }
       }
 
       if (settlement.totalBet > 0) {
@@ -1314,7 +999,7 @@ app.get('/api/games/roulette/history', handleGetRouletteHistory);
 app.get('/games/roulette/history', handleGetRouletteHistory);
 
 // 4. POST Bets (Register bets for ongoing authoritative round)
-const handlePostRouletteBets = (req: Request, res: Response) => {
+const handlePostRouletteBets = async (req: Request, res: Response) => {
   const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
 
   // Idempotency check to prevent double debit
@@ -1347,12 +1032,12 @@ const handlePostRouletteBets = (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Betting is currently closed for this round' });
   }
 
-  if (!deductWallet(totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette')) {
+  if (!(await tryDebitForUser(req, totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
   const existingBets = currentRoundBets[rouletteState.roundId] || [];
-  currentRoundBets[rouletteState.roundId] = [...existingBets, ...bets];
+  currentRoundBets[rouletteState.roundId] = [...existingBets, ...bets.map((bet) => ({ ...bet, userId: req.user!.id } as RouletteBet & { userId: string }))];
 
   const responsePayload = {
     success: true,
@@ -1398,7 +1083,7 @@ app.get('/api/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
 app.get('/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
 
 // 7. POST Spin (Instant spin & authoritative settlement flow)
-const handlePostRouletteSpin = (req: Request, res: Response) => {
+const handlePostRouletteSpin = async (req: Request, res: Response) => {
   const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
 
   // Idempotency check
@@ -1428,7 +1113,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
 
   // Atomic debit
   const currentRoundId = rouletteState.roundId;
-  if (!deductWallet(totalBet, `Roulette Round ${currentRoundId}`, 'roulette')) {
+  if (!(await tryDebitForUser(req, totalBet, `Roulette Round ${currentRoundId}`, 'roulette'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1438,7 +1123,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
 
   // Atomic credit if winning
   if (settlement.grossPayout > 0) {
-    creditWallet(settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
+    await tryCreditForUser(req, settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
   }
 
   // Update server state
@@ -1574,7 +1259,9 @@ setInterval(async () => {
         teenPattiState.userSettlement = settlement;
 
         if (settlement.grossPayout > 0) {
-          creditWallet(settlement.grossPayout, `Teen Patti Win #${teenPattiState.roundId}`, 'teen-patti');
+          if (userPlayer.id && userPlayer.id !== 'user' && settlement.grossPayout > 0) {
+          await supabaseRepo.atomicCredit(userPlayer.id, settlement.grossPayout, 'payout', `Teen Patti Win #${teenPattiState.roundId}`, 'teen-patti');
+        }
         }
 
         if (settlement.betAmount > 0) {
@@ -1662,7 +1349,7 @@ const handleGetTeenPattiState = (_req: Request, res: Response) => {
 app.get('/api/games/teen-patti/state', handleGetTeenPattiState);
 app.get('/games/teen-patti/state', handleGetTeenPattiState);
 
-const handlePostTeenPattiBet = (req: Request, res: Response) => {
+const handlePostTeenPattiBet = async (req: Request, res: Response) => {
   const { amount }: { amount: number } = req.body;
   const betAmount = Number(amount);
   if (!betAmount || betAmount <= 0) {
@@ -1673,14 +1360,16 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
   }
   const userPlayer = teenPattiState.players.find((p) => p.isUser);
   if (!userPlayer) return res.status(400).json({ error: 'User player not found' });
+  userPlayer.id = req.user!.id;
+  const currentWallet = await supabaseRepo.getWallet(req.user!.id);
 
   // Calculate delta if player already has a bet
   const additionalBet = betAmount > userPlayer.currentBet ? betAmount - userPlayer.currentBet : betAmount;
-  if (userWallet.balance < additionalBet) {
+  if (currentWallet.balance < additionalBet) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
-  if (!deductWallet(additionalBet, `Teen Patti Bet #${teenPattiState.roundId}`, 'teen-patti')) {
+  if (!(await tryDebitForUser(req, additionalBet, `Teen Patti Bet #${teenPattiState.roundId}`, 'teen-patti'))) {
     return res.status(400).json({ error: 'Failed to place bet' });
   }
 
@@ -1697,7 +1386,6 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
     betAmount: userPlayer.currentBet,
     pot: teenPattiState.pot
   });
-
   return res.json({
     success: true,
     state: sanitizeTeenPattiState(teenPattiState),
@@ -1708,13 +1396,14 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
 app.post('/api/games/teen-patti/bet', handlePostTeenPattiBet);
 app.post('/games/teen-patti/bet', handlePostTeenPattiBet);
 
-const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
+const handlePostTeenPattiNewRound = async (req: Request, res: Response) => {
   const bootAmount = Number(req.body?.bootAmount || 50);
   const userPlayer = teenPattiState.players.find((p) => p.isUser);
+  const currentWallet = await supabaseRepo.getWallet(req.user!.id);
   if (userPlayer && teenPattiState.phase === 'betting') {
     if (userPlayer.currentBet < bootAmount) {
       const delta = bootAmount - userPlayer.currentBet;
-      if (userWallet.balance >= delta && deductWallet(delta, 'Teen Patti Boot Bet', 'teen-patti')) {
+      if (currentWallet.balance >= delta && await tryDebitForUser(req, delta, 'Teen Patti Boot Bet', 'teen-patti')) {
         userPlayer.currentBet = bootAmount;
         teenPattiState.pot += delta;
       }
@@ -1731,7 +1420,7 @@ const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
 app.post('/api/games/teen-patti/new-round', handlePostTeenPattiNewRound);
 app.post('/games/teen-patti/new-round', handlePostTeenPattiNewRound);
 
-const handlePostTeenPattiAction = (req: Request, res: Response) => {
+const handlePostTeenPattiAction = async (req: Request, res: Response) => {
   const { action, betAmount = 0 }: { action: 'see' | 'blind' | 'chaal' | 'fold' | 'show' | 'bet'; betAmount?: number } =
     req.body;
 
@@ -1753,7 +1442,7 @@ const handlePostTeenPattiAction = (req: Request, res: Response) => {
     if (teenPattiState.phase !== 'betting') {
       return res.status(400).json({ error: 'Betting is closed for this round' });
     }
-    if (!deductWallet(stake, `Teen Patti ${action.toUpperCase()}`, 'teen-patti')) {
+    if (!(await tryDebitForUser(req, stake, `Teen Patti ${action.toUpperCase()}`, 'teen-patti'))) {
       return res.status(400).json({ error: 'Insufficient wallet balance' });
     }
     userPlayer.currentBet += stake;
@@ -1892,7 +1581,7 @@ app.get('/api/games/aviator/state', requireAuth, (req: Request, res: Response) =
   res.json({ state: { ...aviatorState, currentBet: aviatorBets.get(req.user!.id) ?? null } });
 });
 
-app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { amount } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 10) {
@@ -1903,7 +1592,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, (req: Req
     return res.status(400).json({ error: 'Betting is closed for this round' });
   }
 
-  if (!deductWallet(numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator')) {
+  if (!(await tryDebitForUser(req, numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1921,7 +1610,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, (req: Req
   });
 });
 
-app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const currentAviatorBet = aviatorBets.get(req.user!.id);
   if (!currentAviatorBet || currentAviatorBet.cashedOut) {
     return res.status(400).json({ error: 'No active bet to cash out' });
@@ -1940,7 +1629,7 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, (req:
   currentAviatorBet.winAmount = payout;
   aviatorBets.delete(req.user!.id);
 
-  creditWallet(payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
+  await tryCreditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
 
   recordHistory({
     gameId: 'aviator',
@@ -1977,7 +1666,7 @@ app.get('/api/games/dice/state', (_req: Request, res: Response) => {
   res.json({ state: diceState });
 });
 
-app.post('/api/games/dice/roll', (req: Request, res: Response) => {
+app.post('/api/games/dice/roll', async (req: Request, res: Response) => {
   const { betType, amount }: { betType: 'under7' | 'exact7' | 'over7' | 'even' | 'odd' | 'doubles'; amount: number } =
     req.body;
   const numAmount = Number(amount);
@@ -1986,7 +1675,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Minimum bet is ₹10' });
   }
 
-  if (!deductWallet(numAmount, `Dice Bet: ${betType}`, 'dice')) {
+  if (!(await tryDebitForUser(req, numAmount, `Dice Bet: ${betType}`, 'dice'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1997,8 +1686,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
   const isDoubles = d1 === d2;
 
   let multiplier = 0;
-  if (betType === 'under7' && total < 7) multiplier = 2.0;
-  else if (betType === 'over7' && total > 7) multiplier = 2.0;
+  if (betType === 'under7' && total < 7) multiplier = 2.0;  else if (betType === 'over7' && total > 7) multiplier = 2.0;
   else if (betType === 'exact7' && total === 7) multiplier = 5.5;
   else if (betType === 'even' && total % 2 === 0) multiplier = 1.95;
   else if (betType === 'odd' && total % 2 !== 0) multiplier = 1.95;
@@ -2006,7 +1694,7 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
 
   const winAmount = Math.floor(numAmount * multiplier);
   if (winAmount > 0) {
-    creditWallet(winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
+    await tryCreditForUser(req, winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
   }
 
   diceState.dice1 = d1;
@@ -2056,7 +1744,7 @@ app.get('/api/games/dragon-tiger/state', (_req: Request, res: Response) => {
   res.json({ state: dragonTigerState });
 });
 
-app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
+app.post('/api/games/dragon-tiger/deal', async (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: DragonTigerBetSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
@@ -2064,7 +1752,7 @@ app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Minimum bet is ₹10' });
   }
 
-  if (!deductWallet(numAmount, `Dragon Tiger: ${betSide.toUpperCase()}`, 'dragon-tiger')) {
+  if (!(await tryDebitForUser(req, numAmount, `Dragon Tiger: ${betSide.toUpperCase()}`, 'dragon-tiger'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -2085,7 +1773,7 @@ app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
 
   const winAmount = Math.floor(numAmount * multiplier);
   if (winAmount > 0) {
-    creditWallet(winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
+    await tryCreditForUser(req, winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
   }
 
   dragonTigerState.dragonCard = dragonCard;
@@ -2233,7 +1921,7 @@ setInterval(() => {
         const winAmount = Math.floor(numAmount * multiplier);
 
         if (winAmount > 0) {
-          creditWallet(winAmount, `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
+          supabaseRepo.atomicCredit(userId, winAmount, 'payout', `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
         }
 
         recordHistory({
@@ -2277,7 +1965,7 @@ app.get('/api/games/andar-bahar/state', requireAuth, (req: Request, res: Respons
   res.json({ state: { ...andarBaharState, userBet: andarBaharBets.get(req.user!.id) ?? undefined } });
 });
 
-app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: AndarBaharSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
@@ -2285,7 +1973,7 @@ app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req
     return res.status(400).json({ error: 'Minimum bet is ₹10' });
   }
 
-  if (!deductWallet(numAmount, `Andar Bahar: ${betSide.toUpperCase()}`, 'andar-bahar')) {
+  if (!(await tryDebitForUser(req, numAmount, `Andar Bahar: ${betSide.toUpperCase()}`, 'andar-bahar'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
