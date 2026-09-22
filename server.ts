@@ -452,7 +452,17 @@ app.patch('/api/admin/claims/:id/status', requireAuth, requireRoles(['OWNER','SU
 
 // POLICY PRICING & AGENT COMMISSION CONFIGURATION — Supabase authoritative storage
 app.get('/api/admin/policies', requireAuth, requireRoles(['OWNER','SUPER_ADMIN','ADMIN']), async (_req,res) => {
-  }
+  try { res.json({policies:await supabaseRepo.getPolicies()}); }
+  catch(e:any){res.status(500).json({error:e.message});}
+});
+app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER_ADMIN']), async (req,res) => {
+  try {
+    const current=await supabaseRepo.getPolicies();
+    const allowed=['commissionRates','withdrawalFees','minDeposit','minWithdrawal','gameLimits','vipTiers'];
+    const next:any={...current};
+    for(const key of allowed) if(req.body[key]!==undefined) next[key]=req.body[key];
+    res.json({success:true,policies:await supabaseRepo.updatePolicies(next,req.user!.id)});
+  } catch(e:any){res.status(500).json({error:e.message});}
 });
 
 // -------------------------------------------------------------
