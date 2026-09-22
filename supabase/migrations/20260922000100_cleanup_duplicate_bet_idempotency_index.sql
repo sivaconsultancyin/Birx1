@@ -1,0 +1,1 @@
+-- Remove the duplicate index introduced by the initial hardening pass.\nDROP INDEX IF EXISTS public.uq_bets_user_idempotency_key;\n
