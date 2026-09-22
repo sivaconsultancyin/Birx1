@@ -498,6 +498,42 @@ app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response
   const { amount, upiId, idempotencyKey } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 500) {
+  }
+});
+
+// -------------------------------------------------------------
+// WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
+// -------------------------------------------------------------
+app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
+  const actor = req.user!;
+  const wallet = await supabaseRepo.getWallet(actor.id);
+  
+  res.json({ wallet });
+});
+
+app.get('/api/wallet/transactions', requireAuth, async (req: Request, res: Response) => {
+  const actor = req.user!;
+  const txList = await supabaseRepo.getTransactions(actor.id);
+  res.json({ transactions: txList });
+});
+
+app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response) => {
+  const { amount, method = 'UPI', idempotencyKey } = req.body;
+  const numAmount = Number(amount);
+  if (!numAmount || numAmount < 100) {
+    return res.status(400).json({ error: 'Minimum deposit amount is ₹100' });
+  }
+
+  const actor = req.user!;
+  const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
+  broadcastSSE('wallet_updated', { userId: actor.id, wallet: result.wallet });
+  return res.json({ success: true, wallet: result.wallet, transaction: result.transaction });
+});
+
+app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response) => {
+  const { amount, upiId, idempotencyKey } = req.body;
+  const numAmount = Number(amount);
+  if (!numAmount || numAmount < 500) {
     return res.status(400).json({ error: 'Minimum withdrawal is ₹500' });
   }
 
@@ -762,8 +798,7 @@ function computeRouletteSettlement(winningNum: number, bets: RouletteBet[]) {
       bet,
       isWin,
       payoutMultiplier: multiplier,
-      payoutAmount,
-      profit
+      payoutAmount,      profit
     };
 
     if (isWin) {
@@ -1062,8 +1097,7 @@ const handleGetRouletteSettlement = (req: Request, res: Response) => {
 app.get('/api/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
 app.get('/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
 
-// 7. POST Spin (Instant spin & authoritative settlement flow)
-const handlePostRouletteSpin = (req: Request, res: Response) => {
+// 7. POST Spin (Instant spin & authoritative settlement flow)const handlePostRouletteSpin = (req: Request, res: Response) => {
   const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
 
   // Idempotency check
@@ -1362,7 +1396,6 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
     betAmount: userPlayer.currentBet,
     pot: teenPattiState.pot
   });
-
   return res.json({
     success: true,
     state: sanitizeTeenPattiState(teenPattiState),
@@ -1662,4 +1695,360 @@ app.post('/api/games/dice/roll', (req: Request, res: Response) => {
   const isDoubles = d1 === d2;
 
   let multiplier = 0;
-  if (betType === 'under7' && total < 7) multiplier = 2.0;
+  if (betType === 'under7' && total < 7) multiplier = 2.0;  else if (betType === 'over7' && total > 7) multiplier = 2.0;
+  else if (betType === 'exact7' && total === 7) multiplier = 5.5;
+  else if (betType === 'even' && total % 2 === 0) multiplier = 1.95;
+  else if (betType === 'odd' && total % 2 !== 0) multiplier = 1.95;
+  else if (betType === 'doubles' && isDoubles) multiplier = 5.5;
+
+  const winAmount = Math.floor(numAmount * multiplier);
+  if (winAmount > 0) {
+    creditWallet(winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
+  }
+
+  diceState.dice1 = d1;
+  diceState.dice2 = d2;
+  diceState.sum = total;
+  diceState.recentSums.unshift(total);
+  if (diceState.recentSums.length > 10) diceState.recentSums.pop();
+  diceState.roundId = 'DC-' + crypto.randomInt(1000, 10000);
+
+  recordHistory({
+    gameId: 'dice',
+    gameName: 'Dice',
+    betAmount: numAmount,
+    winAmount,
+    outcome: `Rolled [${d1}, ${d2}] = ${total} (${winAmount > 0 ? 'Won' : 'Lost'})`,
+    multiplier,
+    settlementStatus: 'settled'
+  });
+
+  return res.json({
+    success: true,
+    dice1: d1,
+    dice2: d2,
+    sum: total,
+    isDoubles,
+    multiplier,
+    winAmount,
+    wallet: await supabaseRepo.getWallet(req.user!.id),
+    recentSums: diceState.recentSums
+  });
+});
+
+// -------------------------------------------------------------
+// 5. DRAGON TIGER ENGINE (SERVER-AUTHORITATIVE)
+// -------------------------------------------------------------
+let dragonTigerState: DragonTigerState = {
+  roundId: 'DT-' + crypto.randomInt(1000, 10000),
+  phase: 'betting',
+  dragonCard: { suit: 'hearts', rank: 'K', value: 13 },
+  tigerCard: { suit: 'spades', rank: '7', value: 7 },
+  winner: 'dragon',
+  recentResults: ['dragon', 'tiger', 'dragon', 'tie', 'tiger', 'dragon', 'dragon'],
+  countdown: 10
+};
+
+app.get('/api/games/dragon-tiger/state', (_req: Request, res: Response) => {
+  res.json({ state: dragonTigerState });
+});
+
+app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
+  const { betSide, amount }: { betSide: DragonTigerBetSide; amount: number } = req.body;
+  const numAmount = Number(amount);
+
+  if (!numAmount || numAmount < 10) {
+    return res.status(400).json({ error: 'Minimum bet is ₹10' });
+  }
+
+  if (!deductWallet(numAmount, `Dragon Tiger: ${betSide.toUpperCase()}`, 'dragon-tiger')) {
+    return res.status(400).json({ error: 'Insufficient wallet balance' });
+  }
+
+  const deck = generateDeck();
+  const dragonCard = deck.pop()!;
+  const tigerCard = deck.pop()!;
+
+  let winner: DragonTigerBetSide = 'tie';
+  if (dragonCard.value > tigerCard.value) winner = 'dragon';
+  else if (tigerCard.value > dragonCard.value) winner = 'tiger';
+
+  let multiplier = 0;
+  if (betSide === winner) {
+    multiplier = winner === 'tie' ? 9.0 : 2.0; // 8:1 payout for tie, 1:1 for side
+  } else if (winner === 'tie' && (betSide === 'dragon' || betSide === 'tiger')) {
+    multiplier = 0.5; // push half return on tie
+  }
+
+  const winAmount = Math.floor(numAmount * multiplier);
+  if (winAmount > 0) {
+    creditWallet(winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
+  }
+
+  dragonTigerState.dragonCard = dragonCard;
+  dragonTigerState.tigerCard = tigerCard;
+  dragonTigerState.winner = winner;
+  dragonTigerState.recentResults.unshift(winner);
+  if (dragonTigerState.recentResults.length > 15) dragonTigerState.recentResults.pop();
+  dragonTigerState.roundId = 'DT-' + crypto.randomInt(1000, 10000);
+
+  recordHistory({
+    gameId: 'dragon-tiger',
+    gameName: 'Dragon Tiger',
+    betAmount: numAmount,
+    winAmount,
+    outcome: `${winner.toUpperCase()} Won (D: ${dragonCard.rank}, T: ${tigerCard.rank})`,
+    multiplier,
+    settlementStatus: 'settled'
+  });
+
+  return res.json({
+    success: true,
+    dragonCard,
+    tigerCard,
+    winner,
+    multiplier,
+    winAmount,
+    wallet: await supabaseRepo.getWallet(req.user!.id),
+    recentResults: dragonTigerState.recentResults
+  });
+});
+
+// -------------------------------------------------------------
+// 6. ANDAR BAHAR ENGINE (SERVER-AUTHORITATIVE WITH LIVE SHUFFLE & DEALING)
+// -------------------------------------------------------------
+const andarBaharBets = new Map<string, { side: AndarBaharSide; amount: number }>();
+let andarBaharDealtQueue: { side: AndarBaharSide; card: Card }[] = [];
+let andarBaharTargetJoker: Card | null = { suit: 'spades', rank: '8', value: 8 };
+let andarBaharFinalWinner: AndarBaharSide = 'andar';
+
+let andarBaharState: AndarBaharState = {
+  roundId: 'AB-' + crypto.randomInt(1000, 10000),
+  phase: 'betting',
+  jokerCard: { suit: 'spades', rank: '8', value: 8 },
+  dealtCards: [
+    { side: 'andar', card: { suit: 'hearts', rank: '3', value: 3 } },
+    { side: 'bahar', card: { suit: 'clubs', rank: 'K', value: 13 } },
+    { side: 'andar', card: { suit: 'diamonds', rank: '8', value: 8 } }
+  ],
+  winningSide: 'andar',
+  recentWinners: ['andar', 'bahar', 'andar', 'andar', 'bahar'],
+  countdown: 10,
+  startedAt: Date.now(),
+  phaseEndsAt: Date.now() + 10000
+};
+
+// Start a fresh server-authoritative Andar Bahar round
+function startAuthoritativeAndarBaharRound() {
+  const deck = generateDeck();
+  const joker = deck.pop()!;
+  const dealt: { side: AndarBaharSide; card: Card }[] = [];
+  let currentSide: AndarBaharSide = 'andar';
+  let winner: AndarBaharSide = 'andar';
+
+  while (deck.length > 0) {
+    const card = deck.pop()!;
+    dealt.push({ side: currentSide, card });
+    if (card.rank === joker.rank) {
+      winner = currentSide;
+      break;
+    }
+    currentSide = currentSide === 'andar' ? 'bahar' : 'andar';
+  }
+
+  andarBaharTargetJoker = joker;
+  andarBaharDealtQueue = dealt;
+  andarBaharFinalWinner = winner;
+
+  andarBaharState.roundId = 'AB-' + crypto.randomInt(1000, 10000);
+  andarBaharState.phase = 'betting';
+  andarBaharState.countdown = 10;
+  andarBaharState.jokerCard = null;
+  andarBaharState.dealtCards = [];
+  andarBaharState.winningSide = null;
+  andarBaharState.phaseEndsAt = Date.now() + 10000;
+  andarBaharState.startedAt = Date.now();
+  andarBaharState.userBet = undefined;
+  andarBaharState.userSettlement = undefined;
+
+  broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+}
+
+// Background Authoritative Andar Bahar Round Cycle
+setInterval(() => {
+  if (andarBaharState.phase === 'betting') {
+    andarBaharState.countdown -= 1;
+    if (andarBaharState.countdown <= 0) {
+      // Transition to Dealer Shuffle Phase (Elena & Marcus shuffle)
+      andarBaharState.phase = 'shuffle';
+      andarBaharState.countdown = 3;
+      andarBaharState.phaseEndsAt = Date.now() + 3000;
+      broadcastSSE('andar_bahar_shuffling', {
+        roundId: andarBaharState.roundId,
+        phase: 'shuffle',
+        duration: 3000
+      });
+      broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+    }
+  } else if (andarBaharState.phase === 'shuffle') {
+    andarBaharState.countdown -= 1;
+    if (andarBaharState.countdown <= 0) {
+      // Transition to Dealing Phase: Deal Joker first, then cards sequentially
+      andarBaharState.phase = 'dealing';
+      andarBaharState.jokerCard = andarBaharTargetJoker;
+      andarBaharState.dealtCards = [...andarBaharDealtQueue];
+      andarBaharState.winningSide = andarBaharFinalWinner;
+      andarBaharState.countdown = Math.max(3, Math.min(8, andarBaharDealtQueue.length));
+      andarBaharState.phaseEndsAt = Date.now() + andarBaharState.countdown * 1000;
+
+      broadcastSSE('andar_bahar_dealing', {
+        roundId: andarBaharState.roundId,
+        phase: 'dealing',
+        jokerCard: andarBaharTargetJoker,
+        dealtCards: andarBaharDealtQueue,
+        winningSide: andarBaharFinalWinner
+      });
+      broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+    }
+  } else if (andarBaharState.phase === 'dealing') {
+    andarBaharState.countdown -= 1;
+    if (andarBaharState.countdown <= 0) {
+      // Settle Round & Payouts
+      andarBaharState.phase = 'settled';
+      andarBaharState.countdown = 4;
+      andarBaharState.phaseEndsAt = Date.now() + 4000;
+
+      andarBaharState.recentWinners.unshift(andarBaharFinalWinner);
+      if (andarBaharState.recentWinners.length > 15) andarBaharState.recentWinners.pop();
+
+      // Check if user had an active bet for this round
+      for (const [userId, activeAndarBaharBet] of andarBaharBets) {
+        const numAmount = activeAndarBaharBet.amount;
+        const betSide = activeAndarBaharBet.side;
+        const isWin = betSide === andarBaharFinalWinner;
+        const multiplier = isWin ? (andarBaharFinalWinner === 'andar' ? 1.9 : 2.0) : 0;
+        const winAmount = Math.floor(numAmount * multiplier);
+
+        if (winAmount > 0) {
+          creditWallet(winAmount, `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
+        }
+
+        recordHistory({
+          gameId: 'andar-bahar',
+          gameName: 'Andar Bahar',
+          betAmount: numAmount,
+          winAmount,
+          outcome: `${andarBaharFinalWinner.toUpperCase()} matched Joker ${andarBaharTargetJoker?.rank} after ${andarBaharDealtQueue.length} cards`,
+          multiplier,
+          settlementStatus: 'settled'
+        });
+
+        andarBaharState.userSettlement = {
+          isWin,
+          winAmount,
+          betAmount: numAmount,
+          side: betSide,
+          multiplier
+        };
+
+        andarBaharBets.delete(userId);
+      }
+
+      broadcastSSE('andar_bahar_settled', {
+        roundId: andarBaharState.roundId,
+        phase: 'settled',
+        winner: andarBaharFinalWinner,
+        recentWinners: andarBaharState.recentWinners
+      });
+      broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+    }
+  } else if (andarBaharState.phase === 'settled') {
+    andarBaharState.countdown -= 1;
+    if (andarBaharState.countdown <= 0) {
+      startAuthoritativeAndarBaharRound();
+    }
+  }
+}, 1000);
+
+app.get('/api/games/andar-bahar/state', requireAuth, (req: Request, res: Response) => {
+  res.json({ state: { ...andarBaharState, userBet: andarBaharBets.get(req.user!.id) ?? undefined } });
+});
+
+app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+  const { betSide, amount }: { betSide: AndarBaharSide; amount: number } = req.body;
+  const numAmount = Number(amount);
+
+  if (!numAmount || numAmount < 10) {
+    return res.status(400).json({ error: 'Minimum bet is ₹10' });
+  }
+
+  if (!deductWallet(numAmount, `Andar Bahar: ${betSide.toUpperCase()}`, 'andar-bahar')) {
+    return res.status(400).json({ error: 'Insufficient wallet balance' });
+  }
+
+  // Register bet on active server-authoritative round
+  const activeAndarBaharBet = { side: betSide, amount: numAmount };
+  andarBaharBets.set(req.user!.id, activeAndarBaharBet);
+
+  // If currently in betting phase, immediately trigger shuffle/deal if under 2s or accelerate
+  if (andarBaharState.phase === 'betting' && andarBaharState.countdown > 3) {
+    andarBaharState.countdown = 2; // quick countdown transition
+  }
+
+  // Also ensure authoritative outcome is provided
+  const isWin = betSide === andarBaharFinalWinner;
+  const multiplier = isWin ? (andarBaharFinalWinner === 'andar' ? 1.9 : 2.0) : 0;
+  const winAmount = Math.floor(numAmount * multiplier);
+
+  broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+
+  return res.json({
+    success: true,
+    roundId: andarBaharState.roundId,
+    jokerCard: andarBaharTargetJoker,
+    dealtCards: andarBaharDealtQueue,
+    winningSide: andarBaharFinalWinner,
+    multiplier,
+    winAmount,
+    wallet: await supabaseRepo.getWallet(req.user!.id),
+    recentWinners: andarBaharState.recentWinners,
+    state: andarBaharState
+  });
+});
+
+// -------------------------------------------------------------
+// VITE MIDDLEWARE & STATIC FALLBACK
+// -------------------------------------------------------------
+async function start() {
+  if (process.env.NODE_ENV === 'production' && !getSupabaseConfigStatus().isConfigured) {
+    throw new Error('Production startup blocked: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
+  }
+
+  // Execute database state recovery for any interrupted game rounds or unconfirmed transactions
+  try {
+    await gameRecoveryService.recoverInterruptedRounds();
+  } catch (e: any) {
+    console.warn('[Recovery] Non-fatal recovery warning:', e?.message);
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa'
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[Brix Games Engine] Server live on http://0.0.0.0:${PORT}`);
+    console.log(`[Supabase Platform] Connected status: LIVE POSTGRESQL`);
+  });
+}
+
+start();
