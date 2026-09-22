@@ -30,7 +30,7 @@ import {
   createAuthoritativeTeenPattiRound,
   sanitizeTeenPattiState
 } from './src/engines/teenPattiEngine.ts';
-import { supabaseRepo, getSupabaseConfigStatus } from './src/server/supabase/supabaseClient.ts';
+import { supabaseRepo, getSupabaseConfigStatus, getSupabasePublic } from './src/server/supabase/supabaseClient.ts';
 import { authService, requireAuth, requirePlayerForGames, requireRoles } from './src/server/auth/authService.ts';
 import { walletService } from './src/server/wallet/walletService.ts';
 import { storageService } from './src/server/storage/storageService.ts';
@@ -120,20 +120,30 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // -------------------------------------------------------------
  // AUTH ENDPOINTS
  // -------------------------------------------------------------
-const otps = new Map<string, { codeHash: string; expiresAt: number; attempts: number }>();
-
 function normalizeMobile(value: unknown): string {
-  const digits = String(value || '').replace(/\D/g, '');
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D/g, '');
   if (digits.length < 10 || digits.length > 15) throw new Error('Invalid mobile number');
-  return digits;
+  return digits.length === 10 ? `+91${digits}` : `+${digits.replace(/^\+/, '')}`;
 }
 
-app.post('/api/auth/send-otp', (req: Request, res: Response) => {
+async function requireSupabaseAuthClient() {
+  const client = getSupabasePublic();
+  if (!client) throw new Error('Supabase Auth is not configured. Set SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY).');
+  return client;
+}
+
+// Supabase Auth owns OTP generation, delivery, expiry and brute-force controls.
+app.post('/api/auth/send-otp', async (req: Request, res: Response) => {
   try {
-    const mobile = normalizeMobile(req.body.mobile);
-    const code = crypto.randomInt(100000, 1000000).toString();
-    otps.set(mobile, { codeHash: crypto.createHash('sha256').update(code).digest('hex'), expiresAt: Date.now() + 5 * 60_000, attempts: 0 });
-    // Integrate an SMS provider here; never return the OTP from the API.
+    const phone = normalizeMobile(req.body.mobile);
+    const mode = req.body.mode === 'register' ? 'register' : 'login';
+    const client = await requireSupabaseAuthClient();
+    const { error } = await client.auth.signInWithOtp({
+      phone,
+      options: { shouldCreateUser: mode === 'register' }
+    });
+    if (error) return res.status(400).json({ error: error.message });
     res.json({ success: true, message: 'OTP sent successfully.' });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -142,16 +152,24 @@ app.post('/api/auth/send-otp', (req: Request, res: Response) => {
 
 app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
   try {
-    const mobile = normalizeMobile(req.body.mobile);
-    const otp = String(req.body.otp || '');
-    const record = otps.get(mobile);
-    if (!record || Date.now() > record.expiresAt || record.attempts >= 5) return res.status(400).json({ error: 'Invalid or expired OTP' });
-    record.attempts++;
-    const hash = crypto.createHash('sha256').update(otp).digest('hex');
-    if (hash !== record.codeHash) return res.status(400).json({ error: 'Invalid or expired OTP' });
-    otps.delete(mobile);
-    const session = await authService.login(mobile, otp);
-    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+    const phone = normalizeMobile(req.body.mobile);
+    const otp = String(req.body.otp || '').trim();
+    if (!/^\d{6}$/.test(otp)) return res.status(400).json({ error: 'OTP must be 6 digits' });
+
+    const client = await requireSupabaseAuthClient();
+    const { data, error } = await client.auth.verifyOtp({ phone, token: otp, type: 'sms' });
+    if (error || !data.session || !data.user) return res.status(400).json({ error: error?.message || 'Invalid or expired OTP' });
+
+    let user = await supabaseRepo.getUserByAuthUserId(data.user.id);
+    if (!user) {
+      const existing = await supabaseRepo.getUserByEmailOrMobile(phone);
+      if (!existing) return res.status(403).json({ error: 'Account not registered. Please use Register first.' });
+      await supabaseRepo.linkAuthUser(existing.id, data.user.id);
+      user = existing;
+    }
+
+    const wallet = await supabaseRepo.getWallet(user.id);
+    res.json({ success: true, token: data.session.access_token, user, wallet });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -159,11 +177,38 @@ app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
 
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
-    const mobile = normalizeMobile(req.body.mobile);
+    const phone = normalizeMobile(req.body.mobile);
     const username = String(req.body.username || '').trim();
+    const otp = String(req.body.otp || '').trim();
     if (username.length < 3 || username.length > 50) return res.status(400).json({ error: 'Username must be 3-50 characters' });
-    const session = await authService.register(mobile, username, 'PLAYER');
-    res.status(201).json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+    if (!/^\d{6}$/.test(otp)) return res.status(400).json({ error: 'OTP must be 6 digits' });
+
+    const client = await requireSupabaseAuthClient();
+    const { data, error } = await client.auth.verifyOtp({ phone, token: otp, type: 'sms' });
+    if (error || !data.session || !data.user) return res.status(400).json({ error: error?.message || 'Invalid or expired OTP' });
+
+    let user = await supabaseRepo.getUserByAuthUserId(data.user.id);
+    if (!user) {
+      const existing = await supabaseRepo.getUserByEmailOrMobile(phone);
+      if (existing) {
+        await supabaseRepo.linkAuthUser(existing.id, data.user.id);
+        user = existing;
+      } else {
+        user = await supabaseRepo.createUser({
+          id: `usr_${crypto.randomUUID()}`,
+          mobile: phone,
+          username,
+          role: 'PLAYER',
+          vipTier: 'Bronze',
+          isDemo: false,
+          createdAt: new Date().toISOString()
+        });
+        await supabaseRepo.linkAuthUser(user.id, data.user.id);
+      }
+    }
+
+    const wallet = await supabaseRepo.getWallet(user.id);
+    res.status(201).json({ success: true, token: data.session.access_token, user, wallet });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -177,7 +222,8 @@ app.post('/api/auth/switch-role', requireAuth, requireRoles(['OWNER']), async (r
     const { role } = req.body;
     if (!['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
     const session = await authService.switchRole(req.user!.id, role);
-    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+    const token = authService.extractToken(req)!;
+    res.json({ success: true, token, user: session.user, wallet: session.wallet });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -187,9 +233,18 @@ app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
   res.json({ user: req.user, wallet: req.wallet });
 });
 
-app.post('/api/auth/logout', requireAuth, (req: Request, res: Response) => {
+app.post('/api/auth/logout', requireAuth, async (req: Request, res: Response) => {
   const token = authService.extractToken(req);
-  if (token) authService.logout(token);
+  if (token) {
+    const admin = getSupabasePublic();
+    if (admin) {
+      try {
+        await admin.auth.signOut({ scope: 'global' });
+      } catch {
+        // Access tokens expire server-side; logout remains idempotent.
+      }
+    }
+  }
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
