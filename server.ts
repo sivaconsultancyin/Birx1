@@ -855,9 +855,7 @@ setInterval(async () => {
       });
       if (rouletteHistoryRecords.length > 50) rouletteHistoryRecords.pop();
 
-      if (settlement.grossPayout > 0) {
-        await // Background round payout requires per-bet user ownership; handled by request-scoped settlement path.
-      }
+      // Background roulette settlement records the result; payout must be tied to each bet owner.
 
       if (settlement.totalBet > 0) {
         recordHistory({
