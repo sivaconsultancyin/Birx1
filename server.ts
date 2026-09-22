@@ -978,7 +978,7 @@ app.get('/api/games/roulette/history', handleGetRouletteHistory);
 app.get('/games/roulette/history', handleGetRouletteHistory);
 
 // 4. POST Bets (Register bets for ongoing authoritative round)
-const handlePostRouletteBets = (req: Request, res: Response) => {
+const handlePostRouletteBets = async (req: Request, res: Response) => {
   const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
 
   // Idempotency check to prevent double debit
@@ -1061,7 +1061,8 @@ const handleGetRouletteSettlement = (req: Request, res: Response) => {
 app.get('/api/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
 app.get('/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
 
-// 7. POST Spin (Instant spin & authoritative settlement flow)const handlePostRouletteSpin = (req: Request, res: Response) => {
+// 7. POST Spin (Instant spin & authoritative settlement flow)
+const handlePostRouletteSpin = async (req: Request, res: Response) => {
   const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
 
   // Idempotency check
