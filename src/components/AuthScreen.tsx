@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Phone, KeyRound, User as UserIcon, Shield, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react';
+import { Phone, KeyRound, User as UserIcon, Shield, CheckCircle2, ArrowRight } from 'lucide-react';
 import { authApi } from '../api/client.ts';
 import { User } from '../types.ts';
 
@@ -27,10 +27,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await authApi.sendOtp(mobile);
+      const res = await authApi.sendOtp(mobile, mode);
       setOtpSent(true);
-      setSuccessMsg(`OTP sent! (Use demo code: ${res.demoOtp})`);
-      setOtp(res.demoOtp); // pre-populate for demo convenience
+      setSuccessMsg('OTP sent to your mobile number.');
     } catch (err: any) {
       setError(err.message || 'Failed to send OTP');
     } finally {
@@ -41,7 +40,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
   const handleVerifyOrRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!otp || otp.length < 4) {
-      setError('Please enter the 4-digit OTP code');
+      setError('Please enter the 6-digit OTP code');
       return;
     }
 
@@ -67,14 +66,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillDemoLogin = () => {
-    setMobile('9876543210');
-    setOtp('1234');
-    setUsername('LuckyBrix');
-    setOtpSent(true);
-    setError(null);
   };
 
   return (
@@ -228,7 +219,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
                 <input
                   id="input-otp-code"
                   type="text"
-                  maxLength={4}
+                  maxLength={6}
                   placeholder="1234"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
@@ -256,18 +247,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
           </form>
         )}
 
-        {/* Demo Fast Fill Button */}
-        <div className="mt-5 pt-4 border-t border-slate-800/80 text-center">
-          <button
-            id="btn-auto-demo-login"
-            type="button"
-            onClick={fillDemoLogin}
-            className="w-full py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-amber-300/90 text-xs font-bold border border-amber-500/30 flex items-center justify-center gap-2 transition-colors cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Fast Fill Demo Account (1-Click)</span>
-          </button>
-        </div>
       </div>
 
       {/* Footer Security Badge */}
