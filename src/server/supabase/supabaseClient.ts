@@ -198,6 +198,26 @@ seedInitialStore();
 // ---------------------------------------------------------------------
 export const supabaseRepo = {
   // USER QUERIES
+  // AUTH MAPPING
+  async getUserByAuthUserId(authUserId: string): Promise<User | null> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('users').select('*').eq('auth_user_id', authUserId).maybeSingle();
+    if (error || !data) return null;
+    return {
+      id: data.id, email: data.email, mobile: data.mobile, username: data.username,
+      role: data.role as UserRole, parentId: data.parent_id, vipTier: data.vip_tier,
+      avatarUrl: data.avatar_url, isDemo: data.is_demo, createdAt: data.created_at
+    };
+  },
+
+  async linkAuthUser(userId: string, authUserId: string): Promise<void> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { error } = await admin.from('users').update({ auth_user_id: authUserId }).eq('id', userId);
+    if (error) throw new Error(error.message);
+  },
+
   async getUserById(id: string): Promise<User | null> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
