@@ -1259,7 +1259,9 @@ setInterval(async () => {
         teenPattiState.userSettlement = settlement;
 
         if (settlement.grossPayout > 0) {
-          // Background Teen Patti settlement is retained as state-only; payout is request-scoped.
+          if (userPlayer.id && userPlayer.id !== 'user' && settlement.grossPayout > 0) {
+          await supabaseRepo.atomicCredit(userPlayer.id, settlement.grossPayout, 'payout', `Teen Patti Win #${teenPattiState.roundId}`, 'teen-patti');
+        }
         }
 
         if (settlement.betAmount > 0) {
