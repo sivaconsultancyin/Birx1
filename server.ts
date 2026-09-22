@@ -508,7 +508,7 @@ app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response)
   const actor = req.user!;
   const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
   broadcastSSE('wallet_updated', { userId: actor.id, wallet: result.wallet });
-  return res.json({ success: true, wallet: result.wallet, transaction: result.transaction });
+  return res.json({ success: true, wallet: result.wallet, request: result.request });
 });
 
 app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response) => {
