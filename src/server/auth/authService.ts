@@ -90,8 +90,7 @@ export const authService = {
     }
     const updatedUser = await supabaseRepo.updateUserRole(userId, newRole);
     if (!updatedUser) throw new Error('User not found');
-    const token = createSessionToken();
-    sessionTokens.set(token, userId);
+    const token = createSessionToken(userId);
     const wallet = await supabaseRepo.getWallet(userId);
     return { token, user: updatedUser, wallet };
   },
@@ -104,7 +103,7 @@ export const authService = {
   }
 };
 
-function createSessionToken(userId = ''): string {
+function createSessionToken(userId: string): string {
   if (!SESSION_SECRET) throw new Error('SESSION_SECRET is required in production');
   const payload = Buffer.from(JSON.stringify({ sub: userId, exp: Date.now() + SESSION_TTL_MS })).toString('base64url');
   const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
