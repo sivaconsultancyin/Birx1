@@ -35,7 +35,7 @@ import { authService, requireAuth, requirePlayerForGames, requireRoles } from '.
 import { walletService } from './src/server/wallet/walletService.ts';
 import { storageService } from './src/server/storage/storageService.ts';
 import { gameRecoveryService } from './src/server/recovery/gameRecoveryService.ts';
-import { auditMutations } from './src/server/auditLog.ts';
+import { auditMutations, writeAuditLog } from './src/server/auditLog.ts';
 import { rateLimit, requestId, securityHeaders, requireHttps, validateJsonObject } from './src/server/productionSecurity.ts';
 
 const app = express();
@@ -2337,6 +2337,21 @@ app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req
     recentWinners: andarBaharState.recentWinners,
     state: andarBaharState
   });
+});
+
+// Centralized production error boundary: never leak stack traces or secrets.
+app.use(async (err: any, req: Request, res: Response, _next: NextFunction) => {
+  console.error('[UnhandledRequestError]', {
+    requestId: (req as any).requestId,
+    method: req.method,
+    path: req.path,
+    error: err?.message || 'unknown error'
+  });
+  if (!res.headersSent) {
+    res.status(Number(err?.statusCode) >= 400 ? Number(err.statusCode) : 500)
+      .json({ error: process.env.NODE_ENV === 'production' ? 'Internal server error' : (err?.message || 'Internal server error') });
+  }
+  void writeAuditLog(req, res.statusCode, 'UNHANDLED_ERROR');
 });
 
 // -------------------------------------------------------------
