@@ -35,19 +35,27 @@ import { authService, requireAuth, requirePlayerForGames, requireRoles } from '.
 import { walletService } from './src/server/wallet/walletService.ts';
 import { storageService } from './src/server/storage/storageService.ts';
 import { gameRecoveryService } from './src/server/recovery/gameRecoveryService.ts';
+import { auditMutations } from './src/server/auditLog.ts';
+import { rateLimit, requestId, securityHeaders, requireHttps, validateJsonObject } from './src/server/productionSecurity.ts';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '256kb' }));
 app.disable('x-powered-by');
-app.use((_req: Request, res: Response, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+app.use(requestId);
+app.use(securityHeaders);
+app.use(requireHttps);
+app.use('/api', rateLimit({ windowMs: 60_000, max: 180, keyPrefix: 'api' }));
+app.use('/api/auth', rateLimit({ windowMs: 60_000, max: 20, keyPrefix: 'auth' }));
+app.use('/api', (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return validateJsonObject(req, res, next);
   next();
 });
+app.use(auditMutations);
+// All game routes require an authenticated PLAYER. Individual handlers may add stricter checks.
+app.use('/api/games', requireAuth, requirePlayerForGames);
 
 
 // Request-scoped identity only. Never use process-global user/wallet state for authorization.
@@ -113,8 +121,16 @@ app.get('/api/realtime', requireAuth, requirePlayerForGames, handleSSEConnection
 // -------------------------------------------------------------
 // HEALTH CHECK
 // -------------------------------------------------------------
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
+app.get('/api/health', async (_req: Request, res: Response) => {
+  try {
+    const admin = getSupabaseAdmin();
+    if (!admin) return res.status(503).json({ status: 'degraded', database: 'not_configured', timestamp: Date.now() });
+    const { error } = await admin.from('games').select('id').limit(1);
+    if (error) return res.status(503).json({ status: 'degraded', database: 'unhealthy', timestamp: Date.now() });
+    res.json({ status: 'ok', database: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
+  } catch {
+    res.status(503).json({ status: 'degraded', database: 'unhealthy', timestamp: Date.now() });
+  }
 });
 
 // -------------------------------------------------------------
@@ -413,7 +429,7 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER
 // HEALTH CHECK
 
 // -------------------------------------------------------------
-app.get('/api/health', (_req: Request, res: Response) => {
+app.get('/api/healthz', (_req: Request, res: Response) => {
   res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
 });
 
