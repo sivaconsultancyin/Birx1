@@ -116,7 +116,7 @@ function verifySessionToken(token: string): { userId: string } | null {
   const [payload, signature] = raw.split('.');
   if (!payload || !signature) return null;
   const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { sub: string; exp: number };
     if (!data.sub || !data.exp || data.exp <= Date.now()) return null;
