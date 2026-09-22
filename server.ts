@@ -73,6 +73,14 @@ async function creditForUser(req: Request, amount: number, description: string, 
   const user = await getRequestUser(req);
   return supabaseRepo.atomicCredit(user.id, amount, 'payout', description, gameId, idempotencyKey);
 }
+
+async function tryDebitForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string): Promise<boolean> {
+  try { await debitForUser(req, amount, description, gameId, idempotencyKey); return true; } catch { return false; }
+}
+
+async function tryCreditForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string): Promise<boolean> {
+  try { await creditForUser(req, amount, description, gameId, idempotencyKey); return true; } catch { return false; }
+}
 // -------------------------------------------------------------
 // SSE STREAM FOR REAL-TIME EVENTS
 // -------------------------------------------------------------
