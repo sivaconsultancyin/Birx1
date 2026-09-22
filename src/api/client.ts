@@ -51,10 +51,10 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
 // AUTH API
 // -------------------------------------------------------------
 export const authApi = {
-  async sendOtp(mobile: string): Promise<{ success: boolean; message: string; demoOtp: string }> {
+  async sendOtp(mobile: string, mode: 'login' | 'register' = 'login'): Promise<{ success: boolean; message: string }> {
     return fetchJson('/auth/send-otp', {
       method: 'POST',
-      body: JSON.stringify({ mobile })
+      body: JSON.stringify({ mobile, mode })
     });
   },
 
