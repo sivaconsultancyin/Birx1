@@ -1109,7 +1109,7 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
 
   // Atomic debit
   const currentRoundId = rouletteState.roundId;
-  if (!tryDebitForUser(req, totalBet, `Roulette Round ${currentRoundId}`, 'roulette')) {
+  if (!(await tryDebitForUser(req, totalBet, `Roulette Round ${currentRoundId}`, 'roulette'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1119,7 +1119,7 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
 
   // Atomic credit if winning
   if (settlement.grossPayout > 0) {
-    tryCreditForUser(req, settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
+    await tryCreditForUser(req, settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
   }
 
   // Update server state
@@ -1363,7 +1363,7 @@ const handlePostTeenPattiBet = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
-  if (!tryDebitForUser(req, additionalBet, `Teen Patti Bet #${teenPattiState.roundId}`, 'teen-patti')) {
+  if (!(await tryDebitForUser(req, additionalBet, `Teen Patti Bet #${teenPattiState.roundId}`, 'teen-patti'))) {
     return res.status(400).json({ error: 'Failed to place bet' });
   }
 
@@ -1397,7 +1397,7 @@ const handlePostTeenPattiNewRound = async (req: Request, res: Response) => {
   if (userPlayer && teenPattiState.phase === 'betting') {
     if (userPlayer.currentBet < bootAmount) {
       const delta = bootAmount - userPlayer.currentBet;
-      if (userWallet.balance >= delta && tryDebitForUser(req, delta, 'Teen Patti Boot Bet', 'teen-patti')) {
+      if (currentWallet.balance >= delta && await tryDebitForUser(req, delta, 'Teen Patti Boot Bet', 'teen-patti')) {
         userPlayer.currentBet = bootAmount;
         teenPattiState.pot += delta;
       }
@@ -1436,7 +1436,7 @@ const handlePostTeenPattiAction = async (req: Request, res: Response) => {
     if (teenPattiState.phase !== 'betting') {
       return res.status(400).json({ error: 'Betting is closed for this round' });
     }
-    if (!tryDebitForUser(req, stake, `Teen Patti ${action.toUpperCase()}`, 'teen-patti')) {
+    if (!(await tryDebitForUser(req, stake, `Teen Patti ${action.toUpperCase()}`, 'teen-patti'))) {
       return res.status(400).json({ error: 'Insufficient wallet balance' });
     }
     userPlayer.currentBet += stake;
@@ -1586,7 +1586,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
     return res.status(400).json({ error: 'Betting is closed for this round' });
   }
 
-  if (!tryDebitForUser(req, numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator')) {
+  if (!(await tryDebitForUser(req, numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1623,7 +1623,7 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async
   currentAviatorBet.winAmount = payout;
   aviatorBets.delete(req.user!.id);
 
-  tryCreditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
+  await tryCreditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
 
   recordHistory({
     gameId: 'aviator',
@@ -1669,7 +1669,7 @@ app.post('/api/games/dice/roll', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Minimum bet is ₹10' });
   }
 
-  if (!tryDebitForUser(req, numAmount, `Dice Bet: ${betType}`, 'dice')) {
+  if (!(await tryDebitForUser(req, numAmount, `Dice Bet: ${betType}`, 'dice'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1688,7 +1688,7 @@ app.post('/api/games/dice/roll', async (req: Request, res: Response) => {
 
   const winAmount = Math.floor(numAmount * multiplier);
   if (winAmount > 0) {
-    tryCreditForUser(req, winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
+    await tryCreditForUser(req, winAmount, `Dice Win (${d1}+${d2}=${total})`, 'dice');
   }
 
   diceState.dice1 = d1;
@@ -1746,7 +1746,7 @@ app.post('/api/games/dragon-tiger/deal', async (req: Request, res: Response) => 
     return res.status(400).json({ error: 'Minimum bet is ₹10' });
   }
 
-  if (!tryDebitForUser(req, numAmount, `Dragon Tiger: ${betSide.toUpperCase()}`, 'dragon-tiger')) {
+  if (!(await tryDebitForUser(req, numAmount, `Dragon Tiger: ${betSide.toUpperCase()}`, 'dragon-tiger'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -1767,7 +1767,7 @@ app.post('/api/games/dragon-tiger/deal', async (req: Request, res: Response) => 
 
   const winAmount = Math.floor(numAmount * multiplier);
   if (winAmount > 0) {
-    tryCreditForUser(req, winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
+    await tryCreditForUser(req, winAmount, `Dragon Tiger Win (${winner.toUpperCase()})`, 'dragon-tiger');
   }
 
   dragonTigerState.dragonCard = dragonCard;
@@ -1967,7 +1967,7 @@ app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, asyn
     return res.status(400).json({ error: 'Minimum bet is ₹10' });
   }
 
-  if (!tryDebitForUser(req, numAmount, `Andar Bahar: ${betSide.toUpperCase()}`, 'andar-bahar')) {
+  if (!(await tryDebitForUser(req, numAmount, `Andar Bahar: ${betSide.toUpperCase()}`, 'andar-bahar'))) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
