@@ -12,8 +12,9 @@ import {
 
 // Environment credentials
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SECRET_KEY;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 
 const isConfigured = Boolean(
@@ -39,9 +40,9 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 }
 
 export function getSupabasePublic(): SupabaseClient | null {
-  if (!isConfigured) return null;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
   if (!cachedPublicClient) {
-    cachedPublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY);
+    cachedPublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
   }
   return cachedPublicClient;
 }
