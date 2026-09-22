@@ -855,7 +855,13 @@ setInterval(async () => {
       });
       if (rouletteHistoryRecords.length > 50) rouletteHistoryRecords.pop();
 
-      // Background roulette settlement records the result; payout must be tied to each bet owner.
+      // Credit each winning bet to its authenticated owner.
+      for (const winning of settlement.winningBets) {
+        const ownerId = (winning.bet as RouletteBet & { userId?: string }).userId;
+        if (ownerId && winning.payoutAmount > 0) {
+          await supabaseRepo.atomicCredit(ownerId, winning.payoutAmount, 'payout', `Roulette Payout #${rouletteState.roundId}`, 'roulette');
+        }
+      }
 
       if (settlement.totalBet > 0) {
         recordHistory({
@@ -1031,7 +1037,7 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
   }
 
   const existingBets = currentRoundBets[rouletteState.roundId] || [];
-  currentRoundBets[rouletteState.roundId] = [...existingBets, ...bets];
+  currentRoundBets[rouletteState.roundId] = [...existingBets, ...bets.map((bet) => ({ ...bet, userId: req.user!.id } as RouletteBet & { userId: string }))];
 
   const responsePayload = {
     success: true,
