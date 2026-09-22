@@ -20,7 +20,9 @@ export interface AuthSession {
 }
 
 // Memory session cache (maps token -> userId)
-const sessionTokens = new Map<string, string>();
+const sessionTokens = new Map<string, { userId: string; expiresAt: number }>();
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const SESSION_SECRET = process.env.SESSION_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-only-session-secret');
 
 
 export const authService = {
@@ -50,15 +52,14 @@ export const authService = {
         // Invalid/expired JWT.
       }
     }
-    const userId = sessionTokens.get(token);
-    return userId ? supabaseRepo.getUserById(userId) : null;
+    const local = verifySessionToken(token);
+    return local ? supabaseRepo.getUserById(local.userId) : null;
   },
 
   async login(identifier: string, _codeOrPassword?: string): Promise<AuthSession> {
     const user = await supabaseRepo.getUserByEmailOrMobile(identifier);
     if (!user) throw new Error('Account not found. Please register first.');
-    const token = createSessionToken();
-    sessionTokens.set(token, user.id);
+    const token = createSessionToken(user.id);
     const wallet = await supabaseRepo.getWallet(user.id);
     return { token, user, wallet };
   },
@@ -78,8 +79,7 @@ export const authService = {
       createdAt: new Date().toISOString()
     });
 
-    const token = createSessionToken();
-    sessionTokens.set(token, user.id);
+    const token = createSessionToken(user.id);
     const wallet = await supabaseRepo.getWallet(user.id);
     return { token, user, wallet };
   },
@@ -90,8 +90,7 @@ export const authService = {
     }
     const updatedUser = await supabaseRepo.updateUserRole(userId, newRole);
     if (!updatedUser) throw new Error('User not found');
-    const token = createSessionToken();
-    sessionTokens.set(token, userId);
+    const token = createSessionToken(userId);
     const wallet = await supabaseRepo.getWallet(userId);
     return { token, user: updatedUser, wallet };
   },
@@ -104,8 +103,25 @@ export const authService = {
   }
 };
 
-function createSessionToken(): string {
-  return `brix_${crypto.randomBytes(32).toString('hex')}`;
+function createSessionToken(userId: string): string {
+  if (!SESSION_SECRET) throw new Error('SESSION_SECRET is required in production');
+  const payload = Buffer.from(JSON.stringify({ sub: userId, exp: Date.now() + SESSION_TTL_MS })).toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `brix_${payload}.${signature}`;
+}
+
+function verifySessionToken(token: string): { userId: string } | null {
+  if (!SESSION_SECRET || !token.startsWith('brix_')) return null;
+  const raw = token.slice(5);
+  const [payload, signature] = raw.split('.');
+  if (!payload || !signature) return null;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { sub: string; exp: number };
+    if (!data.sub || !data.exp || data.exp <= Date.now()) return null;
+    return { userId: data.sub };
+  } catch { return null; }
 }
 // ---------------------------------------------------------------------
 // EXPRESS MIDDLEWARES

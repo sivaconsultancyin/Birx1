@@ -35,19 +35,31 @@ import { authService, requireAuth, requirePlayerForGames, requireRoles } from '.
 import { walletService } from './src/server/wallet/walletService.ts';
 import { storageService } from './src/server/storage/storageService.ts';
 import { gameRecoveryService } from './src/server/recovery/gameRecoveryService.ts';
+import { auditMutations, writeAuditLog } from './src/server/auditLog.ts';
+import { rateLimit, requestId, securityHeaders, requireHttps, validateJsonObject } from './src/server/productionSecurity.ts';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '256kb' }));
 app.disable('x-powered-by');
-app.use((_req: Request, res: Response, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+app.use(requestId);
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('X-Server-Time', String(Date.now()));
   next();
 });
+app.use(securityHeaders);
+app.use(requireHttps);
+app.use('/api', rateLimit({ windowMs: 60_000, max: 180, keyPrefix: 'api' }));
+app.use('/api/auth', rateLimit({ windowMs: 60_000, max: 20, keyPrefix: 'auth' }));
+app.use('/api', (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return validateJsonObject(req, res, next);
+  next();
+});
+app.use(auditMutations);
+// All game routes require an authenticated PLAYER. Individual handlers may add stricter checks.
+app.use('/api/games', requireAuth, requirePlayerForGames);
 
 
 // Request-scoped identity only. Never use process-global user/wallet state for authorization.
@@ -113,8 +125,16 @@ app.get('/api/realtime', requireAuth, requirePlayerForGames, handleSSEConnection
 // -------------------------------------------------------------
 // HEALTH CHECK
 // -------------------------------------------------------------
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
+app.get('/api/health', async (_req: Request, res: Response) => {
+  try {
+    const admin = getSupabaseAdmin();
+    if (!admin) return res.status(503).json({ status: 'degraded', database: 'not_configured', timestamp: Date.now() });
+    const { error } = await admin.from('games').select('id').limit(1);
+    if (error) return res.status(503).json({ status: 'degraded', database: 'unhealthy', timestamp: Date.now() });
+    res.json({ status: 'ok', database: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
+  } catch {
+    res.status(503).json({ status: 'degraded', database: 'unhealthy', timestamp: Date.now() });
+  }
 });
 
 // -------------------------------------------------------------
@@ -413,7 +433,7 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER
 // HEALTH CHECK
 
 // -------------------------------------------------------------
-app.get('/api/health', (_req: Request, res: Response) => {
+app.get('/api/healthz', (_req: Request, res: Response) => {
   res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
 });
 
@@ -2319,6 +2339,21 @@ app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req
   });
 });
 
+// Centralized production error boundary: never leak stack traces or secrets.
+app.use(async (err: any, req: Request, res: Response, _next: NextFunction) => {
+  console.error('[UnhandledRequestError]', {
+    requestId: (req as any).requestId,
+    method: req.method,
+    path: req.path,
+    error: err?.message || 'unknown error'
+  });
+  if (!res.headersSent) {
+    res.status(Number(err?.statusCode) >= 400 ? Number(err.statusCode) : 500)
+      .json({ error: process.env.NODE_ENV === 'production' ? 'Internal server error' : (err?.message || 'Internal server error') });
+  }
+  void writeAuditLog(req, res.statusCode, 'UNHANDLED_ERROR');
+});
+
 // -------------------------------------------------------------
 // VITE MIDDLEWARE & STATIC FALLBACK
 // -------------------------------------------------------------
@@ -2342,7 +2377,15 @@ async function start() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      maxAge: '1y',
+      immutable: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+      }
+    }));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
