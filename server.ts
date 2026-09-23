@@ -107,7 +107,7 @@ async function debitForUser(req: Request, amount: number, description: string, g
   return supabaseRepo.atomicDebit(user.id, amount, 'bet', description, gameId, idempotencyKey);
 }
 
-async function creditForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string) {
+async async function creditForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string) {
   const user = await getRequestUser(req);
   return supabaseRepo.atomicCredit(user.id, amount, 'payout', description, gameId, idempotencyKey);
 }
@@ -1828,7 +1828,7 @@ setInterval(() => {
         const winAmount = Math.floor(numAmount * multiplier);
 
         if (winAmount > 0) {
-          await creditForUser(req, winAmount, `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar');
+          await supabaseRepo.atomicCredit(userId, winAmount, 'payout', `Andar Bahar Win on ${andarBaharFinalWinner.toUpperCase()}`, 'andar-bahar', `andar-bahar:${andarBaharState.roundId}:${userId}`);
         }
 
         recordHistory({
