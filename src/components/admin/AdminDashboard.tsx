@@ -66,6 +66,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onR
   const [newUserUsername, setNewUserUsername] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('PLAYER');
   const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
 
   // Claim modal state
   const [showClaimModal, setShowClaimModal] = useState(false);
@@ -206,8 +207,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onR
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUserMobile || !newUserUsername) {
-      alert('Please fill in mobile and username');
+    if (!newUserMobile || !newUserUsername || newUserPassword.length < 8) {
+      alert('Please fill in mobile, username, and a password of at least 8 characters');
       return;
     }
     try {
@@ -215,7 +216,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onR
         mobile: newUserMobile,
         username: newUserUsername,
         role: newUserRole,
-        email: newUserEmail || undefined
+        email: newUserEmail || undefined,
+        password: newUserPassword
       });
       if (res.success) {
         setActionMessage(`Created ${newUserRole} account "${newUserUsername}"!`);
@@ -224,6 +226,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onR
         setNewUserMobile('');
         setNewUserUsername('');
         setNewUserEmail('');
+        setNewUserPassword('');
         loadData();
       }
     } catch (err: any) {
@@ -1741,6 +1744,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onR
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 mb-1 font-medium">Temporary Password</label>
+                <input
+                  type="password"
+                  minLength={8}
+                  placeholder="Minimum 8 characters"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  required
                 />
               </div>
 
