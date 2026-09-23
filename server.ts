@@ -198,28 +198,19 @@ app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', '
 app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
   try {
     const actor = req.user!;
-    const { mobile, username, role, email } = req.body;
-    if (!mobile || !username || !role) {
-      return res.status(400).json({ error: 'mobile, username, and role are required' });
+    const { mobile, username, role, password } = req.body;
+    if (!mobile || !username || !role || !password) {
+      return res.status(400).json({ error: 'mobile, username, role, and password are required' });
     }
-
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
     if (!authService.canManageUser(actor, role)) {
       return res.status(403).json({ error: `Actor with role ${actor.role} cannot create user with role ${role}` });
     }
 
-    const created = await supabaseRepo.createUser({
-      id: `usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-      mobile,
-      email,
-      username,
-      role,
-      parentId: actor.id,
-      vipTier: 'Bronze',
-      isDemo: false,
-      createdAt: new Date().toISOString()
-    });
-
-    res.json({ success: true, user: created });
+    const session = await authService.register(String(mobile), String(username).trim(), String(password), role, actor.id);
+    res.json({ success: true, user: session.user });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
