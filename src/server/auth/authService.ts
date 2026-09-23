@@ -85,7 +85,7 @@ export const authService = {
         mobile: `+91${cleanMobile}`,
         email,
         username,
-        role: 'PLAYER',
+        role: _role,
         parentId,
         vipTier: 'Bronze',
         isDemo: false,
