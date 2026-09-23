@@ -1,6 +1,7 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useRef } from 'react';
+import { ExternalAviatorUI } from '../components/external/ExternalAviatorUI.tsx';
 import { Plane, AlertTriangle, CheckCircle, TrendingUp, Sparkles, Clock } from 'lucide-react';
 import { AviatorBet, AviatorState, Wallet } from '../types.ts';
 import { gamesApi } from '../api/client.ts';
