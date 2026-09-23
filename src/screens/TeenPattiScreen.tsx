@@ -1,3 +1,4 @@
+/* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TeenPattiState, Wallet } from '../types.ts';
 import { gamesApi, subscribeToRealtimeEvents } from '../api/client.ts';
