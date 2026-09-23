@@ -239,13 +239,8 @@ export const DragonTigerScreen: React.FC<DragonTigerScreenProps> = ({
             {renderCard(gameState?.tigerCard || null, revealTiger, 'TIGER')}
           </div>
         </div>
-      </div>
-      </ExternalDragonTigerUI>
-
-
-            </ExternalDragonTigerUI>
-
-      {errorMsg && (
+      </div>\n      </ExternalDragonTigerUI>
+{errorMsg && (
         <div className="mx-3 mt-3 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-center">
           {errorMsg}
         </div>
