@@ -1,3 +1,4 @@
+/* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useRef } from 'react';
 import { Plane, AlertTriangle, CheckCircle, TrendingUp, Sparkles, Clock } from 'lucide-react';
 import { AviatorBet, AviatorState, Wallet } from '../types.ts';
