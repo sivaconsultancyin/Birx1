@@ -26,6 +26,7 @@ import { BettingChip, CHIP_VALUES } from '../components/BettingChip.tsx';
 import { Countdown } from '../components/Countdown.tsx';
 import { RulesModal } from '../components/RulesModal.tsx';
 import { RouletteWheel, RED_NUMBERS_SET } from '../components/roulette/RouletteWheel.tsx';
+import { ExternalRouletteWheel } from '../components/roulette/ExternalRouletteWheel.tsx';
 import { RouletteTable } from '../components/roulette/RouletteTable.tsx';
 import { notifyWinLoss } from '../components/WinLossNotification.tsx';
 
@@ -812,16 +813,10 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           }`}
         >
           {/* Wheel Component */}
-          <RouletteWheel
-            roundId={gameState?.roundId}
+          <ExternalRouletteWheel
             isSpinning={isSpinning}
             targetWinningNumber={winningNumber}
-            targetWinningColor={winningColor}
             onSpinComplete={handleWheelAnimationComplete}
-            soundEnabled={soundEnabled}
-            onToggleSound={() => setSoundEnabled(!soundEnabled)}
-            onTestNumber={handleTestNumber}
-            sizeMode={isBettingPhase ? 'compact' : 'hero'}
           />
 
           {/* Under Wheel Status Banner when in Spin/Result Phase */}
