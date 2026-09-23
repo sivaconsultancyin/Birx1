@@ -202,6 +202,7 @@ export const DragonTigerScreen: React.FC<DragonTigerScreenProps> = ({
         ))}
       </div>
 
+      <ExternalDragonTigerUI>
       {/* Battle Arena */}
       <div className="p-4 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border-b border-slate-800 flex flex-col items-center">
         <div className="w-full flex justify-between items-center mb-3 px-1">
@@ -241,6 +242,8 @@ export const DragonTigerScreen: React.FC<DragonTigerScreenProps> = ({
       </div>
       </ExternalDragonTigerUI>
 
+
+            </ExternalDragonTigerUI>
 
       {errorMsg && (
         <div className="mx-3 mt-3 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-center">
