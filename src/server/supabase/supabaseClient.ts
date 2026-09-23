@@ -248,13 +248,13 @@ export const supabaseRepo = {
       }
     }
 
-    for (const u of dbStore.users.values()) {
-      if (
-        (u.email && u.email.toLowerCase() === clean) ||
-        (u.mobile && u.mobile.replace(/\D/g, '').includes(clean.replace(/\D/g, ''))) ||
-        u.username.toLowerCase() === clean
-      ) {
-        return u;
+    if (process.env.NODE_ENV !== 'production') {
+      for (const u of dbStore.users.values()) {
+        if (
+          (u.email && u.email.toLowerCase() === clean) ||
+          (u.mobile && u.mobile.replace(/\D/g, '').includes(clean.replace(/\D/g, ''))) ||
+          u.username.toLowerCase() === clean
+        ) return u;
       }
     }
     return null;
