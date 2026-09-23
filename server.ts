@@ -388,137 +388,6 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER
   } catch(e:any){res.status(500).json({error:e.message});}
 });
 
-// CLAIMS & APPLICATION STATUS MANAGEMENT
-interface PlatformClaim {
-  id: string;
-  userId: string;
-  username: string;
-  type: 'dispute' | 'payment_uncredited' | 'game_interruption' | 'kyc_inquiry';
-  subject: string;
-  description: string;
-  amount?: number;
-  gameId?: string;
-  status: 'pending' | 'investigating' | 'approved' | 'rejected';
-  documentUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-const memoryClaims: PlatformClaim[] = [
-  {
-    id: 'clm_1001',
-    userId: 'usr_brix_8849',
-    username: 'LuckyBrix',
-    type: 'payment_uncredited',
-    subject: 'UPI Recharge Not Reflected Automatically',
-    description: 'Transferred ₹5,000 via UPI Reference #982144. Attached proof receipt.',
-    amount: 5000,
-    status: 'pending',
-    documentUrl: '/assets/docs/UPI_Transfer_Proof_5000.jpg',
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-    updatedAt: new Date(Date.now() - 7200000).toISOString()
-  },
-  {
-    id: 'clm_1002',
-    userId: 'usr_player_002',
-    username: 'HighRollerAlex',
-    type: 'game_interruption',
-    subject: 'Roulette Spin Disconnection Inquiry',
-    description: 'Round #1092 client paused before wheel landed. Bet settled as per server authority.',
-    amount: 1000,
-    gameId: 'roulette',
-    status: 'investigating',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 14400000).toISOString()
-  }
-];
-
-app.get('/api/admin/claims', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  res.json({ claims: memoryClaims });
-});
-
-app.post('/api/admin/claims/create', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const { type, subject, description, amount, gameId, documentUrl } = req.body;
-    if (!subject || !description) {
-      return res.status(400).json({ error: 'Subject and description are required' });
-    }
-    const newClaim: PlatformClaim = {
-      id: `clm_${crypto.randomInt(1000, 10000)}`,
-      userId: actor.id,
-      username: actor.username,
-      type: type || 'dispute',
-      subject,
-      description,
-      amount: amount ? Number(amount) : undefined,
-      gameId,
-      documentUrl,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    memoryClaims.unshift(newClaim);
-    res.json({ success: true, claim: newClaim });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.patch('/api/admin/claims/:id/status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { status } = req.body;
-  const claim = memoryClaims.find((c) => c.id === id);
-  if (!claim) return res.status(404).json({ error: 'Claim not found' });
-  claim.status = status;
-  claim.updatedAt = new Date().toISOString();
-  res.json({ success: true, claim });
-});
-
-// POLICY PRICING & AGENT COMMISSION CONFIGURATION
-interface PlatformPolicies {
-  minBet: number;
-  maxBet: number;
-  dailyWithdrawalLimit: number;
-  agentCommissionPercent: number;
-  superAdminCommissionPercent: number;
-  rouletteTableLimit: number;
-  teenPattiBootLimit: number;
-  andarBaharMaxBet: number;
-  updatedAt: string;
-}
-
-let platformPolicies: PlatformPolicies = {
-  minBet: 10,
-  maxBet: 100000,
-  dailyWithdrawalLimit: 500000,
-  agentCommissionPercent: 3.5,
-  superAdminCommissionPercent: 1.5,
-  rouletteTableLimit: 50000,
-  teenPattiBootLimit: 25000,
-  andarBaharMaxBet: 50000,
-  updatedAt: new Date().toISOString()
-};
-
-app.get('/api/admin/policies', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), (_req: Request, res: Response) => {
-  res.json({ policies: platformPolicies });
-});
-
-app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const updates = req.body;
-    platformPolicies = {
-      ...platformPolicies,
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-    res.json({ success: true, policies: platformPolicies });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// -------------------------------------------------------------
 // WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
 // -------------------------------------------------------------
 app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
@@ -969,7 +838,6 @@ const handleGetRouletteRules = (_req: Request, res: Response) => {
   });
 };
 app.get('/api/games/roulette/rules', requireAuth, requirePlayerForGames, handleGetRouletteRules);
-app.get('/games/roulette/rules', handleGetRouletteRules);
 
 // 2. GET Round / State
 const handleGetRouletteRound = (_req: Request, res: Response) => {
@@ -987,9 +855,7 @@ const handleGetRouletteRound = (_req: Request, res: Response) => {
   });
 };
 app.get('/api/games/roulette/round', requireAuth, requirePlayerForGames, handleGetRouletteRound);
-app.get('/games/roulette/round', handleGetRouletteRound);
 app.get('/api/games/roulette/state', requireAuth, requirePlayerForGames, handleGetRouletteRound);
-app.get('/games/roulette/state', handleGetRouletteRound);
 
 // 3. GET History & Analytics
 const handleGetRouletteHistory = (_req: Request, res: Response) => {
@@ -1029,7 +895,6 @@ const handleGetRouletteHistory = (_req: Request, res: Response) => {
   });
 };
 app.get('/api/games/roulette/history', requireAuth, requirePlayerForGames, handleGetRouletteHistory);
-app.get('/games/roulette/history', handleGetRouletteHistory);
 
 // 4. POST Bets (Register bets for ongoing authoritative round)
 const handlePostRouletteBets = async (req: Request, res: Response) => {
@@ -1089,7 +954,6 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
   return res.json(responsePayload);
 };
 app.post('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handlePostRouletteBets);
-app.post('/games/roulette/bets', handlePostRouletteBets);
 
 // 5. GET Active Bets
 const handleGetRouletteBets = (_req: Request, res: Response) => {
@@ -1101,7 +965,6 @@ const handleGetRouletteBets = (_req: Request, res: Response) => {
   });
 };
 app.get('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handleGetRouletteBets);
-app.get('/games/roulette/bets', handleGetRouletteBets);
 
 // 6. GET Settlement by roundId
 const handleGetRouletteSettlement = (req: Request, res: Response) => {
@@ -1113,7 +976,6 @@ const handleGetRouletteSettlement = (req: Request, res: Response) => {
   return res.json({ settlement });
 };
 app.get('/api/games/roulette/settlement/:roundId', requireAuth, requirePlayerForGames, handleGetRouletteSettlement);
-app.get('/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
 
 // 7. POST Spin (Instant spin & authoritative settlement flow)
 const handlePostRouletteSpin = async (req: Request, res: Response) => {
@@ -1221,7 +1083,6 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
   return res.json(fullSettlementResult);
 };
 app.post('/api/games/roulette/spin', requireAuth, requirePlayerForGames, handlePostRouletteSpin);
-app.post('/games/roulette/spin', handlePostRouletteSpin);
 
 
 // -------------------------------------------------------------
@@ -1378,7 +1239,6 @@ const handleGetTeenPattiState = (_req: Request, res: Response) => {
 };
 
 app.get('/api/games/teen-patti/state', requireAuth, requirePlayerForGames, handleGetTeenPattiState);
-app.get('/games/teen-patti/state', requireAuth, requirePlayerForGames, handleGetTeenPattiState);
 
 const handlePostTeenPattiBet = async (req: Request, res: Response) => {
   const { amount }: { amount: number } = req.body;
@@ -1424,7 +1284,6 @@ const handlePostTeenPattiBet = async (req: Request, res: Response) => {
 };
 
 app.post('/api/games/teen-patti/bet', requireAuth, requirePlayerForGames, handlePostTeenPattiBet);
-app.post('/games/teen-patti/bet', handlePostTeenPattiBet);
 
 const handlePostTeenPattiNewRound = async (req: Request, res: Response) => {
   const bootAmount = Number(req.body?.bootAmount || 50);
@@ -1447,7 +1306,6 @@ const handlePostTeenPattiNewRound = async (req: Request, res: Response) => {
 };
 
 app.post('/api/games/teen-patti/new-round', requireAuth, requirePlayerForGames, handlePostTeenPattiNewRound);
-app.post('/games/teen-patti/new-round', handlePostTeenPattiNewRound);
 
 const handlePostTeenPattiAction = async (req: Request, res: Response) => {
   const { action, betAmount = 0 }: { action: 'see' | 'blind' | 'chaal' | 'fold' | 'show' | 'bet'; betAmount?: number } =
@@ -1487,7 +1345,6 @@ const handlePostTeenPattiAction = async (req: Request, res: Response) => {
 };
 
 app.post('/api/games/teen-patti/action', requireAuth, requirePlayerForGames, handlePostTeenPattiAction);
-app.post('/games/teen-patti/action', handlePostTeenPattiAction);
 
 // Persist the authoritative round after every scheduler tick.
 // The lease ensures only one instance advances the round.
@@ -1710,7 +1567,7 @@ app.post('/api/games/dice/roll', requireAuth, requirePlayerForGames, async (req:
 
   // Authoritative server dice generation
   const d1 = crypto.randomInt(1, 7);
-  const d2 = Math.floor(1 + Math.random() * 6);
+  const d2 = crypto.randomInt(1, 7);
   const total = d1 + d2;
   const isDoubles = d1 === d2;
 
