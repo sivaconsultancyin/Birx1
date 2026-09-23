@@ -19,48 +19,50 @@ export interface AuthSession {
   wallet: Wallet;
 }
 
-// Memory session cache (maps token -> userId)
-const sessionTokens = new Map<string, string>();
-
-
 export const authService = {
-  logout(token: string): void {
-    sessionTokens.delete(token);
+  async logout(token: string): Promise<void> {
+    const admin = getSupabaseAdmin();
+    if (admin && token) {
+      await admin.auth.admin.signOut(token).catch(() => undefined);
+    }
   },
 
   extractToken(req: Request): string | null {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7).trim();
-      return token || null;
+      if (token) return token;
     }
-    return null;
+    const cookieHeader = req.headers.cookie || '';
+    const match = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith('brix_access_token='));
+    return match ? decodeURIComponent(match.slice('brix_access_token='.length)) : null;
   },
 
   async resolveUserFromToken(token: string): Promise<User | null> {
     if (!token) return null;
     const admin = getSupabaseAdmin();
-    if (admin) {
-      try {
-        const { data: { user: sbUser }, error } = await admin.auth.getUser(token);
-        if (!error && sbUser) {
-          return await supabaseRepo.getUserById(sbUser.id);
-        }
-      } catch {
-        // Invalid/expired JWT.
-      }
+    if (!admin) return null;
+    try {
+      const { data: { user: sbUser }, error } = await admin.auth.getUser(token);
+      if (error || !sbUser) return null;
+      return await supabaseRepo.getUserByAuthId(sbUser.id);
+    } catch {
+      return null;
     }
-    const userId = sessionTokens.get(token);
-    return userId ? supabaseRepo.getUserById(userId) : null;
   },
 
-  async login(identifier: string, _codeOrPassword?: string): Promise<AuthSession> {
-    const user = await supabaseRepo.getUserByEmailOrMobile(identifier);
-    if (!user) throw new Error('Account not found. Please register first.');
-    const token = createSessionToken();
-    sessionTokens.set(token, user.id);
+  async login(identifier: string, password: string): Promise<AuthSession> {
+    if (!password || password.length < 8) throw new Error('Password must be at least 8 characters.');
+    const publicClient = getSupabasePublic();
+    const cleanMobile = identifier.replace(/\\D/g, '');
+    const email = cleanMobile ? \`${cleanMobile}@auth.brix.games\` : identifier.trim().toLowerCase();
+    if (!publicClient) throw new Error('Authentication service is not configured.');
+    const { data, error } = await publicClient.auth.signInWithPassword({ email, password });
+    if (error || !data.session || !data.user) throw new Error('Invalid mobile number or password.');
+    const user = await supabaseRepo.getUserByAuthId(data.user.id);
+    if (!user) throw new Error('Authenticated account is not linked to a Brix user.');
     const wallet = await supabaseRepo.getWallet(user.id);
-    return { token, user, wallet };
+    return { token: data.session.access_token, user, wallet };
   },
 
   async register(mobile: string, username: string, _role: UserRole = 'PLAYER', parentId?: string): Promise<AuthSession> {
@@ -90,10 +92,8 @@ export const authService = {
     }
     const updatedUser = await supabaseRepo.updateUserRole(userId, newRole);
     if (!updatedUser) throw new Error('User not found');
-    const token = createSessionToken();
-    sessionTokens.set(token, userId);
     const wallet = await supabaseRepo.getWallet(userId);
-    return { token, user: updatedUser, wallet };
+    throw new Error('Role switching requires a fresh authenticated session.');
   },
 
   canManageUser(actor: User, targetRole: UserRole): boolean {
@@ -104,9 +104,6 @@ export const authService = {
   }
 };
 
-function createSessionToken(): string {
-  return `brix_${crypto.randomBytes(32).toString('hex')}`;
-}
 // ---------------------------------------------------------------------
 // EXPRESS MIDDLEWARES
 // ---------------------------------------------------------------------
