@@ -1794,7 +1794,7 @@ app.get('/api/games/aviator/state', requireAuth, (req: Request, res: Response) =
   res.json({ state: { ...aviatorState, currentBet: aviatorBets.get(req.user!.id) ?? null } });
 });
 
-app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { amount } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 10) {
