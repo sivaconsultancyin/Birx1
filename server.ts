@@ -141,8 +141,6 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // -------------------------------------------------------------
  // AUTH ENDPOINTS
  // -------------------------------------------------------------
-const otps = new Map<string, { codeHash: string; expiresAt: number; attempts: number }>();
-
 function normalizeMobile(value: unknown): string {
   const digits = String(value || '').replace(/\D/g, '');
   if (digits.length < 10 || digits.length > 15) throw new Error('Invalid mobile number');
