@@ -8,17 +8,14 @@ export interface RecoveryReport {
 }
 
 export const gameRecoveryService = {
-  // Safe recovery execution on server startup
   async recoverInterruptedRounds(): Promise<RecoveryReport> {
     const details: string[] = [];
     let recoveredRoundsCount = 0;
     const refundedBetsCount = 0;
-
     try {
       const activeRounds = await supabaseRepo.getActiveGameRounds();
       for (const round of activeRounds) {
         if (round.phase === 'spinning' || round.phase === 'dealing' || round.phase === 'in_flight') {
-          // Reset to clean betting or close gracefully
           round.phase = 'closed';
           round.updatedAt = new Date().toISOString();
           recoveredRoundsCount++;
@@ -28,12 +25,6 @@ export const gameRecoveryService = {
     } catch (err: any) {
       details.push(`Recovery error: ${err.message}`);
     }
-
-    return {
-      timestamp: new Date().toISOString(),
-      recoveredRoundsCount,
-      refundedBetsCount,
-      details
-    };
+    return { timestamp: new Date().toISOString(), recoveredRoundsCount, refundedBetsCount, details };
   }
 };
