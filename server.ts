@@ -93,7 +93,15 @@ function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'> & Parti
 }
 const transactions: Transaction[] = [];
 const PROCESS_OWNER_ID = `brix-${process.pid}-${crypto.randomUUID()}`;
+let leaseConfigWarningShown = false;
 async function acquireGameLease(gameId: string): Promise<boolean> {
+  if (!getSupabaseConfigStatus().isConfigured) {
+    if (!leaseConfigWarningShown) {
+      console.error('[GameLease] Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the runtime environment.');
+      leaseConfigWarningShown = true;
+    }
+    return false;
+  }
   try { return await supabaseRepo.claimGameLease(gameId, PROCESS_OWNER_ID, 4000); }
   catch (e) { console.error(`[GameLease:${gameId}]`, e); return false; }
 }
@@ -1946,7 +1954,8 @@ async function start() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Brix Games Engine] Server live on http://0.0.0.0:${PORT}`);
-    console.log(`[Supabase Platform] Connected status: LIVE POSTGRESQL`);
+    const sbStatus = getSupabaseConfigStatus();
+    console.log(`[Supabase Platform] ${sbStatus.isConfigured ? 'Configured: LIVE POSTGRESQL' : 'NOT CONFIGURED'}`);
   });
 }
 
