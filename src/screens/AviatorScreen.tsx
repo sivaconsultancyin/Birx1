@@ -287,6 +287,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
         </div>
       </div>
 
+      </ExternalAviatorUI>
       {errorMsg && (
         <div className="mx-4 mb-2 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-center">
           {errorMsg}
