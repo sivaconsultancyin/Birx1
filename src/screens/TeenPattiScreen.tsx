@@ -1,3 +1,4 @@
+/* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TeenPattiState, Wallet } from '../types.ts';
