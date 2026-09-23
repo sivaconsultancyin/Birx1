@@ -31,10 +31,10 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
   const token = localStorage.getItem('brix_token');
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      credentials: 'include',
       'X-Request-Id': `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       ...(options.headers || {})
     }
