@@ -52,29 +52,22 @@ export function secureShuffleDeck(deck: Card[]): Card[] {
   const shuffled = [...deck];
   const len = shuffled.length;
 
-  // Environment-safe cryptographic RNG
-  let getRandomInt: (maxExclusive: number) => number;
-
-  try {
-    // Node.js crypto module
-    const nodeCrypto = typeof process !== 'undefined' && process.versions?.node
-      ? // eslint-disable-next-line @typescript-eslint/no-require-imports
-        eval('require("crypto")')
-      : null;
-    if (nodeCrypto && typeof nodeCrypto.randomInt === 'function') {
-      getRandomInt = (max) => nodeCrypto.randomInt(0, max);
-    } else if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-      getRandomInt = (max) => {
-        const arr = new Uint32Array(1);
-        crypto.getRandomValues(arr);
-        return arr[0] % max;
-      };
-    } else {
-      getRandomInt = (max) => Math.floor(Math.random() * max);
+  // Environment-safe cryptographic RNG using Web Crypto / Node Web Crypto.
+  const getRandomInt = (maxExclusive: number): number => {
+    if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
+      throw new Error('Invalid random range');
     }
-  } catch {
-    getRandomInt = (max) => Math.floor(Math.random() * max);
-  }
+    if (typeof globalThis.crypto?.getRandomValues !== 'function') {
+      throw new Error('Cryptographically secure random generator unavailable');
+    }
+    const range = 0x100000000;
+    const limit = range - (range % maxExclusive);
+    const arr = new Uint32Array(1);
+    do {
+      globalThis.crypto.getRandomValues(arr);
+    } while (arr[0] >= limit);
+    return arr[0] % maxExclusive;
+  };
 
   for (let i = len - 1; i > 0; i--) {
     const j = getRandomInt(i + 1);
@@ -402,7 +395,7 @@ export function createAuthoritativeTeenPattiRound(
   }
 
   const now = Date.now();
-  const roundId = 'TP-' + Math.floor(1000 + Math.random() * 9000);
+  const roundId = 'TP-' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
   return {
     roundId,
