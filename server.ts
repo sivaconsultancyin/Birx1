@@ -1216,7 +1216,7 @@ app.get('/api/games/roulette/history', requireAuth, requirePlayerForGames, handl
 app.get('/games/roulette/history', handleGetRouletteHistory);
 
 // 4. POST Bets (Register bets for ongoing authoritative round)
-const handlePostRouletteBets = (req: Request, res: Response) => {
+const handlePostRouletteBets = async (req: Request, res: Response) => {
   const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
 
   // Idempotency check to prevent double debit
