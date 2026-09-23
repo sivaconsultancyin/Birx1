@@ -86,14 +86,14 @@ export const authService = {
     return { token, user, wallet };
   },
 
-  async switchRole(userId: string, newRole: UserRole): Promise<AuthSession> {
+  async switchRole(userId: string, newRole: UserRole): Promise<{ user: User; wallet: Wallet }> {
     if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEV_ROLE_SWITCH !== 'true') {
       throw new Error('Role switching is disabled.');
     }
     const updatedUser = await supabaseRepo.updateUserRole(userId, newRole);
     if (!updatedUser) throw new Error('User not found');
     const wallet = await supabaseRepo.getWallet(userId);
-    throw new Error('Role switching requires a fresh authenticated session.');
+    return { user: updatedUser, wallet };
   },
 
   canManageUser(actor: User, targetRole: UserRole): boolean {
