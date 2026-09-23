@@ -107,7 +107,7 @@ async function debitForUser(req: Request, amount: number, description: string, g
   return supabaseRepo.atomicDebit(user.id, amount, 'bet', description, gameId, idempotencyKey);
 }
 
-async async function creditForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string) {
+async function creditForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string) {
   const user = await getRequestUser(req);
   return supabaseRepo.atomicCredit(user.id, amount, 'payout', description, gameId, idempotencyKey);
 }
