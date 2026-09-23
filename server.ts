@@ -1155,8 +1155,7 @@ setInterval(async () => {
     if (teenPattiState.countdown <= 0) {
       teenPattiState.phase = 'settlement';
 
-      const userWallet = await supabaseRepo.getWallet(req.user!.id);
-  const userPlayer = teenPattiState.players.find((p) => p.isUser);
+      const userPlayer = teenPattiState.players.find((p) => p.isUser);
       let userSettlementDetail = undefined;
       if (userPlayer && teenPattiState.dealer) {
         const settlement = computePlayerSettlement(
