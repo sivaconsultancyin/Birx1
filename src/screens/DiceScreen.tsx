@@ -158,6 +158,7 @@ export const DiceScreen: React.FC<DiceScreenProps> = ({
         onOpenWallet={onOpenWallet}
       />
 
+      <ExternalDiceUI>
       {/* Stage: 3D Rolling Arena */}
       <div className="p-4 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border-b border-slate-800 flex flex-col items-center">
         {/* Recent Sums Streak */}
@@ -197,6 +198,8 @@ export const DiceScreen: React.FC<DiceScreenProps> = ({
       </div>
       </ExternalDiceUI>
 
+
+            </ExternalDiceUI>
 
       {errorMsg && (
         <div className="mx-3 mt-3 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-center">
