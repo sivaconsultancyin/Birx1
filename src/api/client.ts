@@ -103,6 +103,7 @@ export const adminApi = {
     username: string;
     role: UserRole;
     email?: string;
+    password: string;
   }): Promise<{ success: boolean; user: User }> {
     return fetchJson('/admin/users/create', {
       method: 'POST',
