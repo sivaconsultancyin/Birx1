@@ -195,13 +195,8 @@ export const DiceScreen: React.FC<DiceScreenProps> = ({
             ({currentSum > 7 ? 'OVER 7' : currentSum < 7 ? 'UNDER 7' : 'EXACT 7'})
           </span>
         </div>
-      </div>
-      </ExternalDiceUI>
-
-
-            </ExternalDiceUI>
-
-      {errorMsg && (
+      </div>\n      </ExternalDiceUI>
+{errorMsg && (
         <div className="mx-3 mt-3 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-center">
           {errorMsg}
         </div>
