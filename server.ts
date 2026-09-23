@@ -1266,6 +1266,7 @@ const handlePostTeenPattiBet = async (req: Request, res: Response) => {
   if (teenPattiState.phase !== 'betting') {
     return res.status(400).json({ error: 'Betting is closed for this round' });
   }
+  const userWallet = await supabaseRepo.getWallet(req.user!.id);
   const userPlayer = teenPattiState.players.find((p) => p.isUser);
   if (!userPlayer) return res.status(400).json({ error: 'User player not found' });
 
