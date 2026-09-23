@@ -41,7 +41,8 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 export function getSupabasePublic(): SupabaseClient | null {
   if (!isConfigured) return null;
   if (!cachedPublicClient) {
-    cachedPublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY);
+    if (!SUPABASE_ANON_KEY) return null;
+    cachedPublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
   return cachedPublicClient;
 }
@@ -198,6 +199,18 @@ seedInitialStore();
 // ---------------------------------------------------------------------
 export const supabaseRepo = {
   // USER QUERIES
+  async getUserByAuthId(authUserId: string): Promise<User | null> {
+    const admin = getSupabaseAdmin();
+    if (!admin || !authUserId) return null;
+    const { data, error } = await admin.from('users').select('*').eq('auth_user_id', authUserId).single();
+    if (error || !data) return null;
+    return {
+      id: data.id, email: data.email, mobile: data.mobile, username: data.username,
+      role: data.role as UserRole, parentId: data.parent_id, vipTier: data.vip_tier,
+      avatarUrl: data.avatar_url, isDemo: data.is_demo, createdAt: data.created_at
+    };
+  },
+
   async getUserById(id: string): Promise<User | null> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
@@ -318,7 +331,7 @@ export const supabaseRepo = {
       }
     }
 
-    const sourceUsers = allUsers.length > 0 ? allUsers : Array.from(dbStore.users.values());
+    const sourceUsers = allUsers.length > 0 ? allUsers : (process.env.NODE_ENV === 'production' ? [] : Array.from(dbStore.users.values()));
 
     // Role Hierarchy Visibility Filtering:
     // - OWNER can view ALL users
