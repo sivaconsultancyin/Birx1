@@ -38,6 +38,28 @@ import { gameRecoveryService } from './src/server/recovery/gameRecoveryService.t
 
 const app = express();
 const PORT = 3000;
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+function rateLimit(limit: number, windowMs: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const key = `${req.ip}:${req.path}`;
+    const now = Date.now();
+    const bucket = rateBuckets.get(key);
+    if (!bucket || now >= bucket.resetAt) {
+      rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    if (bucket.count >= limit) return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    bucket.count += 1;
+    next();
+  };
+}
+function setAuthCookie(res: Response, token: string) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `brix_access_token=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600${secure}`);
+}
+function clearAuthCookie(res: Response) {
+  res.setHeader('Set-Cookie', 'brix_access_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+}
 
 app.use(express.json({ limit: '256kb' }));
 app.disable('x-powered-by');
@@ -76,19 +98,16 @@ async function creditForUser(req: Request, amount: number, description: string, 
 // -------------------------------------------------------------
 // SSE STREAM FOR REAL-TIME EVENTS
 // -------------------------------------------------------------
-const sseClients: Response[] = [];
+const sseClients: Array<{ res: Response; userId: string }> = [];
 
 function broadcastSSE(event: string, data: any) {
   const payloadData = { type: event, ...data };
   const messagePayload = `data: ${JSON.stringify(payloadData)}\n\n`;
   const eventPayload = `event: ${event}\ndata: ${JSON.stringify(payloadData)}\n\n`;
-  sseClients.forEach((res) => {
-    try {
-      res.write(messagePayload);
-      res.write(eventPayload);
-    } catch {
-      // client dropped
-    }
+  sseClients.forEach(({ res, userId }) => {
+    const targetUserId = data?.userId || data?.playerId || null;
+    if (targetUserId && targetUserId !== userId) return;
+    try { res.write(messagePayload); res.write(eventPayload); } catch { /* client dropped */ }
   });
 }
 
@@ -98,11 +117,13 @@ const handleSSEConnection = (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
 
-  sseClients.push(res);
+  const client = { res, userId: req.user!.id };
+  sseClients.push(client);
   res.write(`data: ${JSON.stringify({ type: 'connected', time: Date.now() })}\n\n`);
-
+  const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 25000);
   req.on('close', () => {
-    const index = sseClients.indexOf(res);
+    clearInterval(heartbeat);
+    const index = sseClients.indexOf(client);
     if (index !== -1) sseClients.splice(index, 1);
   });
 };
@@ -128,69 +149,37 @@ function normalizeMobile(value: unknown): string {
   return digits;
 }
 
-app.post('/api/auth/send-otp', (req: Request, res: Response) => {
+app.post('/api/auth/login', rateLimit(10, 60_000), async (req: Request, res: Response) => {
   try {
     const mobile = normalizeMobile(req.body.mobile);
-    const code = crypto.randomInt(100000, 1000000).toString();
-    otps.set(mobile, { codeHash: crypto.createHash('sha256').update(code).digest('hex'), expiresAt: Date.now() + 5 * 60_000, attempts: 0 });
-    // Integrate an SMS provider here; never return the OTP from the API.
-    res.json({ success: true, message: 'OTP sent successfully.' });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
-  try {
-    const mobile = normalizeMobile(req.body.mobile);
-    const otp = String(req.body.otp || '');
-    const record = otps.get(mobile);
-    if (!record || Date.now() > record.expiresAt || record.attempts >= 5) return res.status(400).json({ error: 'Invalid or expired OTP' });
-    record.attempts++;
-    const hash = crypto.createHash('sha256').update(otp).digest('hex');
-    if (hash !== record.codeHash) return res.status(400).json({ error: 'Invalid or expired OTP' });
-    otps.delete(mobile);
-    const session = await authService.login(mobile, otp);
+    const password = String(req.body.password || '');
+    const session = await authService.login(`+91${mobile}`, password);
+    setAuthCookie(res, session.token);
     res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
+  } catch (err: any) { res.status(401).json({ error: err.message || 'Invalid credentials' }); }
 });
 
-app.post('/api/auth/register', async (req: Request, res: Response) => {
+app.post('/api/auth/register', rateLimit(5, 60_000), async (req: Request, res: Response) => {
   try {
     const mobile = normalizeMobile(req.body.mobile);
     const username = String(req.body.username || '').trim();
+    const password = String(req.body.password || '');
     if (username.length < 3 || username.length > 50) return res.status(400).json({ error: 'Username must be 3-50 characters' });
-    const session = await authService.register(mobile, username, 'PLAYER');
+    const session = await authService.register(mobile, username, password, 'PLAYER');
+    setAuthCookie(res, session.token);
     res.status(201).json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/auth/switch-role', requireAuth, requireRoles(['OWNER']), async (req: Request, res: Response) => {
-  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEV_ROLE_SWITCH !== 'true') {
-    return res.status(403).json({ error: 'Role switching is disabled.' });
-  }
-  try {
-    const { role } = req.body;
-    if (!['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
-    const session = await authService.switchRole(req.user!.id, role);
-    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
 app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
   res.json({ user: req.user, wallet: req.wallet });
 });
 
-app.post('/api/auth/logout', requireAuth, (req: Request, res: Response) => {
+app.post('/api/auth/logout', requireAuth, async (req: Request, res: Response) => {
   const token = authService.extractToken(req);
-  if (token) authService.logout(token);
-  res.json({ success: true, message: 'Logged out successfully' });
+  if (token) await authService.logout(token);
+  clearAuthCookie(res);
+  res.json({ success: true });
 });
 
 // -------------------------------------------------------------
@@ -469,7 +458,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/auth/switch-role', requireAuth, requireRoles(['OWNER']), async (req: Request, res: Response) => {
+app.post('/api/auth/switch-role', rateLimit(10, 60_000), requireAuth, requireRoles(['OWNER']), async (req: Request, res: Response) => {
   if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEV_ROLE_SWITCH !== 'true') {
     return res.status(403).json({ error: 'Role switching is disabled.' });
   }
@@ -477,7 +466,9 @@ app.post('/api/auth/switch-role', requireAuth, requireRoles(['OWNER']), async (r
     const { role } = req.body;
     if (!['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
     const session = await authService.switchRole(req.user!.id, role);
-    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+    const token = authService.extractToken(req);
+    if (token) setAuthCookie(res, token);
+    res.json({ success: true, token, user: session.user, wallet: session.wallet });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
