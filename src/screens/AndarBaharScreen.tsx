@@ -1,6 +1,7 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ExternalAndarBaharUI } from '../components/external/ExternalAndarBaharUI.tsx';
 import { motion, AnimatePresence } from 'motion/react';
 import { Flame, Sparkles, Clock, RotateCcw, ShieldCheck, Award } from 'lucide-react';
 import { AndarBaharDealtCard, AndarBaharSide, AndarBaharState, Card, Wallet } from '../types.ts';
