@@ -388,190 +388,6 @@ app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER
   } catch(e:any){res.status(500).json({error:e.message});}
 });
 
-// HEALTH CHECK
-
-// -------------------------------------------------------------
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
-});
-
-// -------------------------------------------------------------
-// ADMIN MANAGEMENT ENDPOINTS (Strict Role-Based Access Control)
-// -------------------------------------------------------------
-// GET visible users respecting OWNER -> SUPER_ADMIN -> ADMIN -> PLAYER hierarchy
-app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const users = await supabaseRepo.getVisibleUsers(actor);
-    res.json({ users });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// CREATE subordinate user under actor
-app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const { mobile, username, role, email } = req.body;
-    if (!mobile || !username || !role) {
-      return res.status(400).json({ error: 'mobile, username, and role are required' });
-    }
-
-    if (!authService.canManageUser(actor, role)) {
-      return res.status(403).json({ error: `Actor with role ${actor.role} cannot create user with role ${role}` });
-    }
-
-    const created = await supabaseRepo.createUser({
-      id: `usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-      mobile,
-      email,
-      username,
-      role,
-      parentId: actor.id,
-      vipTier: 'Bronze',
-      isDemo: false,
-      createdAt: new Date().toISOString()
-    });
-
-    res.json({ success: true, user: created });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// UPDATE user role
-app.patch('/api/admin/users/:id/role', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const { role } = req.body;
-    if (!authService.canManageUser(actor, role)) {
-      return res.status(403).json({ error: `Permission denied: ${actor.role} cannot grant role ${role}` });
-    }
-    const updated = await supabaseRepo.updateUserRole(req.params.id, role);
-    res.json({ success: true, user: updated });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// COIN RECHARGES
-app.get('/api/admin/recharges', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  const recharges = await walletService.getRecharges();
-  res.json({ recharges });
-});
-
-app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const recharge = await walletService.approveCoinRecharge(req.params.id, actor.id);
-    // Sync local wallet if it was for current user
-    res.json({ success: true, recharge });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/admin/recharges/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const recharge = await walletService.rejectCoinRecharge(req.params.id, actor.id);
-    res.json({ success: true, recharge });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// WITHDRAWALS
-app.get('/api/admin/withdrawals', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  const withdrawals = await walletService.getWithdrawals();
-  res.json({ withdrawals });
-});
-
-app.post('/api/admin/withdrawals/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const withdrawal = await walletService.approveWithdrawal(req.params.id, actor.id);
-    res.json({ success: true, withdrawal });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/admin/withdrawals/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const actor = req.user!;
-    const withdrawal = await walletService.rejectWithdrawal(req.params.id, actor.id);
-    res.json({ success: true, withdrawal });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// SUPABASE STATUS & HEALTH
-app.get('/api/admin/supabase-status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  const status = getSupabaseConfigStatus();
-  const allUsers = await supabaseRepo.getVisibleUsers({ role: 'OWNER' } as User);
-  const recharges = await walletService.getRecharges();
-  const withdrawals = await walletService.getWithdrawals();
-  const allTransactions = await walletService.getTransactions();
-
-  res.json({
-    status,
-    stats: {
-      totalUsers: allUsers.length,
-      totalRecharges: recharges.length,
-      totalWithdrawals: withdrawals.length,
-      totalTransactions: allTransactions.length,
-      schemaFile: 'supabase/migrations/20260920000000_supabase_brix_platform.sql'
-    }
-  });
-});
-
-// STORAGE ASSETS & SHUFFLE VIDEO
-app.get('/api/storage/shuffle-video', async (_req: Request, res: Response) => {
-  const info = await storageService.getShuffleVideoInfo();
-  res.json(info);
-});
-
-app.get('/api/admin/storage/assets', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
-  const assets = await storageService.listAssets('all');
-  res.json({ assets });
-});
-
-// DOCUMENT UPLOADS & GOOGLE DRIVE INTEGRATION METADATA
-app.get('/api/storage/documents', requireAuth, async (_req: Request, res: Response) => {
-  const docs = await storageService.listDocuments();
-  res.json({ documents: docs });
-});
-
-app.post('/api/storage/documents/upload', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const { name, category, url, size, uploadedBy } = req.body;
-    if (!name || !category) {
-      return res.status(400).json({ error: 'Document name and category are required' });
-    }
-    const doc = await storageService.recordDocument({
-      name,
-      category,
-      url: url || `/assets/docs/${name}`,
-      size: Number(size) || 125000,
-      uploadedBy: req.user!.id
-    });
-    res.json({ success: true, document: doc });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.patch('/api/storage/documents/:id/status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { status } = req.body;
-  const updated = await storageService.updateDocumentStatus(id, status);
-  if (!updated) return res.status(404).json({ error: 'Document not found' });
-  res.json({ success: true, document: updated });
-});
-
 // CLAIMS & APPLICATION STATUS MANAGEMENT
 interface PlatformClaim {
   id: string;
@@ -1823,7 +1639,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
   });
 });
 
-app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const currentAviatorBet = aviatorBets.get(req.user!.id);
   if (!currentAviatorBet || currentAviatorBet.cashedOut) {
     return res.status(400).json({ error: 'No active bet to cash out' });
@@ -1879,7 +1695,7 @@ app.get('/api/games/dice/state', requireAuth, requirePlayerForGames, (_req: Requ
   res.json({ state: diceState });
 });
 
-app.post('/api/games/dice/roll', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/dice/roll', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betType, amount }: { betType: 'under7' | 'exact7' | 'over7' | 'even' | 'odd' | 'doubles'; amount: number } =
     req.body;
   const numAmount = Number(amount);
@@ -1958,7 +1774,7 @@ app.get('/api/games/dragon-tiger/state', requireAuth, requirePlayerForGames, (_r
   res.json({ state: dragonTigerState });
 });
 
-app.post('/api/games/dragon-tiger/deal', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/dragon-tiger/deal', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: DragonTigerBetSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
@@ -2179,7 +1995,7 @@ app.get('/api/games/andar-bahar/state', requireAuth, (req: Request, res: Respons
   res.json({ state: { ...andarBaharState, userBet: andarBaharBets.get(req.user!.id) ?? undefined } });
 });
 
-app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: AndarBaharSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
