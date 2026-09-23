@@ -1,6 +1,7 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { ExternalTeenPattiUI } from '../components/external/ExternalTeenPattiUI.tsx';
 import { TeenPattiState, Wallet } from '../types.ts';
 import { gamesApi, subscribeToRealtimeEvents } from '../api/client.ts';
 import { GameHeader } from '../components/GameHeader.tsx';
@@ -197,6 +198,26 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
 
       {/* Main Table Arena */}
       <div className="p-2 sm:p-3 flex-1 flex flex-col items-center">
+        <ExternalTeenPattiUI>
+
+        {gameState ? (
+          <TeenPattiTable
+            state={gameState}
+            wallet={wallet}
+            onPlaceBet={handlePlaceBet}
+            onSeeCards={handleSeeCards}
+            isPlacingBet={isPlacingBet}
+            selectedChip={selectedChip}
+            onSelectChip={setSelectedChip}
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-400 text-sm gap-2">
+            <div className="w-8 h-8 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+            <span>Connecting to Teen Patti Table...</span>
+          </div>
+        )}
+
+        </ExternalTeenPattiUI>
         {gameState ? (
           <TeenPattiTable
             state={gameState}
