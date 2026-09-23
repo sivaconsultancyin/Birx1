@@ -88,9 +88,9 @@ function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'> & Parti
     settlementStatus: entry.settlementStatus
   };
   gameHistories.unshift(normalized);
-}
   if (gameHistories.length > 500) gameHistories.pop();
   return normalized;
+}
 const transactions: Transaction[] = [];
 const PROCESS_OWNER_ID = `brix-${process.pid}-${crypto.randomUUID()}`;
 async function acquireGameLease(gameId: string): Promise<boolean> {
