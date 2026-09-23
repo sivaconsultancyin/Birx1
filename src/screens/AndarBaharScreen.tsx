@@ -1,3 +1,4 @@
+/* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Flame, Sparkles, Clock, RotateCcw, ShieldCheck, Award } from 'lucide-react';
