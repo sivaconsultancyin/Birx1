@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { Request, Response, NextFunction } from 'express';
 import { User, UserRole, Wallet } from '../../types.ts';
-import { supabaseRepo, getSupabaseAdmin } from '../supabase/supabaseClient.ts';
+import { supabaseRepo, getSupabaseAdmin, getSupabasePublic } from '../supabase/supabaseClient.ts';
 
 // Extend Express Request
 declare global {
@@ -54,7 +54,7 @@ export const authService = {
   async login(identifier: string, password: string): Promise<AuthSession> {
     if (!password || password.length < 8) throw new Error('Password must be at least 8 characters.');
     const publicClient = getSupabasePublic();
-    const cleanMobile = identifier.replace(/\\D/g, '');
+    const cleanMobile = identifier.replace(/\D/g, '');
     const email = cleanMobile ? \`${cleanMobile}@auth.brix.games\` : identifier.trim().toLowerCase();
     if (!publicClient) throw new Error('Authentication service is not configured.');
     const { data, error } = await publicClient.auth.signInWithPassword({ email, password });
