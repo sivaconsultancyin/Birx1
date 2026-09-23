@@ -1300,7 +1300,7 @@ app.get('/api/games/roulette/settlement/:roundId', requireAuth, requirePlayerFor
 app.get('/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
 
 // 7. POST Spin (Instant spin & authoritative settlement flow)
-const handlePostRouletteSpin = (req: Request, res: Response) => {
+const handlePostRouletteSpin = async (req: Request, res: Response) => {
   const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
 
   // Idempotency check
