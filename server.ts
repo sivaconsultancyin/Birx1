@@ -111,7 +111,7 @@ function broadcastSSE(event: string, data: any) {
   });
 }
 
-const handleSSEConnection = (req: Request, res: Response) => {
+const handleSSEConnection = async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -1564,7 +1564,7 @@ const handleGetTeenPattiState = (_req: Request, res: Response) => {
 app.get('/api/games/teen-patti/state', requireAuth, requirePlayerForGames, handleGetTeenPattiState);
 app.get('/games/teen-patti/state', requireAuth, requirePlayerForGames, handleGetTeenPattiState);
 
-const handlePostTeenPattiBet = (req: Request, res: Response) => {
+const handlePostTeenPattiBet = async (req: Request, res: Response) => {
   const { amount }: { amount: number } = req.body;
   const betAmount = Number(amount);
   if (!betAmount || betAmount <= 0) {
@@ -1610,7 +1610,7 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
 app.post('/api/games/teen-patti/bet', requireAuth, requirePlayerForGames, handlePostTeenPattiBet);
 app.post('/games/teen-patti/bet', handlePostTeenPattiBet);
 
-const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
+const handlePostTeenPattiNewRound = async (req: Request, res: Response) => {
   const bootAmount = Number(req.body?.bootAmount || 50);
   const userPlayer = teenPattiState.players.find((p) => p.isUser);
   if (userPlayer && teenPattiState.phase === 'betting') {
@@ -1633,7 +1633,7 @@ const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
 app.post('/api/games/teen-patti/new-round', requireAuth, requirePlayerForGames, handlePostTeenPattiNewRound);
 app.post('/games/teen-patti/new-round', handlePostTeenPattiNewRound);
 
-const handlePostTeenPattiAction = (req: Request, res: Response) => {
+const handlePostTeenPattiAction = async (req: Request, res: Response) => {
   const { action, betAmount = 0 }: { action: 'see' | 'blind' | 'chaal' | 'fold' | 'show' | 'bet'; betAmount?: number } =
     req.body;
 
