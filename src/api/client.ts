@@ -28,12 +28,13 @@ import {
 const BASE_URL = '/api';
 
 async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('brix_token') || 'token_demo';
+  const token = localStorage.getItem('brix_token');
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      credentials: 'include',
       'X-Request-Id': `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       ...(options.headers || {})
     }
@@ -51,32 +52,21 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
 // AUTH API
 // -------------------------------------------------------------
 export const authApi = {
-  async sendOtp(mobile: string): Promise<{ success: boolean; message: string; demoOtp: string }> {
-    return fetchJson('/auth/send-otp', {
+  async login(mobile: string, password: string): Promise<{ success: boolean; token: string; user: User; wallet: Wallet }> {
+    const res = await fetchJson<{ success: boolean; token: string; user: User; wallet: Wallet }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ mobile })
+      body: JSON.stringify({ mobile, password })
     });
-  },
-
-  async verifyOtp(mobile: string, otp: string): Promise<{ success: boolean; token: string; user: User }> {
-    const res = await fetchJson<{ success: boolean; token: string; user: User }>('/auth/verify-otp', {
-      method: 'POST',
-      body: JSON.stringify({ mobile, otp })
-    });
-    if (res.token) {
-      localStorage.setItem('brix_token', res.token);
-    }
+    if (res.token) localStorage.setItem('brix_token', res.token);
     return res;
   },
 
-  async register(mobile: string, otp: string, username: string): Promise<{ success: boolean; token: string; user: User }> {
-    const res = await fetchJson<{ success: boolean; token: string; user: User }>('/auth/register', {
+  async register(mobile: string, password: string, username: string): Promise<{ success: boolean; token: string; user: User; wallet: Wallet }> {
+    const res = await fetchJson<{ success: boolean; token: string; user: User; wallet: Wallet }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ mobile, otp, username })
+      body: JSON.stringify({ mobile, password, username })
     });
-    if (res.token) {
-      localStorage.setItem('brix_token', res.token);
-    }
+    if (res.token) localStorage.setItem('brix_token', res.token);
     return res;
   },
 
@@ -84,20 +74,19 @@ export const authApi = {
     return fetchJson('/auth/me');
   },
 
-  async switchRole(role: UserRole): Promise<{ success: boolean; user: User; wallet: Wallet; token: string }> {
-    const res = await fetchJson<{ success: boolean; user: User; wallet: Wallet; token: string }>('/auth/switch-role', {
+  async switchRole(role: UserRole): Promise<{ success: boolean; user: User; wallet: Wallet; token: string | null }> {
+    const res = await fetchJson<{ success: boolean; user: User; wallet: Wallet; token: string | null }>('/auth/switch-role', {
       method: 'POST',
       body: JSON.stringify({ role })
     });
-    if (res.token) {
-      localStorage.setItem('brix_token', res.token);
-    }
+    if (res.token) localStorage.setItem('brix_token', res.token);
     return res;
   },
 
   async logout(): Promise<{ success: boolean }> {
+    const res = await fetchJson<{ success: boolean }>('/auth/logout', { method: 'POST' });
     localStorage.removeItem('brix_token');
-    return fetchJson('/auth/logout', { method: 'POST' });
+    return res;
   }
 };
 
@@ -472,7 +461,7 @@ export const gamesApi = {
 // -------------------------------------------------------------
 export function subscribeToRealtimeEvents(onEvent: (payload: RealtimeEventPayload) => void): () => void {
   try {
-    const eventSource = new EventSource('/api/events/stream');
+    const eventSource = new EventSource('/api/events/stream', { withCredentials: true });
 
     const handleGenericEvent = (e: MessageEvent, name: string) => {
       try {
