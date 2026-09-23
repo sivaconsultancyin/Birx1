@@ -88,6 +88,7 @@ function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'> & Parti
     settlementStatus: entry.settlementStatus
   };
   gameHistories.unshift(normalized);
+}
   if (gameHistories.length > 500) gameHistories.pop();
   return normalized;
 const transactions: Transaction[] = [];
