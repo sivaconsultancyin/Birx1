@@ -178,6 +178,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
         })}
       </div>
 
+      <ExternalAviatorUI>
       {/* Flight Canvas Arena */}
       <div className="relative p-4 bg-slate-950">
         <div className="relative w-full h-64 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col justify-between p-4">
