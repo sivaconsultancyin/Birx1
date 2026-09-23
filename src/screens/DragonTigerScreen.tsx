@@ -1,3 +1,4 @@
+/* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect } from 'react';
 import { Flame, Shield, Award, RotateCcw, Clock } from 'lucide-react';
 import { Card, DragonTigerBetSide, DragonTigerState, Wallet } from '../types.ts';
