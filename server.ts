@@ -853,7 +853,7 @@ const requireGameMutationAuth = (req: Request, res: Response, next: NextFunction
 };
 app.use('/api/games', requireGameMutationAuth);
 
-app.get('/api/games/history', (_req: Request, res: Response) => {
+app.get('/api/games/history', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
   res.json({ history: gameHistories });
 });
 
@@ -1241,7 +1241,7 @@ const handleGetRouletteRules = (_req: Request, res: Response) => {
     zeroRule: '0 is Green. When 0 hits, all outside bets (Red/Black, Odd/Even, Low/High, Dozens, Columns) lose. Only bets covering 0 win.'
   });
 };
-app.get('/api/games/roulette/rules', handleGetRouletteRules);
+app.get('/api/games/roulette/rules', requireAuth, requirePlayerForGames, handleGetRouletteRules);
 app.get('/games/roulette/rules', handleGetRouletteRules);
 
 // 2. GET Round / State
@@ -1259,9 +1259,9 @@ const handleGetRouletteRound = (_req: Request, res: Response) => {
     limits: ROULETTE_LIMITS
   });
 };
-app.get('/api/games/roulette/round', handleGetRouletteRound);
+app.get('/api/games/roulette/round', requireAuth, requirePlayerForGames, handleGetRouletteRound);
 app.get('/games/roulette/round', handleGetRouletteRound);
-app.get('/api/games/roulette/state', handleGetRouletteRound);
+app.get('/api/games/roulette/state', requireAuth, requirePlayerForGames, handleGetRouletteRound);
 app.get('/games/roulette/state', handleGetRouletteRound);
 
 // 3. GET History & Analytics
@@ -1301,7 +1301,7 @@ const handleGetRouletteHistory = (_req: Request, res: Response) => {
     coldNumbers: coldNumbers.length > 0 ? coldNumbers : [0, 26, 35, 11]
   });
 };
-app.get('/api/games/roulette/history', handleGetRouletteHistory);
+app.get('/api/games/roulette/history', requireAuth, requirePlayerForGames, handleGetRouletteHistory);
 app.get('/games/roulette/history', handleGetRouletteHistory);
 
 // 4. POST Bets (Register bets for ongoing authoritative round)
@@ -1361,7 +1361,7 @@ const handlePostRouletteBets = (req: Request, res: Response) => {
   broadcastSSE('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
   return res.json(responsePayload);
 };
-app.post('/api/games/roulette/bets', handlePostRouletteBets);
+app.post('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handlePostRouletteBets);
 app.post('/games/roulette/bets', handlePostRouletteBets);
 
 // 5. GET Active Bets
@@ -1373,7 +1373,7 @@ const handleGetRouletteBets = (_req: Request, res: Response) => {
     totalBet: bets.reduce((sum, b) => sum + Number(b.amount || 0), 0)
   });
 };
-app.get('/api/games/roulette/bets', handleGetRouletteBets);
+app.get('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handleGetRouletteBets);
 app.get('/games/roulette/bets', handleGetRouletteBets);
 
 // 6. GET Settlement by roundId
@@ -1385,7 +1385,7 @@ const handleGetRouletteSettlement = (req: Request, res: Response) => {
   }
   return res.json({ settlement });
 };
-app.get('/api/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
+app.get('/api/games/roulette/settlement/:roundId', requireAuth, requirePlayerForGames, handleGetRouletteSettlement);
 app.get('/games/roulette/settlement/:roundId', handleGetRouletteSettlement);
 
 // 7. POST Spin (Instant spin & authoritative settlement flow)
@@ -1493,7 +1493,7 @@ const handlePostRouletteSpin = (req: Request, res: Response) => {
 
   return res.json(fullSettlementResult);
 };
-app.post('/api/games/roulette/spin', handlePostRouletteSpin);
+app.post('/api/games/roulette/spin', requireAuth, requirePlayerForGames, handlePostRouletteSpin);
 app.post('/games/roulette/spin', handlePostRouletteSpin);
 
 
@@ -1650,8 +1650,8 @@ const handleGetTeenPattiState = (_req: Request, res: Response) => {
   });
 };
 
-app.get('/api/games/teen-patti/state', handleGetTeenPattiState);
-app.get('/games/teen-patti/state', handleGetTeenPattiState);
+app.get('/api/games/teen-patti/state', requireAuth, requirePlayerForGames, handleGetTeenPattiState);
+app.get('/games/teen-patti/state', requireAuth, requirePlayerForGames, handleGetTeenPattiState);
 
 const handlePostTeenPattiBet = (req: Request, res: Response) => {
   const { amount }: { amount: number } = req.body;
@@ -1696,7 +1696,7 @@ const handlePostTeenPattiBet = (req: Request, res: Response) => {
   });
 };
 
-app.post('/api/games/teen-patti/bet', handlePostTeenPattiBet);
+app.post('/api/games/teen-patti/bet', requireAuth, requirePlayerForGames, handlePostTeenPattiBet);
 app.post('/games/teen-patti/bet', handlePostTeenPattiBet);
 
 const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
@@ -1719,7 +1719,7 @@ const handlePostTeenPattiNewRound = (req: Request, res: Response) => {
   });
 };
 
-app.post('/api/games/teen-patti/new-round', handlePostTeenPattiNewRound);
+app.post('/api/games/teen-patti/new-round', requireAuth, requirePlayerForGames, handlePostTeenPattiNewRound);
 app.post('/games/teen-patti/new-round', handlePostTeenPattiNewRound);
 
 const handlePostTeenPattiAction = (req: Request, res: Response) => {
@@ -1759,7 +1759,7 @@ const handlePostTeenPattiAction = (req: Request, res: Response) => {
   return res.status(400).json({ error: 'Unknown action' });
 };
 
-app.post('/api/games/teen-patti/action', handlePostTeenPattiAction);
+app.post('/api/games/teen-patti/action', requireAuth, requirePlayerForGames, handlePostTeenPattiAction);
 app.post('/games/teen-patti/action', handlePostTeenPattiAction);
 
 // Persist the authoritative round after every scheduler tick.
@@ -1964,11 +1964,11 @@ let diceState: DiceState = {
   countdown: 10
 };
 
-app.get('/api/games/dice/state', (_req: Request, res: Response) => {
+app.get('/api/games/dice/state', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
   res.json({ state: diceState });
 });
 
-app.post('/api/games/dice/roll', (req: Request, res: Response) => {
+app.post('/api/games/dice/roll', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
   const { betType, amount }: { betType: 'under7' | 'exact7' | 'over7' | 'even' | 'odd' | 'doubles'; amount: number } =
     req.body;
   const numAmount = Number(amount);
@@ -2043,11 +2043,11 @@ let dragonTigerState: DragonTigerState = {
   countdown: 10
 };
 
-app.get('/api/games/dragon-tiger/state', (_req: Request, res: Response) => {
+app.get('/api/games/dragon-tiger/state', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
   res.json({ state: dragonTigerState });
 });
 
-app.post('/api/games/dragon-tiger/deal', (req: Request, res: Response) => {
+app.post('/api/games/dragon-tiger/deal', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: DragonTigerBetSide; amount: number } = req.body;
   const numAmount = Number(amount);
 
