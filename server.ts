@@ -1773,7 +1773,7 @@ function startAuthoritativeAndarBaharRound() {
 }
 
 // Background Authoritative Andar Bahar Round Cycle
-setInterval(() => {
+setInterval(async () => {
   if (andarBaharState.phase === 'betting') {
     andarBaharState.countdown -= 1;
     if (andarBaharState.countdown <= 0) {
