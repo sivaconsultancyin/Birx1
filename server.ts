@@ -1308,9 +1308,12 @@ const handlePostTeenPattiNewRound = async (req: Request, res: Response) => {
   if (userPlayer && teenPattiState.phase === 'betting') {
     if (userPlayer.currentBet < bootAmount) {
       const delta = bootAmount - userPlayer.currentBet;
-      if (userWallet.balance >= delta) { try { await debitForUser(req, delta, 'Teen Patti Boot Bet', 'teen-patti');
+      try {
+        await debitForUser(req, delta, 'Teen Patti Boot Bet', 'teen-patti');
         userPlayer.currentBet = bootAmount;
         teenPattiState.pot += delta;
+      } catch (e: any) {
+        return res.status(400).json({ error: 'Failed to place boot bet' });
       }
     }
   }
