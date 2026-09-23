@@ -74,6 +74,22 @@ app.use((_req: Request, res: Response, next) => {
 
 // Request-scoped identity only. Never use process-global user/wallet state for authorization.
 const gameHistories: GameHistoryEntry[] = [];
+function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'> & Partial<Pick<GameHistoryEntry, 'id' | 'createdAt'>>) {
+  const normalized: GameHistoryEntry = {
+    id: entry.id || `hist_${crypto.randomUUID()}`,
+    createdAt: entry.createdAt || new Date().toISOString(),
+    gameId: entry.gameId,
+    gameName: entry.gameName,
+    betAmount: Number(entry.betAmount) || 0,
+    winAmount: Number(entry.winAmount) || 0,
+    netProfit: entry.netProfit,
+    outcome: String(entry.outcome || ''),
+    multiplier: Number(entry.multiplier) || 0,
+    settlementStatus: entry.settlementStatus
+  };
+  gameHistories.unshift(normalized);
+  if (gameHistories.length > 500) gameHistories.pop();
+  return normalized;
 const transactions: Transaction[] = [];
 const PROCESS_OWNER_ID = `brix-${process.pid}-${crypto.randomUUID()}`;
 async function acquireGameLease(gameId: string): Promise<boolean> {
@@ -1139,7 +1155,8 @@ setInterval(async () => {
     if (teenPattiState.countdown <= 0) {
       teenPattiState.phase = 'settlement';
 
-      const userPlayer = teenPattiState.players.find((p) => p.isUser);
+      const userWallet = await supabaseRepo.getWallet(req.user!.id);
+  const userPlayer = teenPattiState.players.find((p) => p.isUser);
       let userSettlementDetail = undefined;
       if (userPlayer && teenPattiState.dealer) {
         const settlement = computePlayerSettlement(
@@ -1463,7 +1480,7 @@ async function startAviatorFlight() {
 // Start initial aviator flight cycle
 runAviatorCycle();
 
-app.get('/api/games/aviator/state', requireAuth, (req: Request, res: Response) => {
+app.get('/api/games/aviator/state', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
   res.json({ state: { ...aviatorState, currentBet: aviatorBets.get(req.user!.id) ?? null } });
 });
 
@@ -1848,7 +1865,7 @@ setInterval(() => {
   }
 }, 1000);
 
-app.get('/api/games/andar-bahar/state', requireAuth, (req: Request, res: Response) => {
+app.get('/api/games/andar-bahar/state', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
   res.json({ state: { ...andarBaharState, userBet: andarBaharBets.get(req.user!.id) ?? undefined } });
 });
 
