@@ -128,7 +128,7 @@ export const authService = {
         vipTier: 'Bronze',
         isDemo: false,
         createdAt: new Date().toISOString()
-      }, authData.user.id);
+      });
       const { error: linkError } = await admin.from('users').update({ auth_user_id: authData.user.id }).eq('id', user.id);
       if (linkError) throw linkError;
       const { data: sessionData, error: signInError } = await publicClient.auth.signInWithPassword({ email, password });
