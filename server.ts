@@ -497,11 +497,10 @@ app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response
 
 // -------------------------------------------------------------
 // STRICT AUTHORIZATION GUARD FOR GAMES:
-// Games must be visible and playable ONLY by users with role 'PLAYER'
-// OWNER, SUPER_ADMIN, and ADMIN roles are barred from accessing game routes
+// Game state/rules GET endpoints are public so the client can synchronize the
+// authoritative room/round before authentication. Betting/mutation endpoints
+// remain protected below.
 // -------------------------------------------------------------
-app.use('/api/games', requireAuth, requirePlayerForGames);
-app.use('/games', requireAuth, requirePlayerForGames);
 
 // All wagering/game mutation endpoints require an authenticated PLAYER.
 // Read-only game state/rules remain public.
