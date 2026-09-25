@@ -1409,6 +1409,8 @@ app.post('/api/games/teen-patti/action', requireAuth, requirePlayerForGames, han
 // -------------------------------------------------------------
 // 3. AVIATOR ENGINE (SERVER-AUTHORITATIVE)
 // -------------------------------------------------------------
+const AVIATOR_ROOM_ID = 'aviator-main';
+
 let aviatorState: AviatorState = {
   roundId: 'AV-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
@@ -1443,7 +1445,7 @@ async function runAviatorCycle() {
   // Bets are keyed by authenticated user and survive the round reset independently.
   currentCrashTarget = generateCrashPoint();
 
-  broadcastSSE('round_started', { gameId: 'aviator', roundId: aviatorState.roundId });
+  broadcastSSE('round_started', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
   await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
 
@@ -1461,7 +1463,7 @@ async function startAviatorFlight() {
   aviatorState.phase = 'running';
   aviatorState.multiplier = 1.0;
 
-  broadcastSSE('betting_closed', { gameId: 'aviator' });
+  broadcastSSE('betting_closed', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
   const startTime = Date.now();
   const flightInterval = setInterval(async () => {
@@ -1495,6 +1497,8 @@ async function startAviatorFlight() {
 
       broadcastSSE('result', {
         gameId: 'aviator',
+        roomId: AVIATOR_ROOM_ID,
+        roundId: aviatorState.roundId,
         multiplier: currentCrashTarget,
         crashed: true
       });
