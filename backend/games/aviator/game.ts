@@ -21,6 +21,24 @@ let aviatorState: AviatorState = {
 const aviatorBets = new Map<string, AviatorBet>();
 let currentCrashTarget = generateCrashPoint();
 let aviatorTimer: NodeJS.Timeout | null = null;
+let leaseHeartbeat: NodeJS.Timeout | null = null;
+
+function stopLeaseHeartbeat() {
+  if (leaseHeartbeat) clearInterval(leaseHeartbeat);
+  leaseHeartbeat = null;
+}
+
+function startLeaseHeartbeat() {
+  stopLeaseHeartbeat();
+  leaseHeartbeat = setInterval(async () => {
+    try {
+      const owned = await acquireGameLease('aviator');
+      if (!owned) console.warn('[Aviator] Game lease lost; waiting for the current cycle to finish.');
+    } catch (e) {
+      console.warn('[Aviator] Lease renewal failed; continuing current authoritative loop.', e);
+    }
+  }, 2000);
+}
 
 function generateCrashPoint(): number {
   // Classic Provably Fair distribution: 1 / (1 - U) with 3% house edge
@@ -33,6 +51,16 @@ function generateCrashPoint(): number {
 
 async function runAviatorCycle() {
   if (aviatorTimer) clearInterval(aviatorTimer);
+  stopLeaseHeartbeat();
+
+  // Exactly one process owns the authoritative Aviator room when Supabase is configured.
+  // Other processes wait and retry instead of creating competing rounds.
+  const hasLease = await acquireGameLease('aviator');
+  if (!hasLease) {
+    setTimeout(() => { void runAviatorCycle(); }, 1000);
+    return;
+  }
+  startLeaseHeartbeat();
 
   // Phase 1: Betting (5 seconds countdown)
   aviatorState.phase = 'betting';
@@ -101,9 +129,10 @@ async function startAviatorFlight() {
         crashed: true
       });
 
-      // Restart cycle after 3s
+      // Persist the terminal state, then start the next round in the same permanent room.
       await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
-      setTimeout(() => { runAviatorCycle(); }, 3500);
+      stopLeaseHeartbeat();
+      setTimeout(() => { void runAviatorCycle(); }, 3500);
     } else {
       aviatorState.multiplier = nextMult;
       await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
