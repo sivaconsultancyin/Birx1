@@ -1,6 +1,5 @@
-import express, { Request, Response } from 'express';
+import type { AviatorBet, AviatorState } from '../../../src/types.ts';
 import crypto from 'node:crypto';
-import { supabaseRepo } from '../../../src/server/supabase/supabaseClient.ts';
 
 // Extracted from server.ts. Game lifecycle and settlement remain server-authoritative.
 // 3. AVIATOR ENGINE (SERVER-AUTHORITATIVE)
@@ -196,4 +195,5 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async
 
 // -------------------------------------------------------------
 
-export default { name: 'aviator' };
+export const aviatorGameModule = { gameId: 'aviator', source: 'server-authoritative' } as const;
+export default aviatorGameModule;
