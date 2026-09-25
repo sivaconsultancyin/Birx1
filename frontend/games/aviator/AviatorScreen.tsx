@@ -1,14 +1,14 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useRef } from 'react';
-import { ExternalAviatorUI } from '../components/external/ExternalAviatorUI.tsx';
+import { ExternalAviatorUI } from '../../../src/components/external/ExternalAviatorUI.tsx';
 import { Plane, AlertTriangle, CheckCircle, TrendingUp, Sparkles, Clock } from 'lucide-react';
-import { AviatorBet, AviatorState, Wallet } from '../types.ts';
-import { gamesApi } from '../api/client.ts';
-import { GameHeader } from '../components/GameHeader.tsx';
-import { AmountSelector } from '../components/AmountSelector.tsx';
-import { RulesModal } from '../components/RulesModal.tsx';
-import { notifyWinLoss } from '../components/WinLossNotification.tsx';
+import { AviatorBet, AviatorState, Wallet } from '../../../src/types.ts';
+import { gamesApi } from '../../../src/api/client.ts';
+import { GameHeader } from '../../../src/components/GameHeader.tsx';
+import { AmountSelector } from '../../../src/components/AmountSelector.tsx';
+import { RulesModal } from '../../../src/components/RulesModal.tsx';
+import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
 
 interface AviatorScreenProps {
   wallet: Wallet;
