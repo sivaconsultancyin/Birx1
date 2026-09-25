@@ -118,8 +118,10 @@ async function acquireGameLease(gameId: string): Promise<boolean> {
     const claimed = await supabaseRepo.claimGameLease(gameId, PROCESS_OWNER_ID, 4000);
     return Boolean(claimed);
   } catch (e) {
-    console.warn(`[GameLease:${gameId}] lease RPC unavailable; falling back to local loop.`, e);
-    return true;
+    // When Supabase is configured, never fall back to a second local authority:
+    // doing so could create competing rounds across server instances.
+    console.error(`[GameLease:${gameId}] lease RPC unavailable; refusing authority.`, e);
+    return false;
   }
 }
 
