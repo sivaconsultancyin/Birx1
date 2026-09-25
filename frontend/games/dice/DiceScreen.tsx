@@ -1,14 +1,14 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect } from 'react';
-import { ExternalDiceUI } from '../components/external/ExternalDiceUI.tsx';
+import { ExternalDiceUI } from '../../../src/components/external/ExternalDiceUI.tsx';
 import { Dices, RotateCw, Sparkles, TrendingUp } from 'lucide-react';
-import { DiceBetType, DiceState, Wallet } from '../types.ts';
-import { gamesApi } from '../api/client.ts';
-import { GameHeader } from '../components/GameHeader.tsx';
-import { AmountSelector } from '../components/AmountSelector.tsx';
-import { notifyWinLoss } from '../components/WinLossNotification.tsx';
-import { RulesModal } from '../components/RulesModal.tsx';
+import { DiceBetType, DiceState, Wallet } from '../../../src/types.ts';
+import { gamesApi } from '../../../src/api/client.ts';
+import { GameHeader } from '../../../src/components/GameHeader.tsx';
+import { AmountSelector } from '../../../src/components/AmountSelector.tsx';
+import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
+import { RulesModal } from '../../../src/components/RulesModal.tsx';
 
 interface DiceScreenProps {
   wallet: Wallet;
