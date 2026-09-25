@@ -26,17 +26,17 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onPlay }) => {
     <div
       id={`game-card-${game.id}`}
       onClick={() => onPlay(game.id)}
-      className="group relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900 to-slate-950 p-4 transition-all duration-300 hover:-translate-y-1 hover:border-amber-500/50 hover:shadow-xl hover:shadow-amber-500/10 cursor-pointer select-none"
+      className="group ui-interactive ui-shimmer relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900 to-slate-950 p-4 transition-all duration-300 hover:-translate-y-1 hover:border-amber-500/50 hover:shadow-xl hover:shadow-amber-500/10 cursor-pointer select-none"
     >
       {/* Dynamic ambient gradient background */}
       <div
         className={`absolute -top-10 -right-10 w-32 h-32 rounded-full blur-2xl opacity-30 transition-opacity group-hover:opacity-60 bg-gradient-to-br ${game.accentColor}`}
       />
 
-      <div className="relative flex items-start justify-between gap-3">
+      <div className="relative flex items-start justify-between gap-3 ui-card-enter">
         {/* Left: Icon & Title */}
         <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-13 h-13 rounded-2xl bg-slate-800/90 border border-slate-700/60 shadow-md text-2xl group-hover:scale-105 group-hover:border-amber-400/60 transition-transform">
+          <div className="relative flex items-center justify-center w-13 h-13 rounded-2xl bg-slate-800/90 border border-slate-700/60 shadow-md text-2xl group-hover:scale-105 group-hover:border-amber-400/60 transition-transform ui-glow-pulse">
             <span>{game.iconEmoji}</span>
             {game.isLive && (
               <span className="absolute -top-1 -right-1 flex h-3 w-3">
