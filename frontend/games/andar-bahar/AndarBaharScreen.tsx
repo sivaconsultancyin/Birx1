@@ -1,22 +1,22 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ExternalAndarBaharUI } from '../components/external/ExternalAndarBaharUI.tsx';
+import { ExternalAndarBaharUI } from '../../../src/components/external/ExternalAndarBaharUI.tsx';
 import { motion, AnimatePresence } from 'motion/react';
 import { Flame, Sparkles, Clock, RotateCcw, ShieldCheck, Award } from 'lucide-react';
-import { AndarBaharDealtCard, AndarBaharSide, AndarBaharState, Card, Wallet } from '../types.ts';
-import { gamesApi } from '../api/client.ts';
-import { GameHeader } from '../components/GameHeader.tsx';
-import { BettingChip, CHIP_VALUES } from '../components/BettingChip.tsx';
-import { notifyWinLoss } from '../components/WinLossNotification.tsx';
-import { RulesModal } from '../components/RulesModal.tsx';
-import { RealisticCasinoTable } from '../components/casino/RealisticCasinoTable.tsx';
-import { RealisticLiveShuffleEngine } from '../components/casino/RealisticLiveShuffleEngine.tsx';
-import { RealHumanShuffleVideo } from '../components/casino/RealHumanShuffleVideo.tsx';
-import { DealerDealingHand } from '../components/casino/DealerDealingHand.tsx';
-import { Live3DDealerCanvas } from '../components/casino3d/Live3DDealerCanvas.tsx';
-import { PlayingCard } from '../components/teenpatti/PlayingCard.tsx';
-import { casinoAudio } from '../utils/casinoAudio.ts';
+import { AndarBaharDealtCard, AndarBaharSide, AndarBaharState, Card, Wallet } from '../../../src/types.ts';
+import { gamesApi } from '../../../src/api/client.ts';
+import { GameHeader } from '../../../src/components/GameHeader.tsx';
+import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
+import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
+import { RulesModal } from '../../../src/components/RulesModal.tsx';
+import { RealisticCasinoTable } from '../../../src/components/casino/RealisticCasinoTable.tsx';
+import { RealisticLiveShuffleEngine } from '../../../src/components/casino/RealisticLiveShuffleEngine.tsx';
+import { RealHumanShuffleVideo } from '../../../src/components/casino/RealHumanShuffleVideo.tsx';
+import { DealerDealingHand } from '../../../src/components/casino/DealerDealingHand.tsx';
+import { Live3DDealerCanvas } from '../../../src/components/casino3d/Live3DDealerCanvas.tsx';
+import { PlayingCard } from '../../../src/components/teenpatti/PlayingCard.tsx';
+import { casinoAudio } from '../../../src/utils/casinoAudio.ts';
 
 interface AndarBaharScreenProps {
   wallet: Wallet;
