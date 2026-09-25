@@ -153,3 +153,164 @@ body {
     transition-duration: .001ms !important;
   }
 }
+
+/* Aviator visual system: HTML/SVG structure + CSS motion, kept independent of game settlement logic. */
+#screen-aviator {
+  --aviator-cyan: #22d3ee;
+  --aviator-blue: #3b82f6;
+  --aviator-rose: #fb7185;
+  --aviator-amber: #f59e0b;
+}
+
+#screen-aviator .aviator-shell {
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 78%, rgba(59,130,246,.16), transparent 38%),
+    linear-gradient(180deg, rgba(30,27,75,.98), rgba(2,6,23,.98) 48%, #000 100%);
+}
+
+#screen-aviator .aviator-stars {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: .8;
+}
+
+#screen-aviator .aviator-stars i {
+  position: absolute;
+  width: calc(1px + (var(--i) % 3) * 1px);
+  height: calc(1px + (var(--i) % 3) * 1px);
+  left: calc((var(--i) * 37) % 100 * 1%);
+  top: calc((var(--i) * 61) % 82 * 1%);
+  border-radius: 999px;
+  background: rgba(255,255,255,.8);
+  box-shadow: 0 0 7px rgba(125,211,252,.75);
+  animation: aviatorStarDrift calc(3s + (var(--i) % 5) * .65s) ease-in-out infinite alternate;
+  animation-delay: calc((var(--i) % 7) * -.4s);
+}
+
+#screen-aviator .aviator-cloud {
+  position: absolute;
+  width: 150px;
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(148,163,184,.12), rgba(30,41,59,.03));
+  filter: blur(2px);
+  pointer-events: none;
+  opacity: .65;
+}
+
+#screen-aviator .aviator-cloud::before,
+#screen-aviator .aviator-cloud::after {
+  content: "";
+  position: absolute;
+  bottom: 6px;
+  border-radius: 50%;
+  background: inherit;
+}
+
+#screen-aviator .aviator-cloud::before { width: 58px; height: 58px; left: 25px; }
+#screen-aviator .aviator-cloud::after { width: 78px; height: 78px; right: 20px; }
+
+#screen-aviator .aviator-cloud-a { top: 18%; left: -170px; animation: aviatorCloud 15s linear infinite; }
+#screen-aviator .aviator-cloud-b { top: 42%; left: -230px; transform: scale(.7); opacity: .35; animation: aviatorCloud 21s linear infinite 3s; }
+#screen-aviator .aviator-cloud-c { top: 63%; left: -190px; transform: scale(.5); opacity: .25; animation: aviatorCloud 25s linear infinite 7s; }
+
+#screen-aviator .aviator-scanline {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 5px,
+    rgba(255,255,255,.012) 6px
+  );
+  mix-blend-mode: screen;
+}
+
+#screen-aviator .aviator-flight-card {
+  transform-origin: 50% 70%;
+  animation: aviatorArenaBreath 4s ease-in-out infinite;
+}
+
+#screen-aviator .aviator-flight-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 70%, transparent 25%, rgba(0,0,0,.2) 100%);
+}
+
+#screen-aviator .aviator-multiplier-live {
+  animation: aviatorMultiplierPulse .85s ease-in-out infinite alternate;
+}
+
+#screen-aviator .aviator-plane {
+  filter: drop-shadow(0 0 12px rgba(251,113,133,.55));
+  animation: aviatorPlaneBob .42s ease-in-out infinite alternate;
+}
+
+#screen-aviator .aviator-trail {
+  stroke-dasharray: 12 8;
+  animation: aviatorTrailFlow .55s linear infinite;
+}
+
+#screen-aviator .aviator-action-primary {
+  position: relative;
+  overflow: hidden;
+  transform: translateZ(0);
+}
+
+#screen-aviator .aviator-action-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-110%);
+  background: linear-gradient(100deg, transparent 15%, rgba(255,255,255,.28) 50%, transparent 85%);
+  animation: aviatorButtonSweep 2.6s ease-in-out infinite;
+}
+
+#screen-aviator .aviator-history-item {
+  animation: aviatorHistoryIn .35s cubic-bezier(.16,1,.3,1) both;
+  animation-delay: calc(var(--history-index, 0) * 45ms);
+}
+
+@keyframes aviatorStarDrift {
+  from { opacity: .25; transform: scale(.8) translateY(2px); }
+  to { opacity: 1; transform: scale(1.35) translateY(-5px); }
+}
+@keyframes aviatorCloud {
+  from { transform: translateX(0) scale(var(--cloud-scale, 1)); }
+  to { transform: translateX(calc(100vw + 500px)) scale(var(--cloud-scale, 1)); }
+}
+@keyframes aviatorArenaBreath {
+  0%, 100% { box-shadow: 0 20px 60px rgba(2,6,23,.55); }
+  50% { box-shadow: 0 24px 72px rgba(30,64,175,.18); }
+}
+@keyframes aviatorMultiplierPulse {
+  from { transform: scale(1); text-shadow: 0 0 8px rgba(245,158,11,.18); }
+  to { transform: scale(1.035); text-shadow: 0 0 28px rgba(245,158,11,.5); }
+}
+@keyframes aviatorPlaneBob {
+  from { transform: translateY(1px) rotate(-12deg); }
+  to { transform: translateY(-5px) rotate(-8deg); }
+}
+@keyframes aviatorTrailFlow {
+  to { stroke-dashoffset: -20; }
+}
+@keyframes aviatorButtonSweep {
+  0%, 55% { transform: translateX(-110%); }
+  78%, 100% { transform: translateX(110%); }
+}
+@keyframes aviatorHistoryIn {
+  from { opacity: 0; transform: translateY(5px) scale(.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 420px) {
+  #screen-aviator .aviator-cloud { opacity: .42; }
+  #screen-aviator .aviator-stars { opacity: .6; }
+}
