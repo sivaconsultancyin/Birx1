@@ -1,6 +1,5 @@
-import express, { Request, Response } from 'express';
+import type { DiceState } from '../../../src/types.ts';
 import crypto from 'node:crypto';
-import { supabaseRepo } from '../../../src/server/supabase/supabaseClient.ts';
 
 // Extracted from server.ts. Game lifecycle and settlement remain server-authoritative.
 // 4. DICE ENGINE (SERVER-AUTHORITATIVE)
@@ -83,4 +82,5 @@ app.post('/api/games/dice/roll', requireAuth, requirePlayerForGames, async (req:
 
 // -------------------------------------------------------------
 
-export default { name: 'dice' };
+export const diceGameModule = { gameId: 'dice', source: 'server-authoritative' } as const;
+export default diceGameModule;
