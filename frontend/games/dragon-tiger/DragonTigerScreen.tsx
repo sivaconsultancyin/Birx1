@@ -1,15 +1,15 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect } from 'react';
-import { ExternalDragonTigerUI } from '../components/external/ExternalDragonTigerUI.tsx';
+import { ExternalDragonTigerUI } from '../../../src/components/external/ExternalDragonTigerUI.tsx';
 import { Flame, Shield, Award, RotateCcw, Clock } from 'lucide-react';
-import { Card, DragonTigerBetSide, DragonTigerState, Wallet } from '../types.ts';
-import { gamesApi } from '../api/client.ts';
-import { GameHeader } from '../components/GameHeader.tsx';
-import { BettingChip, CHIP_VALUES } from '../components/BettingChip.tsx';
-import { Countdown } from '../components/Countdown.tsx';
-import { notifyWinLoss } from '../components/WinLossNotification.tsx';
-import { RulesModal } from '../components/RulesModal.tsx';
+import { Card, DragonTigerBetSide, DragonTigerState, Wallet } from '../../../src/types.ts';
+import { gamesApi } from '../../../src/api/client.ts';
+import { GameHeader } from '../../../src/components/GameHeader.tsx';
+import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
+import { Countdown } from '../../../src/components/Countdown.tsx';
+import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
+import { RulesModal } from '../../../src/components/RulesModal.tsx';
 
 interface DragonTigerScreenProps {
   wallet: Wallet;
