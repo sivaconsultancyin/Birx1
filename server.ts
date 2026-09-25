@@ -36,12 +36,6 @@ import { walletService } from './src/server/wallet/walletService.ts';
 import { storageService } from './src/server/storage/storageService.ts';
 import { gameRecoveryService } from './src/server/recovery/gameRecoveryService.ts';
 
-import rouletteEngine from './backend/games/roulette/engine.ts';
-import teenPattiEngine from './backend/games/teen-patti/engine.ts';
-import aviatorEngine from './backend/games/aviator/engine.ts';
-import diceEngine from './backend/games/dice/engine.ts';
-import dragonTigerEngine from './backend/games/dragon-tiger/engine.ts';
-import andarBaharEngine from './backend/games/andar-bahar/engine.ts';
 
 const app = express();
 const PORT = 3000;
