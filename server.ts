@@ -95,16 +95,43 @@ function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'> & Parti
 const transactions: Transaction[] = [];
 const PROCESS_OWNER_ID = `brix-${process.pid}-${crypto.randomUUID()}`;
 let leaseConfigWarningShown = false;
-async function acquireGameLease(gameId: string): Promise<boolean> {
+async async function acquireGameLease(gameId: string): Promise<boolean> {
+  // Keep the local game loop alive when the lease RPC is unavailable.
+  // A single Node process can safely use its in-memory authoritative state.
   if (!getSupabaseConfigStatus().isConfigured) {
     if (!leaseConfigWarningShown) {
-      console.error('[GameLease] Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the runtime environment.');
+      console.warn('[GameLease] Supabase lease unavailable; using single-process local game loop.');
       leaseConfigWarningShown = true;
     }
-    return false;
+    return true;
   }
-  try { return await supabaseRepo.claimGameLease(gameId, PROCESS_OWNER_ID, 4000); }
-  catch (e) { console.error(`[GameLease:${gameId}]`, e); return false; }
+  try {
+    const claimed = await supabaseRepo.claimGameLease(gameId, PROCESS_OWNER_ID, 4000);
+    return Boolean(claimed);
+  } catch (e) {
+    console.warn(`[GameLease:${gameId}] lease RPC unavailable; falling back to local loop.`, e);
+    return true;
+  }
+}
+
+async function safeSaveAuthoritativeGameState(gameId: string, state: any): Promise<void> {
+  try {
+    if (getSupabaseConfigStatus().isConfigured) {
+      await supabaseRepo.saveAuthoritativeGameState(gameId, state);
+    }
+  } catch (e) {
+    console.warn(`[GameState:${gameId}] persistence unavailable; continuing with in-memory state.`, e);
+  }
+}
+
+async function safeGetAuthoritativeGameState(gameId: string): Promise<any | null> {
+  try {
+    if (!getSupabaseConfigStatus().isConfigured) return null;
+    return await supabaseRepo.getAuthoritativeGameState(gameId);
+  } catch (e) {
+    console.warn(`[GameState:${gameId}] read unavailable; continuing with in-memory state.`, e);
+    return null;
+  }
 }
 
 async function getRequestUser(req: Request): Promise<User> {
@@ -1419,24 +1446,24 @@ async function runAviatorCycle() {
 
   broadcastSSE('round_started', { gameId: 'aviator', roundId: aviatorState.roundId });
 
-  await supabaseRepo.saveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+  await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
 
   const betInterval = setInterval(async () => {
     if (!(await acquireGameLease('aviator'))) return;
-    const persisted = await supabaseRepo.getAuthoritativeGameState('aviator');
+    const persisted = await safeGetAuthoritativeGameState('aviator');
     if (persisted) { aviatorState = persisted as AviatorState; currentCrashTarget = Number(persisted.crashTarget || currentCrashTarget); }
     aviatorState.countdown -= 1;
     if (aviatorState.countdown <= 0) {
       clearInterval(betInterval);
       startAviatorFlight();
     }
-    await supabaseRepo.saveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+    await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
   }, 1000);
 }
 
 async function startAviatorFlight() {
   if (!(await acquireGameLease('aviator'))) return;
-  const persisted = await supabaseRepo.getAuthoritativeGameState('aviator');
+  const persisted = await safeGetAuthoritativeGameState('aviator');
   if (persisted) { aviatorState = persisted as AviatorState; currentCrashTarget = Number(persisted.crashTarget || currentCrashTarget); }
   aviatorState.phase = 'running';
   aviatorState.multiplier = 1.0;
@@ -1481,11 +1508,11 @@ async function startAviatorFlight() {
       });
 
       // Restart cycle after 3s
-      await supabaseRepo.saveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+      await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
       setTimeout(() => { runAviatorCycle(); }, 3500);
     } else {
       aviatorState.multiplier = nextMult;
-      await supabaseRepo.saveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+      await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
     }
   }, 100);
 }
