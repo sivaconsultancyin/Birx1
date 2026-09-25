@@ -107,7 +107,7 @@ async function runAviatorCycle() {
       clearInterval(betInterval);
       void startAviatorFlight();
     }
-    await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+    await persistAviatorState();
   }, 1000);
 }
 
@@ -161,7 +161,7 @@ async function startAviatorFlight() {
       setTimeout(() => { void runAviatorCycle(); }, 3500);
     } else {
       aviatorState.multiplier = nextMult;
-      await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+      await persistAviatorState();
     }
   }, 100);
 }
