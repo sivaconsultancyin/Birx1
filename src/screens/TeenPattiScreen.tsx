@@ -218,22 +218,6 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
         )}
 
         </ExternalTeenPattiUI>
-        {gameState ? (
-          <TeenPattiTable
-            state={gameState}
-            wallet={wallet}
-            onPlaceBet={handlePlaceBet}
-            onSeeCards={handleSeeCards}
-            isPlacingBet={isPlacingBet}
-            selectedChip={selectedChip}
-            onSelectChip={setSelectedChip}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-400 text-sm gap-2">
-            <div className="w-8 h-8 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
-            <span>Connecting to Teen Patti Table...</span>
-          </div>
-        )}
       </div>
 
       {/* Rules & Payouts Modal */}
