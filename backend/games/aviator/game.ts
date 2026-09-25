@@ -19,6 +19,7 @@ let aviatorState: AviatorState = {
 };
 
 const aviatorBets = new Map<string, AviatorBet>();
+let lastHydratedVersion = 0;
 let currentCrashTarget = generateCrashPoint();
 let aviatorTimer: NodeJS.Timeout | null = null;
 let leaseHeartbeat: NodeJS.Timeout | null = null;
@@ -53,6 +54,9 @@ async function hydrateAviatorState() {
     const persisted = await safeGetAuthoritativeGameState('aviator');
     if (!persisted) return;
     const { crashTarget, activeBets, ...sharedState } = persisted as any;
+    const incomingVersion = Number(sharedState.version || 0);
+    if (incomingVersion <= lastHydratedVersion) return;
+    lastHydratedVersion = incomingVersion;
     if (sharedState.roundId) aviatorState = { ...aviatorState, ...sharedState };
     if (typeof crashTarget === 'number') currentCrashTarget = crashTarget;
     if (activeBets && typeof activeBets === 'object') {
@@ -156,7 +160,7 @@ async function startAviatorFlight() {
       });
 
       // Persist the terminal state, then start the next round in the same permanent room.
-      await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+      await persistAviatorState();
       stopLeaseHeartbeat();
       setTimeout(() => { void runAviatorCycle(); }, 3500);
     } else {
