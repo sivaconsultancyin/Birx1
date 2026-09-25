@@ -1512,8 +1512,18 @@ async function startAviatorFlight() {
 // Start initial aviator flight cycle
 runAviatorCycle();
 
-app.get('/api/games/aviator/state', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
-  res.json({ state: { ...aviatorState, currentBet: aviatorBets.get(req.user!.id) ?? null } });
+app.get('/api/games/aviator/state', (req: Request, res: Response) => {
+  // Public round state is non-sensitive; betting and cashout endpoints remain authenticated.
+  const userId = req.user?.id;
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.json({
+    state: {
+      ...aviatorState,
+      currentBet: userId ? (aviatorBets.get(userId) ?? null) : null
+    }
+  });
 });
 
 app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
