@@ -1,6 +1,5 @@
-import express, { Request, Response } from 'express';
+import type { TeenPattiState } from '../../../src/types.ts';
 import crypto from 'node:crypto';
-import { supabaseRepo } from '../../../src/server/supabase/supabaseClient.ts';
 
 // Extracted from server.ts. Game lifecycle and settlement remain server-authoritative.
 // 2. TEEN PATTI ENGINE (SERVER-AUTHORITATIVE MULTIPLAYER)
@@ -272,4 +271,5 @@ app.post('/api/games/teen-patti/action', requireAuth, requirePlayerForGames, han
 
 // -------------------------------------------------------------
 
-export default { name: 'teen-patti' };
+export const teen_pattiGameModule = { gameId: 'teen-patti', source: 'server-authoritative' } as const;
+export default teen_pattiGameModule;
