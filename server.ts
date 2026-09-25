@@ -1432,7 +1432,6 @@ function generateCrashPoint(): number {
 }
 
 async function runAviatorCycle() {
-  if (!(await acquireGameLease('aviator'))) return;
   if (aviatorTimer) clearInterval(aviatorTimer);
 
   // Phase 1: Betting (5 seconds countdown)
@@ -1449,22 +1448,16 @@ async function runAviatorCycle() {
   await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
 
   const betInterval = setInterval(async () => {
-    if (!(await acquireGameLease('aviator'))) return;
-    const persisted = await safeGetAuthoritativeGameState('aviator');
-    if (persisted) { aviatorState = persisted as AviatorState; currentCrashTarget = Number(persisted.crashTarget || currentCrashTarget); }
     aviatorState.countdown -= 1;
     if (aviatorState.countdown <= 0) {
       clearInterval(betInterval);
-      startAviatorFlight();
+      void startAviatorFlight();
     }
     await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
   }, 1000);
 }
 
 async function startAviatorFlight() {
-  if (!(await acquireGameLease('aviator'))) return;
-  const persisted = await safeGetAuthoritativeGameState('aviator');
-  if (persisted) { aviatorState = persisted as AviatorState; currentCrashTarget = Number(persisted.crashTarget || currentCrashTarget); }
   aviatorState.phase = 'running';
   aviatorState.multiplier = 1.0;
 
@@ -1472,7 +1465,6 @@ async function startAviatorFlight() {
 
   const startTime = Date.now();
   const flightInterval = setInterval(async () => {
-    if (!(await acquireGameLease('aviator'))) return;
     const elapsedSec = (Date.now() - startTime) / 1000;
     // Exponential curve: 1 + 0.06 * t^1.7
     const nextMult = Number((1.0 + 0.06 * Math.pow(elapsedSec * 1.8, 1.6)).toFixed(2));
