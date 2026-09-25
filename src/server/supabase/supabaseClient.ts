@@ -608,8 +608,15 @@ export const supabaseRepo = {
   async saveAuthoritativeGameState(gameId: string, state: any): Promise<void> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
+    const version = Number(state?.version || 0) + 1;
+    const nextState = { ...state, version };
     const { error } = await admin.from('authoritative_game_states').upsert({
-      game_id: gameId, round_id: state.roundId, phase: state.phase, state, updated_at: new Date().toISOString()
+      game_id: gameId,
+      round_id: nextState.roundId,
+      phase: nextState.phase,
+      state: nextState,
+      version,
+      updated_at: new Date().toISOString()
     }, { onConflict: 'game_id' });
     if (error) throw new Error(error.message);
   },
@@ -617,9 +624,10 @@ export const supabaseRepo = {
   async getAuthoritativeGameState(gameId: string): Promise<any | null> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
-    const { data, error } = await admin.from('authoritative_game_states').select('state').eq('game_id', gameId).maybeSingle();
+    const { data, error } = await admin.from('authoritative_game_states').select('state, version').eq('game_id', gameId).maybeSingle();
     if (error) throw new Error(error.message);
-    return data?.state ?? null;
+    if (!data) return null;
+    return { ...(data.state || {}), version: Number(data.version || data.state?.version || 0) };
   },
 
   async claimGameLease(gameId: string, ownerId: string, leaseMs = 4000): Promise<boolean> {
