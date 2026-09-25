@@ -131,7 +131,7 @@ async function safeSaveAuthoritativeGameState(gameId: string, state: any): Promi
       await supabaseRepo.saveAuthoritativeGameState(gameId, state);
     }
   } catch (e) {
-    console.warn(`[GameState:${gameId}] persistence unavailable; continuing with in-memory state.`, e);
+    console.warn(`[GameState:${gameId}] persistence unavailable; keeping local authoritative state.`, e);
   }
 }
 
@@ -140,7 +140,7 @@ async function safeGetAuthoritativeGameState(gameId: string): Promise<any | null
     if (!getSupabaseConfigStatus().isConfigured) return null;
     return await supabaseRepo.getAuthoritativeGameState(gameId);
   } catch (e) {
-    console.warn(`[GameState:${gameId}] read unavailable; continuing with in-memory state.`, e);
+    console.warn(`[GameState:${gameId}] read unavailable; keeping local authoritative state.`, e);
     return null;
   }
 }
