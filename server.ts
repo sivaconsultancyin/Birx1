@@ -533,4 +533,31 @@ registerDiceGame(app, gameModuleDeps);
 registerDragonTigerGame(app, gameModuleDeps);
 registerAndarBaharGame(app, gameModuleDeps);
 
+const startServer = async () => {
+  try {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) {
+      const distPath = path.resolve(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req: Request, res: Response, next: NextFunction) => {
+        if (req.path.startsWith('/api/')) return next();
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    } else {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa'
+      });
+      app.use(vite.middlewares);
+    }
 
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[server] listening on http://0.0.0.0:${PORT}`);
+    });
+  } catch (error) {
+    console.error('[server] startup failed:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
