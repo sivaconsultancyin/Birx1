@@ -1,6 +1,5 @@
-import express, { Request, Response } from 'express';
+import type { AndarBaharState, AndarBaharSide } from '../../../src/types.ts';
 import crypto from 'node:crypto';
-import { supabaseRepo } from '../../../src/server/supabase/supabaseClient.ts';
 
 // Extracted from server.ts. Game lifecycle and settlement remain server-authoritative.
 // 6. ANDAR BAHAR ENGINE (SERVER-AUTHORITATIVE WITH LIVE SHUFFLE & DEALING)
@@ -206,4 +205,5 @@ app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, asyn
 
 // -------------------------------------------------------------
 
-export default { name: 'andar-bahar' };
+export const andar_baharGameModule = { gameId: 'andar-bahar', source: 'server-authoritative' } as const;
+export default andar_baharGameModule;
