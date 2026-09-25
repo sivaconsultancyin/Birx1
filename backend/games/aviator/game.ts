@@ -40,6 +40,32 @@ function startLeaseHeartbeat() {
   }, 2000);
 }
 
+async function persistAviatorState() {
+  await safeSaveAuthoritativeGameState('aviator', {
+    ...aviatorState,
+    crashTarget: currentCrashTarget,
+    activeBets: Object.fromEntries(aviatorBets.entries())
+  });
+}
+
+async function hydrateAviatorState() {
+  try {
+    const persisted = await safeGetAuthoritativeGameState('aviator');
+    if (!persisted) return;
+    const { crashTarget, activeBets, ...sharedState } = persisted as any;
+    if (sharedState.roundId) aviatorState = { ...aviatorState, ...sharedState };
+    if (typeof crashTarget === 'number') currentCrashTarget = crashTarget;
+    if (activeBets && typeof activeBets === 'object') {
+      aviatorBets.clear();
+      for (const [userId, bet] of Object.entries(activeBets)) {
+        aviatorBets.set(userId, bet as AviatorBet);
+      }
+    }
+  } catch (e) {
+    console.warn('[Aviator] Could not hydrate persisted room state.', e);
+  }
+}
+
 function generateCrashPoint(): number {
   // Classic Provably Fair distribution: 1 / (1 - U) with 3% house edge
   const rand = crypto.randomInt(1, 1_000_000_000) / 1_000_000_000;
@@ -73,7 +99,7 @@ async function runAviatorCycle() {
 
   broadcastSSE('round_started', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
-  await safeSaveAuthoritativeGameState('aviator', { ...aviatorState, crashTarget: currentCrashTarget });
+  await persistAviatorState();
 
   const betInterval = setInterval(async () => {
     aviatorState.countdown -= 1;
@@ -143,9 +169,10 @@ async function startAviatorFlight() {
 // Start initial aviator flight cycle
 runAviatorCycle();
 
-app.get('/api/games/aviator/state', (req: Request, res: Response) => {
+app.get('/api/games/aviator/state', async (req: Request, res: Response) => {
   // Public round state is non-sensitive; betting and cashout endpoints remain authenticated.
   const userId = req.user?.id;
+  await hydrateAviatorState();
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -178,6 +205,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
     cashedOut: false
   };
   aviatorBets.set(req.user!.id, currentAviatorBet);
+  await persistAviatorState();
 
   return res.json({
     success: true,
@@ -187,6 +215,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
 });
 
 app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
+  await hydrateAviatorState();
   const currentAviatorBet = aviatorBets.get(req.user!.id);
   if (!currentAviatorBet || currentAviatorBet.cashedOut) {
     return res.status(400).json({ error: 'No active bet to cash out' });
@@ -206,6 +235,7 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async
   aviatorBets.delete(req.user!.id);
 
   await creditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
+  await persistAviatorState();
 
   recordHistory({
     gameId: 'aviator',
