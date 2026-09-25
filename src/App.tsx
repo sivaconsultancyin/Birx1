@@ -10,12 +10,12 @@ import { GamesScreen } from './screens/GamesScreen.tsx';
 import { WalletScreen } from './screens/WalletScreen.tsx';
 import { HistoryScreen } from './screens/HistoryScreen.tsx';
 import { ProfileScreen } from './screens/ProfileScreen.tsx';
-import { RouletteScreen } from './screens/RouletteScreen.tsx';
-import { TeenPattiScreen } from './screens/TeenPattiScreen.tsx';
-import { AviatorScreen } from './screens/AviatorScreen.tsx';
-import { DiceScreen } from './screens/DiceScreen.tsx';
-import { DragonTigerScreen } from './screens/DragonTigerScreen.tsx';
-import { AndarBaharScreen } from './screens/AndarBaharScreen.tsx';
+import { RouletteScreen } from '../frontend/games/roulette/RouletteScreen.tsx';
+import { TeenPattiScreen } from '../frontend/games/teen-patti/TeenPattiScreen.tsx';
+import { AviatorScreen } from '../frontend/games/aviator/AviatorScreen.tsx';
+import { DiceScreen } from '../frontend/games/dice/DiceScreen.tsx';
+import { DragonTigerScreen } from '../frontend/games/dragon-tiger/DragonTigerScreen.tsx';
+import { AndarBaharScreen } from '../frontend/games/andar-bahar/AndarBaharScreen.tsx';
 import { WinLossNotification } from './components/WinLossNotification.tsx';
 import { AdminDashboard } from './components/admin/AdminDashboard.tsx';
 
