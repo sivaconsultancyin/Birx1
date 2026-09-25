@@ -248,7 +248,7 @@ export const walletApi = {
     return fetchJson('/wallet/transactions');
   },
 
-  async deposit(amount: number, method = 'UPI'): Promise<{ success: boolean; wallet: Wallet; transaction: Transaction }> {
+  async deposit(amount: number, method = 'UPI'): Promise<{ success: boolean; wallet: Wallet; request: CoinRecharge }> {
     return fetchJson('/wallet/deposit', {
       method: 'POST',
       body: JSON.stringify({

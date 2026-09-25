@@ -58,7 +58,8 @@ function setAuthCookie(res: Response, token: string) {
   res.setHeader('Set-Cookie', `brix_access_token=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600${secure}`);
 }
 function clearAuthCookie(res: Response) {
-  res.setHeader('Set-Cookie', 'brix_access_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `brix_access_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`);
 }
 
 app.use(express.json({ limit: '256kb' }));
@@ -176,7 +177,7 @@ app.post('/api/auth/login', rateLimit(10, 60_000), async (req: Request, res: Res
   try {
     const mobile = normalizeMobile(req.body.mobile);
     const password = String(req.body.password || '');
-    const session = await authService.login(`+91${mobile}`, password);
+    const session = await authService.login(mobile, password);
     setAuthCookie(res, session.token);
     res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
   } catch (err: any) { res.status(401).json({ error: err.message || 'Invalid credentials' }); }
@@ -438,7 +439,7 @@ app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response)
   const actor = req.user!;
   const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
   broadcastSSE('wallet_updated', { userId: actor.id, wallet: result.wallet });
-  return res.json({ success: true, wallet: result.wallet, transaction: result.transaction });
+  return res.json({ success: true, wallet: result.wallet, request: result.request });
 });
 
 app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response) => {

@@ -13,6 +13,7 @@ export interface User {
   username: string;
   role: UserRole;
   parentId?: string | null;
+  authUserId?: string;
   avatarUrl?: string;
   avatar?: string;
   maskedPhone?: string;

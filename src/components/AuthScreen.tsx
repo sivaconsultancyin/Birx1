@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { KeyRound, User as UserIcon, Shield, CheckCircle2, ArrowRight } from 'lucide-react';
 import { authApi } from '../api/client.ts';
-import { User } from '../types.ts';
+import { User, Wallet } from '../types.ts';
 
-interface AuthScreenProps { onSuccess: (user: User) => void; }
+interface AuthScreenProps { onSuccess: (user: User, wallet: Wallet) => void; }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -28,7 +28,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
         ? await authApi.login(digits, password)
         : await authApi.register(digits, password, username.trim());
       setSuccessMsg(mode === 'login' ? 'Login successful!' : 'Account created successfully!');
-      setTimeout(() => onSuccess(res.user), 300);
+      setTimeout(() => onSuccess(res.user, res.wallet), 300);
     } catch (err: any) {
       setError(err.message || 'Authentication failed.');
     } finally { setLoading(false); }

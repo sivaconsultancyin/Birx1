@@ -103,7 +103,7 @@ export default function App() {
 
   // 2. If not logged in, show Auth Screen
   if (!user) {
-    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+    return <AuthScreen onSuccess={handleAuthSuccess} />;
   }
 
   // 3. Strict Role Isolation: OWNER, SUPER_ADMIN, and ADMIN dashboards do NOT display games.
