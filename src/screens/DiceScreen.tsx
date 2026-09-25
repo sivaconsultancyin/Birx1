@@ -43,19 +43,22 @@ export const DiceScreen: React.FC<DiceScreenProps> = ({
   const [showRules, setShowRules] = useState(false);
 
   useEffect(() => {
-    loadState();
+    let mounted = true;
+    const sync = async () => {
+      try {
+        const res = await gamesApi.dice.getState();
+        if (!mounted) return;
+        setGameState(res.state);
+        if (res.state.dice1) setDice1(res.state.dice1);
+        if (res.state.dice2) setDice2(res.state.dice2);
+      } catch (err: any) {
+        if (mounted) setErrorMsg(err.message || 'Unable to connect to Dice server');
+      }
+    };
+    sync();
+    const interval = setInterval(sync, 1500);
+    return () => { mounted = false; clearInterval(interval); };
   }, []);
-
-  const loadState = async () => {
-    try {
-      const res = await gamesApi.dice.getState();
-      setGameState(res.state);
-      if (res.state.dice1) setDice1(res.state.dice1);
-      if (res.state.dice2) setDice2(res.state.dice2);
-    } catch (err: any) {
-      setErrorMsg(err.message);
-    }
-  };
 
   const handleRoll = async () => {
     if (isRolling) return;
