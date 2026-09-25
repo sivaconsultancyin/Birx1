@@ -95,7 +95,7 @@ function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'> & Parti
 const transactions: Transaction[] = [];
 const PROCESS_OWNER_ID = `brix-${process.pid}-${crypto.randomUUID()}`;
 let leaseConfigWarningShown = false;
-async async function acquireGameLease(gameId: string): Promise<boolean> {
+async function acquireGameLease(gameId: string): Promise<boolean> {
   // Keep the local game loop alive when the lease RPC is unavailable.
   // A single Node process can safely use its in-memory authoritative state.
   if (!getSupabaseConfigStatus().isConfigured) {
