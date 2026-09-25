@@ -19,16 +19,16 @@ import {
   RouletteState,
   RouletteHistoryStats,
   Wallet
-} from '../types.ts';
-import { gamesApi } from '../api/client.ts';
-import { GameHeader } from '../components/GameHeader.tsx';
-import { BettingChip, CHIP_VALUES } from '../components/BettingChip.tsx';
-import { Countdown } from '../components/Countdown.tsx';
-import { RulesModal } from '../components/RulesModal.tsx';
-import { RouletteWheel, RED_NUMBERS_SET } from '../components/roulette/RouletteWheel.tsx';
-import { ExternalRouletteWheel } from '../components/roulette/ExternalRouletteWheel.tsx';
-import { RouletteTable } from '../components/roulette/RouletteTable.tsx';
-import { notifyWinLoss } from '../components/WinLossNotification.tsx';
+} from '../../../src/types.ts';
+import { gamesApi } from '../../../src/api/client.ts';
+import { GameHeader } from '../../../src/components/GameHeader.tsx';
+import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
+import { Countdown } from '../../../src/components/Countdown.tsx';
+import { RulesModal } from '../../../src/components/RulesModal.tsx';
+import { RouletteWheel, RED_NUMBERS_SET } from '../../../src/components/roulette/RouletteWheel.tsx';
+import { ExternalRouletteWheel } from '../../../src/components/roulette/ExternalRouletteWheel.tsx';
+import { RouletteTable } from '../../../src/components/roulette/RouletteTable.tsx';
+import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
 
 interface RouletteScreenProps {
   wallet: Wallet;
