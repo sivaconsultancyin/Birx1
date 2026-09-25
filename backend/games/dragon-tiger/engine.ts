@@ -1,6 +1,5 @@
-import express, { Request, Response } from 'express';
+import type { DragonTigerState, DragonTigerBetSide } from '../../../src/types.ts';
 import crypto from 'node:crypto';
-import { supabaseRepo } from '../../../src/server/supabase/supabaseClient.ts';
 
 // Extracted from server.ts. Game lifecycle and settlement remain server-authoritative.
 // 5. DRAGON TIGER ENGINE (SERVER-AUTHORITATIVE)
@@ -82,4 +81,5 @@ app.post('/api/games/dragon-tiger/deal', requireAuth, requirePlayerForGames, asy
 
 // -------------------------------------------------------------
 
-export default { name: 'dragon-tiger' };
+export const dragon_tigerGameModule = { gameId: 'dragon-tiger', source: 'server-authoritative' } as const;
+export default dragon_tigerGameModule;
