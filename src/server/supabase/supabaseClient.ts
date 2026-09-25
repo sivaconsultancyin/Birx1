@@ -55,8 +55,8 @@ export function getSupabaseConfigStatus(): SupabaseConfigStatus {
     hasAnonKey: Boolean(SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('your-')),
     hasServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_SERVICE_ROLE_KEY.includes('your-')),
     hasDatabaseUrl: Boolean(DATABASE_URL && !DATABASE_URL.includes('your-')),
-    authProvider: isConfigured ? 'supabase_auth' : 'not_configured',
-    dbEngine: isConfigured ? 'supabase_postgresql' : 'not_configured',
+    authProvider: isConfigured ? 'supabase_auth' : 'local_authoritative_engine',
+    dbEngine: isConfigured ? 'supabase_postgresql' : 'authoritative_simulated_pg',
     storageAvailable: isConfigured
   };
 }
