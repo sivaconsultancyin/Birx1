@@ -1,6 +1,5 @@
-import express, { Request, Response } from 'express';
+import type { RouletteBet, RouletteState } from '../../../src/types.ts';
 import crypto from 'node:crypto';
-import { supabaseRepo } from '../../../src/server/supabase/supabaseClient.ts';
 
 // Extracted from server.ts. Game lifecycle and settlement remain server-authoritative.
 // 1. EUROPEAN ROULETTE ENGINE (SERVER-AUTHORITATIVE)
@@ -636,4 +635,5 @@ app.post('/api/games/roulette/spin', requireAuth, requirePlayerForGames, handleP
 
 // -------------------------------------------------------------
 
-export default { name: 'roulette' };
+export const rouletteGameModule = { gameId: 'roulette', source: 'server-authoritative' } as const;
+export default rouletteGameModule;
