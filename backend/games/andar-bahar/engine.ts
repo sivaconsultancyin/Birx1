@@ -1,2 +1,1 @@
-export { default } from './game.ts';
-export * from './game.ts';
+export { registerAndarBaharGame as default, registerAndarBaharGame } from './game.ts';
