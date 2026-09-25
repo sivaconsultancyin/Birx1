@@ -164,7 +164,8 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
           return (
             <span
               key={idx}
-              className={`shrink-0 text-[11px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+              style={{ ['--history-index' as any]: idx }}
+              className={`aviator-history-item shrink-0 text-[11px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                 isHigh
                   ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                   : isMid
@@ -181,7 +182,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
       <ExternalAviatorUI>
       {/* Flight Canvas Arena */}
       <div className="relative p-4 bg-slate-950">
-        <div className="relative w-full h-64 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col justify-between p-4">
+        <div className="aviator-flight-card relative w-full h-64 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col justify-between p-4">
           {/* Grid Background Lines */}
           <div className="absolute inset-0 grid grid-cols-6 grid-rows-4 opacity-10 pointer-events-none">
             {[...Array(24)].map((_, i) => (
@@ -229,6 +230,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
                   stroke="url(#curveGradient)"
                   strokeWidth="4"
                   strokeLinecap="round"
+                  className="aviator-trail"
                 />
               </>
             )}
@@ -247,7 +249,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
               </div>
             ) : isRunning ? (
               <div className="text-center">
-                <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 tracking-tight drop-shadow-lg">
+                <div className="aviator-multiplier-live text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 tracking-tight drop-shadow-lg">
                   {multiplier.toFixed(2)}x
                 </div>
                 <div className="text-[11px] text-amber-400/80 font-bold uppercase tracking-wider mt-0.5">
@@ -273,7 +275,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
               }}
             >
               <div className="relative flex items-center justify-center">
-                <Plane className="w-10 h-10 text-rose-500 fill-rose-500 -rotate-12 drop-shadow-xl animate-pulse" />
+                <Plane className="aviator-plane w-10 h-10 text-rose-500 fill-rose-500 -rotate-12 drop-shadow-xl" />
                 <span className="absolute -left-3 w-4 h-1 bg-amber-400 rounded-full blur-sm" />
               </div>
             </div>
@@ -322,7 +324,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
                 type="button"
                 disabled={loading}
                 onClick={handleCashout}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-500/25 active:scale-95 transition-transform cursor-pointer flex flex-col items-center justify-center leading-tight"
+                className="aviator-action-primary w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-500/25 active:scale-95 transition-transform cursor-pointer flex flex-col items-center justify-center leading-tight"
               >
                 <span>CASH OUT NOW</span>
                 <span className="text-xs font-extrabold text-slate-900">
@@ -339,7 +341,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
                 type="button"
                 disabled={loading || phase !== 'betting'}
                 onClick={handlePlaceBet}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer flex items-center justify-center gap-2"
+                className="aviator-action-primary w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer flex items-center justify-center gap-2"
               >
                 <span>
                   {phase === 'betting'
