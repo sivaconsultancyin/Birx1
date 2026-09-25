@@ -48,21 +48,24 @@ export const DragonTigerScreen: React.FC<DragonTigerScreenProps> = ({
   const [countdown, setCountdown] = useState(12);
 
   useEffect(() => {
-    loadState();
-    const interval = setInterval(() => {
+    let mounted = true;
+    const sync = async () => {
+      try {
+        const res = await gamesApi.dragonTiger.getState();
+        if (!mounted) return;
+        setGameState(res.state);
+        setErrorMsg(null);
+      } catch (err: any) {
+        if (mounted) setErrorMsg(err.message || 'Unable to connect to Dragon Tiger server');
+      }
+    };
+    sync();
+    const interval = setInterval(sync, 1500);
+    const countdownInterval = setInterval(() => {
       setCountdown((c) => (c > 1 ? c - 1 : 12));
     }, 1000);
-    return () => clearInterval(interval);
+    return () => { mounted = false; clearInterval(interval); clearInterval(countdownInterval); };
   }, []);
-
-  const loadState = async () => {
-    try {
-      const res = await gamesApi.dragonTiger.getState();
-      setGameState(res.state);
-    } catch (err: any) {
-      setErrorMsg(err.message);
-    }
-  };
 
   const handleSelectBet = (side: DragonTigerBetSide) => {
     setSelectedSide(side);
