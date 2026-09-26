@@ -33,37 +33,67 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   const currentBetRef = useRef<AviatorBet | null>(null);
   currentBetRef.current = currentBet;
 
-  // Poll server state every 150ms to strictly display server-authoritative ticks & crash
+  // SSE is the primary live-game transport. Supabase authoritative state is
+  // persisted by the server and is used by the initial fetch/resync path.
   useEffect(() => {
     let isMounted = true;
 
-    const pollInterval = setInterval(async () => {
+    const syncState = async () => {
       try {
         const res = await gamesApi.aviator.getState();
         if (!isMounted) return;
         setGameState(res.state);
-        if (res.state.phase === 'crashed') {
-          if (currentBetRef.current && !currentBetRef.current.cashedOut) {
-            notifyWinLoss({
-              type: 'loss',
-              amount: currentBetRef.current.amount
-            });
-            setCurrentBet(null);
-          }
-        } else if (res.state.currentBet) {
-          setCurrentBet(res.state.currentBet);
-        } else if (res.state.phase === 'betting') {
-          // If server reset round
+        if (res.state.currentBet) setCurrentBet(res.state.currentBet);
+      } catch {
+        // Initial/resync failure is handled by the SSE connection.
+      }
+    };
+
+    void syncState();
+
+    const unsubscribe = (await import('../../../src/api/client.ts')).subscribeToRealtimeEvents((payload) => {
+      if (!isMounted) return;
+      const data: any = payload.data || {};
+
+      if (payload.event === 'aviator_tick') {
+        setGameState((prev) => prev ? {
+          ...prev,
+          roundId: data.roundId || prev.roundId,
+          phase: data.phase || prev.phase,
+          multiplier: Number(data.multiplier ?? prev.multiplier),
+          countdown: Number(data.countdown ?? prev.countdown)
+        } : null);
+        return;
+      }
+
+      if (payload.event === 'round_started' && data.gameId === 'aviator') {
+        void syncState();
+        return;
+      }
+
+      if (payload.event === 'betting_closed' && data.gameId === 'aviator') {
+        setGameState((prev) => prev ? { ...prev, phase: 'running' } : prev);
+        return;
+      }
+
+      if (payload.event === 'result' && data.gameId === 'aviator') {
+        setGameState((prev) => prev ? {
+          ...prev,
+          phase: 'crashed',
+          multiplier: Number(data.multiplier ?? prev.multiplier),
+          crashMultiplier: Number(data.multiplier ?? prev.crashMultiplier ?? 0)
+        } : prev);
+        if (currentBetRef.current && !currentBetRef.current.cashedOut) {
+          notifyWinLoss({ type: 'loss', amount: currentBetRef.current.amount });
           setCurrentBet(null);
         }
-      } catch (err: any) {
-        // network tick jitter
+        void syncState();
       }
-    }, 180);
+    });
 
     return () => {
       isMounted = false;
-      clearInterval(pollInterval);
+      unsubscribe();
     };
   }, []);
 
