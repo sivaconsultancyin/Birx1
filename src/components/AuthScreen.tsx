@@ -28,7 +28,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
         ? await authApi.login(digits, password)
         : await authApi.register(digits, password, username.trim());
       setSuccessMsg(mode === 'login' ? 'Login successful!' : 'Account created successfully!');
-      setTimeout(() => onSuccess(res.user, res.wallet), 300);
+      onSuccess(res.user, res.wallet);
     } catch (err: any) {
       setError(err.message || 'Authentication failed.');
     } finally { setLoading(false); }
