@@ -389,48 +389,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       // SSE fallback
     }
 
-    // 2. High-reliability polling synchronization with single authoritative room
-    const syncInterval = setInterval(async () => {
-      try {
-        const res = await gamesApi.roulette.getRound();
-        if (res && res.state) {
-          setGameState(res.state);
-          setCountdown(res.countdown);
-
-          // Only trigger spin if server entered spinning AND this client hasn't spun for this round
-          if (
-            res.state.phase === 'spinning' &&
-            hasSpunRoundRef.current !== res.state.roundId &&
-            res.winningNumber !== null
-          ) {
-            hasSpunRoundRef.current = res.state.roundId;
-            setWinningNumber(res.winningNumber);
-            setWinningColor(res.winningColor);
-            setIsSpinning(true);
-            setStagedBets([]);
-          }
-
-          // If server rolled into new round while client was on old round
-          if (res.state.phase === 'betting' && currentRoundIdRef.current && currentRoundIdRef.current !== res.state.roundId) {
-            hasSpunRoundRef.current = '';
-            if (confirmedBetsRef.current.length > 0) {
-              setPreviousBets(JSON.parse(JSON.stringify(confirmedBetsRef.current)));
-            }
-            setConfirmedBets([]);
-            setStagedBets([]);
-            setIsSpinning(false);
-          }
-        }
-      } catch {
-        // network retry
-      }
-    }, 1200);
-
     return () => {
-      clearInterval(syncInterval);
-      if (sse) {
-        sse.close();
-      }
+      if (sse) sse.close();
     };
   }, []);
 
