@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ExternalAviatorUI } from '../../../src/components/external/ExternalAviatorUI.tsx';
 import { Plane, AlertTriangle, CheckCircle, TrendingUp, Sparkles, Clock } from 'lucide-react';
 import { AviatorBet, AviatorState, Wallet } from '../../../src/types.ts';
-import { gamesApi } from '../../../src/api/client.ts';
+import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { AmountSelector } from '../../../src/components/AmountSelector.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
@@ -51,7 +51,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
 
     void syncState();
 
-    const unsubscribe = (await import('../../../src/api/client.ts')).subscribeToRealtimeEvents((payload) => {
+    const unsubscribe = subscribeToRealtimeEvents((payload) => {
       if (!isMounted) return;
       const data: any = payload.data || {};
 
