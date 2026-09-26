@@ -120,6 +120,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
           </button>
         </div>
       </MotionCard>
+    </div>
       )}
     </AnimatePresence>
   );
