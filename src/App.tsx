@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GameId, NavigationTab, User, Wallet } from './types.ts';
-import { authApi, walletApi, subscribeToEvents } from './api/client.ts';
+import { authApi, walletApi, subscribeToEvents } from '../frontend/api/client.ts';
 import { SplashScreen } from './components/SplashScreen.tsx';
 import { AuthScreen } from './components/AuthScreen.tsx';
 import { AppHeader } from './components/AppHeader.tsx';
