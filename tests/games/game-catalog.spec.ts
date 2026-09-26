@@ -26,6 +26,8 @@ async function authenticate(page: any) {
 test('game catalog renders the six configured games for an authenticated player', async ({ page }) => {
   await authenticate(page);
   await page.goto('/');
+  await expect(page.locator('#bottom-navigation')).toBeVisible({ timeout: 15000 });
+  await page.locator('#nav-tab-games').click();
   await expect(page.locator('#screen-games')).toBeVisible({ timeout: 15000 });
   await expect(page.getByText(/All Games \(6\)/i)).toBeVisible();
   await expect(page.locator('[id^="game-card-"]')).toHaveCount(6);
