@@ -38,7 +38,7 @@ test('each game play control navigates to its game screen', async ({ page }) => 
   for (const [id, heading] of games) {
     await page.locator(`#btn-play-${id}`).click();
     await expect(page.getByText(heading).first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: /back/i }).first().click();
+    await page.locator('[id^="btn-back-"]').first().click();
     await expect(page.locator('#screen-games')).toBeVisible();
   }
 });
