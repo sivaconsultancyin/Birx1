@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { ExternalDiceUI } from '../../../src/components/external/ExternalDiceUI.tsx';
 import { Dices, RotateCw, Sparkles, TrendingUp } from 'lucide-react';
 import { DiceBetType, DiceState, Wallet } from '../../../src/types.ts';
-import { gamesApi } from '../../../src/api/client.ts';
+import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { AmountSelector } from '../../../src/components/AmountSelector.tsx';
 import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
@@ -56,7 +56,13 @@ export const DiceScreen: React.FC<DiceScreenProps> = ({
       }
     };
     void sync();
-    return () => { mounted = false; };
+    const unsubscribe = subscribeToRealtimeEvents((event) => {
+      const data: any = event.data || {};
+      if (['round_started','betting_open','betting_closed','card_revealed','result','settlement'].includes(event.event) && (!data.gameId || data.gameId === 'dice')) {
+        void sync();
+      }
+    });
+    return () => { mounted = false; unsubscribe(); };
   }, []);
 
   const handleRoll = async () => {
