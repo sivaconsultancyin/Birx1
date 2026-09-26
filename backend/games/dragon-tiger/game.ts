@@ -60,6 +60,17 @@ app.post('/api/games/dragon-tiger/deal', requireAuth, requirePlayerForGames, asy
   if (dragonTigerState.recentResults.length > 15) dragonTigerState.recentResults.pop();
   dragonTigerState.roundId = 'DT-' + crypto.randomInt(1000, 10000);
 
+  broadcastSSE('dragon_tiger_result', {
+    gameId: 'dragon-tiger',
+    roundId: dragonTigerState.roundId,
+    dragonCard,
+    tigerCard,
+    winner,
+    multiplier,
+    winAmount,
+    recentResults: dragonTigerState.recentResults
+  });
+
   recordHistory({
     gameId: 'dragon-tiger',
     gameName: 'Dragon Tiger',
