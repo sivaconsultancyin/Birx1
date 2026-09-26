@@ -60,11 +60,9 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
     }
   }, []);
 
-  // Initial load + periodic sync (every 1.5s for seamless reconnection and timer drift recovery)
+  // Initial load + SSE-driven synchronization. No periodic polling.
   useEffect(() => {
-    refreshState();
-    const interval = setInterval(refreshState, 1500);
-    return () => clearInterval(interval);
+    void refreshState();
   }, [refreshState]);
 
   // Real-time SSE listener for instant sub-second round events
