@@ -263,7 +263,7 @@ function computeRouletteSettlement(winningNum: number, bets: RouletteBet[]) {
 // Background Authoritative Roulette Round Cycle
 setInterval(async () => {
   if (!(await acquireGameLease('roulette'))) return;
-  const persistedRoulette = await supabaseRepo.getAuthoritativeGameState('roulette');
+  const persistedRoulette = await safeGetAuthoritativeGameState('roulette');
   if (persistedRoulette) rouletteState = persistedRoulette as RouletteState;
   if (rouletteState.phase === 'betting') {
     rouletteState.countdown -= 1;
