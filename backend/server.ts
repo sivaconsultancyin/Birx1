@@ -28,7 +28,7 @@ import {
   User,
   UserRole,
   Wallet
-} from '../src/types.ts';
+} from '../types.ts';
 import {
   generateDeck,
   secureShuffleDeck,
@@ -37,7 +37,7 @@ import {
   computePlayerSettlement,
   createAuthoritativeTeenPattiRound,
   sanitizeTeenPattiState
-} from '../src/engines/teenPattiEngine.ts';
+} from '../engines/teenPattiEngine.ts';
 import { supabaseRepo, getSupabaseConfigStatus } from './supabase/supabaseClient.ts';
 import { authService, requireAuth, requirePlayerForGames, requireRoles } from './auth/authService.ts';
 import { walletService } from './wallet/walletService.ts';
