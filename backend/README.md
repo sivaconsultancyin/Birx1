@@ -1,7 +1,15 @@
 # Backend
 
-The Node/Express server is `server.ts`.
+The authoritative Node/Express API server lives at `backend/server.ts`.
 
-Game engines are server-authoritative. Each game's API routes, round lifecycle, validation and settlement are isolated by game identifiers.
+## Responsibilities
+- Authentication and authorization middleware
+- Game API routes and server-authoritative round lifecycle
+- SSE real-time event stream
+- Wallet/debit/credit orchestration
+- Supabase repository access
+- Recovery/lease coordination
 
-The backend is the only authority for round state, bets, cash-outs and wallet settlement.
+Game engines are server-authoritative. Frontend code never owns round state, wallet settlement, or secret Supabase credentials.
+
+`server.ts` at the repository root is only a compatibility entrypoint that imports `backend/server.ts`.
