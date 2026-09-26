@@ -373,7 +373,28 @@ export type ServerEventType =
   | 'result'
   | 'settlement'
   | 'wallet_updated'
-  | 'round_recovered';
+  | 'round_recovered'
+  | 'aviator_tick'
+  | 'teen_patti_round_started'
+  | 'teen_patti_betting_open'
+  | 'teen_patti_betting_closed'
+  | 'teen_patti_dealing_started'
+  | 'teen_patti_dealer_revealed'
+  | 'teen_patti_result'
+  | 'teen_patti_settlement'
+  | 'teen_patti_bet_placed'
+  | 'andar_bahar_state_update'
+  | 'andar_bahar_shuffling'
+  | 'andar_bahar_dealing'
+  | 'andar_bahar_settled'
+  | 'roulette_round_started'
+  | 'roulette_betting_open'
+  | 'roulette_betting_closed'
+  | 'roulette_spin_started'
+  | 'roulette_result'
+  | 'roulette_settlement'
+  | 'dice_result'
+  | 'dragon_tiger_result';
 
 export interface RealtimeEventPayload {
   event: ServerEventType;
