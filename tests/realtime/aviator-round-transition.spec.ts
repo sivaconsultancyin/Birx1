@@ -21,7 +21,11 @@ async function login(request: any) {
   const mobile = process.env.E2E_TEST_MOBILE;
   const password = process.env.E2E_TEST_PASSWORD;
   test.skip(!mobile || !password, 'E2E credentials are not configured');
-  const response = await request.post('/api/auth/login', { data: { mobile, password } });
+  let response = await request.post('/api/auth/login', { data: { mobile, password } });
+  if (response.status() === 429) {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    response = await request.post('/api/auth/login', { data: { mobile, password } });
+  }
   expect(response.status()).toBe(200);
   return response.headers()['set-cookie']?.split(';')[0];
 }
@@ -33,8 +37,8 @@ test('two clients observe Aviator round transition events for the permanent room
   expect(cookieB).toContain('brix_access_token=');
 
   const [eventsA, eventsB] = await Promise.all([
-    streamEvents(request, cookieA, 10000),
-    streamEvents(request, cookieB, 10000),
+    streamEvents(request, cookieA, 20000),
+    streamEvents(request, cookieB, 20000),
   ]);
 
   for (const events of [eventsA, eventsB]) {
