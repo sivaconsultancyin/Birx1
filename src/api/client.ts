@@ -503,7 +503,9 @@ export function subscribeToRealtimeEvents(onEvent: (payload: RealtimeEventPayloa
       'roulette_betting_closed',
       'roulette_spin_started',
       'roulette_result',
-      'roulette_settlement'
+      'roulette_settlement',
+      'dice_result',
+      'dragon_tiger_result'
     ];
 
     eventNames.forEach((evtName) => {
