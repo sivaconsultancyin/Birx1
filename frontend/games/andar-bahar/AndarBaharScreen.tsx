@@ -81,12 +81,20 @@ export const AndarBaharScreen: React.FC<AndarBaharScreenProps> = ({
   useEffect(() => {
     loadState();
 
-    // Setup polling for live multiplayer synchronization
-    const syncInterval = setInterval(() => {
-      loadState(true);
-    }, 1200);
+    // SSE is the primary live transport; initial state comes from the API.
+  useEffect(() => {
+    void loadState();
 
-    return () => clearInterval(syncInterval);
+    const unsubscribe = subscribeToRealtimeEvents((payload) => {
+      const data: any = payload.data || {};
+      if (!data.gameId || data.gameId === 'andar-bahar') {
+        if (['round_started','betting_open','betting_closed','card_revealed','result','settlement'].includes(payload.event)) {
+          void loadState(true);
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const loadState = async (isBackground = false) => {
