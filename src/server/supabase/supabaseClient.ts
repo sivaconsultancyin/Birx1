@@ -608,7 +608,8 @@ export const supabaseRepo = {
   async saveAuthoritativeGameState(gameId: string, state: any): Promise<void> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
-    const version = Number(state?.version || 0) + 1;
+    const suppliedVersion = Number(state?.version);
+    const version = Number.isFinite(suppliedVersion) && suppliedVersion > 0 ? suppliedVersion : 1;
     const nextState = { ...state, version };
     const { error } = await admin.from('authoritative_game_states').upsert({
       game_id: gameId,
