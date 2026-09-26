@@ -517,13 +517,22 @@ export const supabaseRepo = {
   },
 
   // COIN RECHARGE
-  async createRecharge(userId: string, amount: number, method = 'UPI'): Promise<CoinRecharge> {
+  async createRecharge(userId: string, amount: number, method = 'UPI', idempotencyKey?: string): Promise<CoinRecharge> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
     const user = await this.getUserById(userId);
+    const key = idempotencyKey?.trim();
+    if (key) {
+      const { data: existing } = await admin.from('coin_recharges').select('*').eq('idempotency_key', key).maybeSingle();
+      if (existing) return {
+        id: existing.id, userId: existing.user_id, username: (await this.getUserById(existing.user_id))?.username || 'Player',
+        amount: Number(existing.amount), method: existing.method, status: existing.status,
+        approvedBy: existing.approved_by, transactionId: existing.transaction_id, createdAt: existing.created_at
+      };
+    }
     const id = `rch_${crypto.randomUUID()}`;
     const { data, error } = await admin.from('coin_recharges').insert({
-      id, user_id: userId, amount, method, status: 'pending'
+      id, user_id: userId, amount, method, status: 'pending', ...(key ? { idempotency_key: key } : {})
     }).select('*').single();
     if (error || !data) throw new Error(error?.message || 'Failed to create recharge');
     return {
