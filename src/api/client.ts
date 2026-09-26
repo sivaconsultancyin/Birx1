@@ -493,7 +493,17 @@ export function subscribeToRealtimeEvents(onEvent: (payload: RealtimeEventPayloa
       'teen_patti_result',
       'teen_patti_settlement',
       'teen_patti_bet_placed',
-      'aviator_tick'
+      'aviator_tick',
+      'andar_bahar_state_update',
+      'andar_bahar_shuffling',
+      'andar_bahar_dealing',
+      'andar_bahar_settled',
+      'roulette_round_started',
+      'roulette_betting_open',
+      'roulette_betting_closed',
+      'roulette_spin_started',
+      'roulette_result',
+      'roulette_settlement'
     ];
 
     eventNames.forEach((evtName) => {
