@@ -373,7 +373,7 @@ setInterval(async () => {
       });
     }
   }
-  await supabaseRepo.saveAuthoritativeGameState('roulette', rouletteState);
+  await safeSaveAuthoritativeGameState('roulette', rouletteState);
 }, 1000);
 
 
