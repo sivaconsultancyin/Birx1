@@ -46,7 +46,7 @@ export const walletService = {
     _idempotencyKey?: string
   ): Promise<{ success: boolean; wallet: Wallet; request: CoinRecharge }> {
     if (amount <= 0) throw new Error('Deposit amount must be greater than zero');
-    const request = await supabaseRepo.createRecharge(userId, amount, method);
+    const request = await supabaseRepo.createRecharge(userId, amount, method, _idempotencyKey);
     const wallet = await supabaseRepo.getWallet(userId);
     return { success: true, request, wallet };
   },
