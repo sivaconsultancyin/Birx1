@@ -212,6 +212,49 @@ export const supabaseRepo = {
     };
   },
 
+  async getUserAndWalletByAuthId(authUserId: string): Promise<{ user: User; wallet: Wallet } | null> {
+    const admin = getSupabaseAdmin();
+    if (!admin || !authUserId) return null;
+
+    // One PostgREST request instead of separate user + wallet round trips.
+    const { data, error } = await admin
+      .from('users')
+      .select('*, wallets(*)')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    const walletRow = Array.isArray((data as any).wallets)
+      ? (data as any).wallets[0]
+      : (data as any).wallets;
+
+    if (!walletRow) return null;
+
+    const user: User = {
+      id: data.id,
+      email: data.email,
+      mobile: data.mobile,
+      username: data.username,
+      role: data.role as UserRole,
+      parentId: data.parent_id,
+      vipTier: data.vip_tier,
+      avatarUrl: data.avatar_url,
+      isDemo: data.is_demo,
+      createdAt: data.created_at
+    };
+
+    const wallet: Wallet = {
+      balance: Number(walletRow.balance),
+      bonus: Number(walletRow.bonus),
+      lockedAmount: Number(walletRow.locked_amount || 0),
+      currency: walletRow.currency,
+      isDemo: walletRow.is_demo
+    };
+
+    return { user, wallet };
+  },
+
   async getUserById(id: string): Promise<User | null> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
