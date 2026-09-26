@@ -38,11 +38,11 @@ import {
   createAuthoritativeTeenPattiRound,
   sanitizeTeenPattiState
 } from '../src/engines/teenPattiEngine.ts';
-import { supabaseRepo, getSupabaseConfigStatus } from '../src/server/supabase/supabaseClient.ts';
-import { authService, requireAuth, requirePlayerForGames, requireRoles } from '../src/server/auth/authService.ts';
-import { walletService } from '../src/server/wallet/walletService.ts';
-import { storageService } from '../src/server/storage/storageService.ts';
-import { gameRecoveryService } from '../src/server/recovery/gameRecoveryService.ts';
+import { supabaseRepo, getSupabaseConfigStatus } from './supabase/supabaseClient.ts';
+import { authService, requireAuth, requirePlayerForGames, requireRoles } from './auth/authService.ts';
+import { walletService } from './wallet/walletService.ts';
+import { storageService } from './storage/storageService.ts';
+import { gameRecoveryService } from './recovery/gameRecoveryService.ts';
 
 
 const app = express();
