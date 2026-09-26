@@ -5,7 +5,7 @@ import { ExternalAndarBaharUI } from '../../../src/components/external/ExternalA
 import { motion, AnimatePresence } from 'motion/react';
 import { Flame, Sparkles, Clock, RotateCcw, ShieldCheck, Award } from 'lucide-react';
 import { AndarBaharDealtCard, AndarBaharSide, AndarBaharState, Card, Wallet } from '../../../src/types.ts';
-import { gamesApi } from '../../../src/api/client.ts';
+import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
 import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
@@ -77,20 +77,18 @@ export const AndarBaharScreen: React.FC<AndarBaharScreenProps> = ({
     }
   }, []);
 
-  // Sync state and listen to real-time events
-  useEffect(() => {
-    loadState();
-
-    // SSE is the primary live transport; initial state comes from the API.
+  // Initial state + SSE-driven synchronization.
   useEffect(() => {
     void loadState();
 
     const unsubscribe = subscribeToRealtimeEvents((payload) => {
-      const data: any = payload.data || {};
-      if (!data.gameId || data.gameId === 'andar-bahar') {
-        if (['round_started','betting_open','betting_closed','card_revealed','result','settlement'].includes(payload.event)) {
-          void loadState(true);
-        }
+      if ([
+        'andar_bahar_state_update',
+        'andar_bahar_shuffling',
+        'andar_bahar_dealing',
+        'andar_bahar_settled'
+      ].includes(payload.event)) {
+        void loadState(true);
       }
     });
 
