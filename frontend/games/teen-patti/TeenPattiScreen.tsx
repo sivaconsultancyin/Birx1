@@ -32,7 +32,7 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
   const lastSettledRoundRef = useRef<string>('');
 
   // Fetch authoritative state from backend
-  const refreshState = useCallback(async () => {
+  const refreshState = useCallback(async (): Promise<boolean> => {
     try {
       const res = await gamesApi.teenPatti.getState();
       if (res?.state) {
@@ -55,8 +55,9 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
           }
         }
       }
+      return Boolean(res?.state);
     } catch {
-      // Ignore background network jitter
+      return false;
     }
   }, []);
 
@@ -68,19 +69,12 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
     let attempts = 0;
 
     const connect = async () => {
-      try {
-        await refreshState();
-      } catch {
-        // refreshState intentionally absorbs background errors; retry below.
-      }
-      if (!cancelled) {
-        // A successful state load clears the connecting screen. If startup races
-        // the API/SSE, retry a few times with bounded backoff.
-        retryTimer = setTimeout(() => {
-          if (cancelled) return;
-          attempts += 1;
-          if (attempts <= 5) void connect();
-        }, Math.min(1000 * Math.pow(2, attempts), 8000));
+      const loaded = await refreshState();
+      if (!cancelled && !loaded) {
+        attempts += 1;
+        if (attempts <= 5) {
+          retryTimer = setTimeout(() => { if (!cancelled) void connect(); }, Math.min(1000 * Math.pow(2, attempts - 1), 8000));
+        }
       }
     };
 
