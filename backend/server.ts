@@ -180,6 +180,7 @@ const handleSSEConnection = async (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
+  res.write(': connected\n\n');
 
   const client = { res, userId: req.user!.id };
   sseClients.push(client);
