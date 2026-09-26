@@ -492,7 +492,8 @@ export function subscribeToRealtimeEvents(onEvent: (payload: RealtimeEventPayloa
       'teen_patti_dealer_revealed',
       'teen_patti_result',
       'teen_patti_settlement',
-      'teen_patti_bet_placed'
+      'teen_patti_bet_placed',
+      'aviator_tick'
     ];
 
     eventNames.forEach((evtName) => {
