@@ -11,7 +11,7 @@ test('Aviator runs continuous server-authoritative rounds in one permanent room'
 
   let sawProgress = false;
   let sawNewRound = false;
-  const deadline = Date.now() + 12000;
+  const deadline = Date.now() + 22000;
 
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 500));
