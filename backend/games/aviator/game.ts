@@ -20,6 +20,7 @@ let aviatorState: AviatorState = {
 
 const aviatorBets = new Map<string, AviatorBet>();
 let lastHydratedVersion = 0;
+let authoritativeVersion = 0;
 let currentCrashTarget = generateCrashPoint();
 let aviatorTimer: NodeJS.Timeout | null = null;
 let leaseHeartbeat: NodeJS.Timeout | null = null;
@@ -42,8 +43,10 @@ function startLeaseHeartbeat() {
 }
 
 async function persistAviatorState() {
+  authoritativeVersion += 1;
   await safeSaveAuthoritativeGameState('aviator', {
     ...aviatorState,
+    version: authoritativeVersion,
     crashTarget: currentCrashTarget,
     activeBets: Object.fromEntries(aviatorBets.entries())
   });
@@ -57,6 +60,7 @@ async function hydrateAviatorState() {
     const incomingVersion = Number(sharedState.version || 0);
     if (incomingVersion <= lastHydratedVersion) return;
     lastHydratedVersion = incomingVersion;
+    authoritativeVersion = Math.max(authoritativeVersion, incomingVersion);
     if (sharedState.roundId) aviatorState = { ...aviatorState, ...sharedState };
     if (typeof crashTarget === 'number') currentCrashTarget = crashTarget;
     if (activeBets && typeof activeBets === 'object') {
@@ -189,6 +193,7 @@ app.get('/api/games/aviator/state', async (req: Request, res: Response) => {
 });
 
 app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
+  await hydrateAviatorState();
   const { amount } = req.body;
   const numAmount = Number(amount);
   if (!numAmount || numAmount < 10) {
@@ -199,12 +204,14 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
     return res.status(400).json({ error: 'Betting is closed for this round' });
   }
 
-  try { await debitForUser(req, numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator'); } catch (e: any) {
+  const betId = `av_bet_${crypto.randomUUID()}`;
+  const idempotencyKey = `aviator_bet_${aviatorState.roundId}_${req.user!.id}`;
+  try { await debitForUser(req, numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator', idempotencyKey); } catch (e: any) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
   const currentAviatorBet: AviatorBet = {
-    betId: `av_bet_${Date.now()}`,
+    betId,
     amount: numAmount,
     cashedOut: false
   };
