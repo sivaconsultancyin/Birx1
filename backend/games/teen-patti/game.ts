@@ -12,7 +12,7 @@ let teenPattiState: TeenPattiState = createAuthoritativeTeenPattiRound('Player',
 // Background Authoritative Teen Patti Round Cycle
 setInterval(async () => {
   if (!(await acquireGameLease('teen-patti'))) return;
-  const persistedTeen = await supabaseRepo.getAuthoritativeGameState('teen-patti');
+  const persistedTeen = await safeGetAuthoritativeGameState('teen-patti');
   if (persistedTeen) teenPattiState = persistedTeen as TeenPattiState;
   if (teenPattiState.phase === 'betting') {
     teenPattiState.countdown -= 1;
