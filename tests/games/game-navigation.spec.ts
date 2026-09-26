@@ -26,6 +26,8 @@ async function authenticate(page: any) {
 test('each game play control navigates to its game screen', async ({ page }) => {
   await authenticate(page);
   await page.goto('/');
+  await expect(page.locator('#bottom-navigation')).toBeVisible({ timeout: 15000 });
+  await page.locator('#nav-tab-games').click();
   await expect(page.locator('#screen-games')).toBeVisible({ timeout: 15000 });
 
   const games = [
