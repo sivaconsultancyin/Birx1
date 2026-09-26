@@ -169,6 +169,13 @@ async function startAviatorFlight() {
       setTimeout(() => { void runAviatorCycle(); }, 3500);
     } else {
       aviatorState.multiplier = nextMult;
+      // SSE is the primary high-frequency live transport. Persisting the same tick
+      // to Supabase remains available for authoritative resync, but clients do not poll it.
+      broadcastSSE('aviator_tick', {
+        gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId,
+        phase: aviatorState.phase, multiplier: aviatorState.multiplier,
+        countdown: aviatorState.countdown
+      });
       await persistAviatorState();
     }
   }, 100);
