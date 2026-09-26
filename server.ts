@@ -1,2 +1,3 @@
-// Backend compatibility entrypoint. The authoritative Express server lives in backend/server.ts.
+// Compatibility entrypoint for local development and legacy deployment.
+// The authoritative server implementation is backend/server.ts.
 import './backend/server.ts';
