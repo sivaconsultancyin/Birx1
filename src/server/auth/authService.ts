@@ -97,10 +97,9 @@ export const authService = {
     const email = getAuthEmail(identifier);
     const { data, error } = await publicClient.auth.signInWithPassword({ email, password });
     if (error || !data.session || !data.user) throw new Error('Invalid mobile number or password.');
-    const user = await supabaseRepo.getUserByAuthId(data.user.id);
-    if (!user) throw new Error('Authenticated account is not linked to a Brix user.');
-    const wallet = await supabaseRepo.getWallet(user.id);
-    return { token: data.session.access_token, user, wallet };
+    const account = await supabaseRepo.getUserAndWalletByAuthId(data.user.id);
+    if (!account) throw new Error('Authenticated account is not linked to a Brix user or wallet.');
+    return { token: data.session.access_token, user: account.user, wallet: account.wallet };
   },
 
   async register(mobile: string, username: string, password: string, _role: UserRole = 'PLAYER', parentId?: string): Promise<AuthSession> {
