@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { Request, Response } from 'express';
-import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState, AviatorBet, AviatorState, DiceState, DragonTigerState, DragonTigerBetSide, AndarBaharState, AndarBaharSide, GameHistoryEntry, User, Wallet, Transaction } from '../../../src/types.ts';
+import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState, AviatorBet, AviatorState, DiceState, DragonTigerState, DragonTigerBetSide, AndarBaharState, AndarBaharSide, GameHistoryEntry, User, Wallet, Transaction } from '../../types.ts';
 
 /** Server-authoritative aviator module. All shared infrastructure is injected by the thin router. */
 export function registerAviatorGame(app: any, deps: any) {
