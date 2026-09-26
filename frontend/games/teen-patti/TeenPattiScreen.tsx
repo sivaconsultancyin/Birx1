@@ -60,9 +60,35 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
     }
   }, []);
 
-  // Initial load + SSE-driven synchronization. No periodic polling.
+  // Initial load with bounded retry. SSE remains the live transport; retry only
+  // covers startup/network races so the table never stays on "Connecting..." forever.
   useEffect(() => {
-    void refreshState();
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+
+    const connect = async () => {
+      try {
+        await refreshState();
+      } catch {
+        // refreshState intentionally absorbs background errors; retry below.
+      }
+      if (!cancelled) {
+        // A successful state load clears the connecting screen. If startup races
+        // the API/SSE, retry a few times with bounded backoff.
+        retryTimer = setTimeout(() => {
+          if (cancelled) return;
+          attempts += 1;
+          if (attempts <= 5) void connect();
+        }, Math.min(1000 * Math.pow(2, attempts), 8000));
+      }
+    };
+
+    void connect();
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [refreshState]);
 
   // Real-time SSE listener for instant sub-second round events
