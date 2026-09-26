@@ -13,13 +13,35 @@ test('authenticated realtime stream sends a connected event', async ({ request }
   expect(setCookie).toContain('brix_access_token=');
 
   const cookie = setCookie.split(';')[0];
-  const stream = await request.get('/api/events/stream', {
-    headers: { Cookie: cookie },
-    timeout: 3000,
-    maxRedirects: 0,
+  const responsePromise = new Promise<{ status: number; contentType: string; body: string }>((resolve, reject) => {
+    const http = require('node:http');
+    const base = new URL('/api/events/stream', 'http://127.0.0.1:3000');
+    const req = http.get(base, {
+      headers: { Cookie: cookie, Accept: 'text/event-stream' },
+    }, (res: any) => {
+      res.setEncoding('utf8');
+      let body = '';
+      const timer = setTimeout(() => {
+        req.destroy();
+        resolve({ status: res.statusCode ?? 0, contentType: String(res.headers['content-type'] ?? ''), body });
+      }, 2000);
+      res.on('data', (chunk: string) => {
+        body += chunk;
+        if (body.includes('"type":"connected"')) {
+          clearTimeout(timer);
+          req.destroy();
+          resolve({ status: res.statusCode ?? 0, contentType: String(res.headers['content-type'] ?? ''), body });
+        }
+      });
+      res.on('error', reject);
+    });
+    req.on('error', (err: Error) => {
+      if (!/socket hang up|ECONNRESET/.test(err.message)) reject(err);
+    });
   });
-  expect(stream.status()).toBe(200);
-  expect(stream.headers()['content-type']).toMatch(/text\/event-stream/);
-  const body = await stream.body();
-  expect(body.toString()).toContain('"type":"connected"');
+
+  const stream = await responsePromise;
+  expect(stream.status).toBe(200);
+  expect(stream.contentType).toMatch(/text\/event-stream/);
+  expect(stream.body).toContain('"type":"connected"');
 });
