@@ -526,12 +526,19 @@ const gameModuleDeps = {
   rateLimit, getSupabaseConfigStatus, authService, crypto
 };
 
-registerRouletteGame(app, gameModuleDeps);
-registerTeenPattiGame(app, gameModuleDeps);
-registerAviatorGame(app, gameModuleDeps);
-registerDiceGame(app, gameModuleDeps);
-registerDragonTigerGame(app, gameModuleDeps);
-registerAndarBaharGame(app, gameModuleDeps);
+// Browser smoke tests can boot the HTTP/Vite server without starting the
+// long-running game loops. Full game E2E runs should use the configured Supabase
+// environment and leave this disabled.
+const skipGameLoops = process.env.E2E_SMOKE_ONLY === '1';
+
+if (!skipGameLoops) {
+  registerRouletteGame(app, gameModuleDeps);
+  registerTeenPattiGame(app, gameModuleDeps);
+  registerAviatorGame(app, gameModuleDeps);
+  registerDiceGame(app, gameModuleDeps);
+  registerDragonTigerGame(app, gameModuleDeps);
+  registerAndarBaharGame(app, gameModuleDeps);
+}
 
 const startServer = async () => {
   try {
