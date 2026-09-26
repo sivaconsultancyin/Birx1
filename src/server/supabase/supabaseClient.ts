@@ -600,7 +600,7 @@ export const supabaseRepo = {
   async getActiveGameRounds(): Promise<any[]> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
-    const { data, error } = await admin.from('game_rounds').select('*').in('phase', ['betting','lock','deal','running','closed']).order('updated_at',{ascending:false});
+    const { data, error } = await admin.from('game_rounds').select('*').in('phase', ['betting','closed','spinning','dealing','in_flight','result']).order('created_at',{ascending:false});
     if (error) throw new Error(error.message);
     return data || [];
   },
