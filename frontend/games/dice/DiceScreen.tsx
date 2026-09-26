@@ -58,8 +58,17 @@ export const DiceScreen: React.FC<DiceScreenProps> = ({
     void sync();
     const unsubscribe = subscribeToRealtimeEvents((event) => {
       const data: any = event.data || {};
-      if (['round_started','betting_open','betting_closed','card_revealed','result','settlement'].includes(event.event) && (!data.gameId || data.gameId === 'dice')) {
-        void sync();
+      if (event.event === 'dice_result' && data.gameId === 'dice') {
+        setGameState((prev) => prev ? {
+          ...prev,
+          roundId: data.roundId || prev.roundId,
+          dice1: Number(data.dice1 ?? prev.dice1),
+          dice2: Number(data.dice2 ?? prev.dice2),
+          sum: Number(data.sum ?? prev.sum),
+          recentSums: data.recentSums || prev.recentSums
+        } : prev);
+        setDice1(Number(data.dice1));
+        setDice2(Number(data.dice2));
       }
     });
     return () => { mounted = false; unsubscribe(); };
