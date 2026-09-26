@@ -15,7 +15,8 @@ test('authenticated realtime stream sends a connected event', async ({ request }
   const cookie = setCookie.split(';')[0];
   const stream = await request.get('/api/events/stream', {
     headers: { Cookie: cookie },
-    timeout: 10000,
+    timeout: 3000,
+    maxRedirects: 0,
   });
   expect(stream.status()).toBe(200);
   expect(stream.headers()['content-type']).toMatch(/text\/event-stream/);
