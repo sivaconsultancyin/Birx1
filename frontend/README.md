@@ -1,14 +1,15 @@
 # Frontend
 
-The browser client is the React/Vite application.
+This directory is the browser-facing game UI boundary.
 
-## Responsibilities
-- UI/screens/components
-- Game presentation and animations
-- Calling the backend API
-- Receiving live SSE events
-- Local UI state only
+## Ownership
+- React game screens and UI components
+- Client-side presentation state and animations
+- Backend API/SSE consumption only
 
-Game state, betting validation, wallet settlement, Supabase service-role access, and round authority do **not** belong in frontend code.
+## Backend boundary
+The frontend must communicate with the server through `src/api/client.ts`.
+It must not import anything from `backend/` or use Supabase service-role/database credentials.
 
-The main application shell currently lives under `src/`; game-specific screens live under `frontend/games/<game>/`. This is being kept as a compatibility layout while the remaining shared UI is migrated into the frontend boundary.
+## Games
+Each game UI lives under `frontend/games/<game>/`.
