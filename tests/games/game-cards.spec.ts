@@ -26,7 +26,9 @@ async function authenticate(page: any) {
 test('game cards expose working play controls', async ({ page }) => {
   await authenticate(page);
   await page.goto('/');
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(1000);
+  await expect(page.locator('#bottom-navigation')).toBeVisible({ timeout: 15000 });
+  await page.locator('#nav-tab-games').click();
   await expect(page.locator('#screen-games')).toBeVisible({ timeout: 15000 });
   for (const id of ['roulette','teen-patti','aviator','dice','dragon-tiger','andar-bahar']) {
     await expect(page.locator(`#game-card-${id}`)).toBeVisible();
