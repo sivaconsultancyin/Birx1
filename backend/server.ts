@@ -195,6 +195,26 @@ const handleSSEConnection = async (req: Request, res: Response) => {
 app.get('/api/events/stream', requireAuth, requirePlayerForGames, handleSSEConnection);
 app.get('/api/realtime', requireAuth, requirePlayerForGames, handleSSEConnection);
 
+// Supabase is the authoritative realtime source when configured.
+// One server-side subscription fans state changes out to every connected player.
+let stopAuthoritativeRealtime: (() => void) | null = null;
+function startAuthoritativeRealtimeBridge() {
+  if (stopAuthoritativeRealtime || !getSupabaseConfigStatus().isConfigured) return;
+  stopAuthoritativeRealtime = supabaseRepo.subscribeToAuthoritativeGameStates((payload: any) => {
+    const row = payload?.new;
+    if (!row?.game_id || !row?.state) return;
+    const state = row.state;
+    broadcastSSE('game_state', {
+      gameId: row.game_id,
+      roundId: row.round_id ?? state.roundId ?? null,
+      phase: row.phase ?? state.phase ?? null,
+      version: Number(row.version ?? state.version ?? 0),
+      state
+    });
+  });
+}
+startAuthoritativeRealtimeBridge();
+
 // -------------------------------------------------------------
 // HEALTH CHECK
 // -------------------------------------------------------------
