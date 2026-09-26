@@ -55,9 +55,8 @@ export const DiceScreen: React.FC<DiceScreenProps> = ({
         if (mounted) setErrorMsg(err.message || 'Unable to connect to Dice server');
       }
     };
-    sync();
-    const interval = setInterval(sync, 1500);
-    return () => { mounted = false; clearInterval(interval); };
+    void sync();
+    return () => { mounted = false; };
   }, []);
 
   const handleRoll = async () => {
