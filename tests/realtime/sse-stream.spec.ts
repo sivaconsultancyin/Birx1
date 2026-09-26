@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import * as http from 'node:http';
 
 test('authenticated realtime stream sends a connected event', async ({ request }) => {
   const mobile = process.env.E2E_TEST_MOBILE;
@@ -14,7 +15,6 @@ test('authenticated realtime stream sends a connected event', async ({ request }
 
   const cookie = setCookie.split(';')[0];
   const responsePromise = new Promise<{ status: number; contentType: string; body: string }>((resolve, reject) => {
-    const http = require('node:http');
     const base = new URL('/api/events/stream', 'http://127.0.0.1:3000');
     const req = http.get(base, {
       headers: { Cookie: cookie, Accept: 'text/event-stream' },
