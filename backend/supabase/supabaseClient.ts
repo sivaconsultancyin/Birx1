@@ -665,6 +665,22 @@ export const supabaseRepo = {
     if (error) throw new Error(error.message);
   },
 
+  subscribeToAuthoritativeGameStates(onChange: (payload: any) => void): (() => void) | null {
+    const admin = getSupabaseAdmin();
+    if (!admin) return null;
+    const channel = admin
+      .channel('authoritative-game-states-server')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'authoritative_game_states' },
+        (payload) => onChange(payload)
+      )
+      .subscribe();
+    return () => {
+      void admin.removeChannel(channel);
+    };
+  },
+
   async getAuthoritativeGameState(gameId: string): Promise<any | null> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
