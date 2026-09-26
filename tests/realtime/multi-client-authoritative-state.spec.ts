@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
+import * as http from 'node:http';
 
 async function login(request: any) {
   const mobile = process.env.E2E_TEST_MOBILE;
@@ -15,7 +16,6 @@ async function login(request: any) {
 async function waitForGameState(request: any, cookie: string, gameId: string, version: number) {
   const base = new URL('/api/events/stream', process.env.BASE_URL || 'http://127.0.0.1:3000');
   return await new Promise<boolean>((resolve, reject) => {
-    const http = require('node:http');
     const req = http.get(base, { headers: { Cookie: cookie, Accept: 'text/event-stream' } }, (res: any) => {
       res.setEncoding('utf8');
       let body = '';
