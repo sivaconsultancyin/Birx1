@@ -1,10 +1,14 @@
 # Frontend
 
-The Vite/React client lives under `src/` in this repository. This folder is the architectural boundary for frontend ownership.
+The browser client is the React/Vite application.
 
-## Games
-Each game has its own screen and game-specific component namespace under `src/screens` and `src/components/<game>`.
+## Responsibilities
+- UI/screens/components
+- Game presentation and animations
+- Calling the backend API
+- Receiving live SSE events
+- Local UI state only
 
-Games: aviator, roulette, teen-patti, dice, dragon-tiger, andar-bahar.
+Game state, betting validation, wallet settlement, Supabase service-role access, and round authority do **not** belong in frontend code.
 
-Game state and money settlement never belong in frontend code; the frontend only renders server state and calls the API.
+The main application shell currently lives under `src/`; game-specific screens live under `frontend/games/<game>/`. This is being kept as a compatibility layout while the remaining shared UI is migrated into the frontend boundary.
