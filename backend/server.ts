@@ -205,12 +205,15 @@ function startAuthoritativeRealtimeBridge() {
     const row = payload?.new;
     if (!row?.game_id || !row?.state) return;
     const state = row.state;
+    const gameId = row.game_id;
+    const roomId = state.roomId ?? (gameId === 'aviator' ? 'aviator-main' : null);
     broadcastSSE('game_state', {
-      gameId: row.game_id,
+      gameId,
+      roomId,
       roundId: row.round_id ?? state.roundId ?? null,
       phase: row.phase ?? state.phase ?? null,
       version: Number(row.version ?? state.version ?? 0),
-      state
+      state: { ...state, gameId, roomId }
     });
   });
 }
