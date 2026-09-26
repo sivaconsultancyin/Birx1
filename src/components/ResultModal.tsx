@@ -1,5 +1,7 @@
 import React from 'react';
 import { Trophy, AlertCircle, RotateCcw, X } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
+import { MotionCard, ParticleCanvas } from './animation/GameAnimationKit';
 
 interface ResultModalProps {
   isOpen: boolean;
@@ -24,15 +26,15 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   summaryText,
   onPlayAgain
 }) => {
-  if (!isOpen) return null;
-
   return (
+    <AnimatePresence>
+      {!isOpen ? null : (
     <div
       id="result-modal-backdrop"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
-      <div
+      <MotionCard
         id="result-modal-card"
         onClick={(e) => e.stopPropagation()}
         className={`relative w-full max-w-sm rounded-2xl p-6 border text-center shadow-2xl overflow-hidden ${
@@ -41,6 +43,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
             : 'bg-gradient-to-b from-slate-900 via-slate-900/95 to-slate-950 border-slate-700/60 shadow-black/60'
         }`}
       >
+        {isWin && <ParticleCanvas active className="opacity-70" />}
         {/* Ambient Top Glow */}
         <div
           className={`absolute -top-12 left-1/2 -translate-x-1/2 w-40 h-40 rounded-full blur-3xl pointer-events-none ${
@@ -116,7 +119,8 @@ export const ResultModal: React.FC<ResultModalProps> = ({
             Close
           </button>
         </div>
-      </div>
-    </div>
+      </MotionCard>
+      )}
+    </AnimatePresence>
   );
 };
