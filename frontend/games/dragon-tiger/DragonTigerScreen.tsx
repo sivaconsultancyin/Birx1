@@ -62,8 +62,15 @@ export const DragonTigerScreen: React.FC<DragonTigerScreenProps> = ({
     void sync();
     const unsubscribe = subscribeToRealtimeEvents((event) => {
       const data: any = event.data || {};
-      if (['round_started','betting_open','betting_closed','card_revealed','result','settlement'].includes(event.event) && (!data.gameId || data.gameId === 'dragon-tiger')) {
-        void sync();
+      if (event.event === 'dragon_tiger_result' && data.gameId === 'dragon-tiger') {
+        setGameState((prev) => prev ? {
+          ...prev,
+          roundId: data.roundId || prev.roundId,
+          dragonCard: data.dragonCard || prev.dragonCard,
+          tigerCard: data.tigerCard || prev.tigerCard,
+          winner: data.winner || prev.winner,
+          recentResults: data.recentResults || prev.recentResults
+        } : prev);
       }
     });
     return () => { mounted = false; unsubscribe(); };
