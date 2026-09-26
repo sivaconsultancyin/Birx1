@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { ExternalDragonTigerUI } from '../../../src/components/external/ExternalDragonTigerUI.tsx';
 import { Flame, Shield, Award, RotateCcw, Clock } from 'lucide-react';
 import { Card, DragonTigerBetSide, DragonTigerState, Wallet } from '../../../src/types.ts';
-import { gamesApi } from '../../../src/api/client.ts';
+import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
 import { Countdown } from '../../../src/components/Countdown.tsx';
@@ -60,7 +60,13 @@ export const DragonTigerScreen: React.FC<DragonTigerScreenProps> = ({
       }
     };
     void sync();
-    return () => { mounted = false; };
+    const unsubscribe = subscribeToRealtimeEvents((event) => {
+      const data: any = event.data || {};
+      if (['round_started','betting_open','betting_closed','card_revealed','result','settlement'].includes(event.event) && (!data.gameId || data.gameId === 'dragon-tiger')) {
+        void sync();
+      }
+    });
+    return () => { mounted = false; unsubscribe(); };
   }, []);
 
   const handleSelectBet = (side: DragonTigerBetSide) => {
