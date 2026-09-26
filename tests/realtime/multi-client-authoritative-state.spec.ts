@@ -6,7 +6,11 @@ async function login(request: any) {
   const mobile = process.env.E2E_TEST_MOBILE;
   const password = process.env.E2E_TEST_PASSWORD;
   test.skip(!mobile || !password, 'E2E credentials are not configured');
-  const response = await request.post('/api/auth/login', { data: { mobile, password } });
+  let response = await request.post('/api/auth/login', { data: { mobile, password } });
+  if (response.status() === 429) {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    response = await request.post('/api/auth/login', { data: { mobile, password } });
+  }
   expect(response.status()).toBe(200);
   const cookie = response.headers()['set-cookie']?.split(';')[0];
   expect(cookie).toContain('brix_access_token=');
@@ -49,6 +53,7 @@ test('two authenticated clients receive the same authoritative realtime state', 
 
   const streamA = waitForGameState(request, cookieA, gameId, version);
   const streamB = waitForGameState(request, cookieB, gameId, version);
+  await new Promise(resolve => setTimeout(resolve, 750));
 
   const { error } = await supabase.from('authoritative_game_states').upsert({
     game_id: gameId,
