@@ -59,12 +59,8 @@ export const DragonTigerScreen: React.FC<DragonTigerScreenProps> = ({
         if (mounted) setErrorMsg(err.message || 'Unable to connect to Dragon Tiger server');
       }
     };
-    sync();
-    const interval = setInterval(sync, 1500);
-    const countdownInterval = setInterval(() => {
-      setCountdown((c) => (c > 1 ? c - 1 : 12));
-    }, 1000);
-    return () => { mounted = false; clearInterval(interval); clearInterval(countdownInterval); };
+    void sync();
+    return () => { mounted = false; };
   }, []);
 
   const handleSelectBet = (side: DragonTigerBetSide) => {
