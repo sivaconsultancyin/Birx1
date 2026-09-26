@@ -60,6 +60,17 @@ app.post('/api/games/dice/roll', requireAuth, requirePlayerForGames, async (req:
   if (diceState.recentSums.length > 10) diceState.recentSums.pop();
   diceState.roundId = 'DC-' + crypto.randomInt(1000, 10000);
 
+  broadcastSSE('dice_result', {
+    gameId: 'dice',
+    roundId: diceState.roundId,
+    dice1: d1,
+    dice2: d2,
+    sum: total,
+    multiplier,
+    winAmount,
+    recentSums: diceState.recentSums
+  });
+
   recordHistory({
     gameId: 'dice',
     gameName: 'Dice',
