@@ -23,7 +23,7 @@ import {
   UserRole,
   Wallet,
   WithdrawalRequest
-} from '../types.ts';
+} from '../../src/types.ts';
 
 const BASE_URL = '/api';
 
