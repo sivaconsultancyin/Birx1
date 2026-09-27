@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
-import * as http from 'node:http';
+import WebSocket from 'ws';
 
 async function login(request: any) {
   const mobile = process.env.E2E_TEST_MOBILE;
@@ -17,26 +17,22 @@ async function login(request: any) {
   return cookie;
 }
 
-async function waitForGameState(request: any, cookie: string, gameId: string, version: number) {
-  const base = new URL('/api/events/stream', process.env.BASE_URL || 'http://127.0.0.1:3000');
+async function waitForGameState(cookie: string, gameId: string, version: number) {
+  const wsUrl = (process.env.BASE_URL || 'http://127.0.0.1:3000').replace(/^http/, 'ws') + '/ws';
   return await new Promise<boolean>((resolve, reject) => {
-    const req = http.get(base, { headers: { Cookie: cookie, Accept: 'text/event-stream' } }, (res: any) => {
-      res.setEncoding('utf8');
-      let body = '';
-      const timer = setTimeout(() => { req.destroy(); resolve(false); }, 6000);
-      res.on('data', (chunk: string) => {
-        body += chunk;
-        if (body.includes('"type":"game_state"') && body.includes('"gameId":"' + gameId + '"') && body.includes('"version":' + version)) {
+    const ws = new WebSocket(wsUrl, { headers: { Cookie: cookie } });
+    const timer = setTimeout(() => { ws.close(); resolve(false); }, 8000);
+    ws.on('message', raw => {
+      try {
+        const data = JSON.parse(raw.toString());
+        if (data.type === 'game_state' && data.gameId === gameId && Number(data.version) === version) {
           clearTimeout(timer);
-          req.destroy();
+          ws.close();
           resolve(true);
         }
-      });
-      res.on('error', reject);
+      } catch {}
     });
-    req.on('error', (err: Error) => {
-      if (!/socket hang up|ECONNRESET/.test(err.message)) reject(err);
-    });
+    ws.on('error', reject);
   });
 }
 
@@ -51,8 +47,8 @@ test('two authenticated clients receive the same authoritative realtime state', 
   const version = 1;
   const supabase = createClient(url!, key!, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const streamA = waitForGameState(request, cookieA, gameId, version);
-  const streamB = waitForGameState(request, cookieB, gameId, version);
+  const streamA = waitForGameState(cookieA, gameId, version);
+  const streamB = waitForGameState(cookieB, gameId, version);
   await new Promise(resolve => setTimeout(resolve, 750));
 
   const { error } = await supabase.from('authoritative_game_states').upsert({
@@ -70,7 +66,6 @@ test('two authenticated clients receive the same authoritative realtime state', 
     return Number(data?.version || 0);
   }, { timeout: 5000 }).toBe(version);
 
-  await expect.poll(async () => (await streamA) && (await streamB), { timeout: 8000 }).toBeTruthy();
-
+  await expect.poll(async () => (await streamA) && (await streamB), { timeout: 9000 }).toBeTruthy();
   await supabase.from('authoritative_game_states').delete().eq('game_id', gameId);
 });
