@@ -4,7 +4,7 @@ import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState,
 
 /** Server-authoritative andar-bahar module. All shared infrastructure is injected by the thin router. */
 export function registerAndarBaharGame(app: any, deps: any) {
-  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastSSE, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
+  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
 const andarBaharBets = new Map<string, { side: AndarBaharSide; amount: number }>();
@@ -61,7 +61,7 @@ function startAuthoritativeAndarBaharRound() {
   andarBaharState.userBet = undefined;
   andarBaharState.userSettlement = undefined;
 
-  broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+  broadcastRealtime('andar_bahar_state_update', { state: andarBaharState });
 }
 
 // Background Authoritative Andar Bahar Round Cycle
@@ -73,12 +73,12 @@ setInterval(async () => {
       andarBaharState.phase = 'shuffle';
       andarBaharState.countdown = 3;
       andarBaharState.phaseEndsAt = Date.now() + 3000;
-      broadcastSSE('andar_bahar_shuffling', {
+      broadcastRealtime('andar_bahar_shuffling', {
         roundId: andarBaharState.roundId,
         phase: 'shuffle',
         duration: 3000
       });
-      broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+      broadcastRealtime('andar_bahar_state_update', { state: andarBaharState });
     }
   } else if (andarBaharState.phase === 'shuffle') {
     andarBaharState.countdown -= 1;
@@ -91,14 +91,14 @@ setInterval(async () => {
       andarBaharState.countdown = Math.max(3, Math.min(8, andarBaharDealtQueue.length));
       andarBaharState.phaseEndsAt = Date.now() + andarBaharState.countdown * 1000;
 
-      broadcastSSE('andar_bahar_dealing', {
+      broadcastRealtime('andar_bahar_dealing', {
         roundId: andarBaharState.roundId,
         phase: 'dealing',
         jokerCard: andarBaharTargetJoker,
         dealtCards: andarBaharDealtQueue,
         winningSide: andarBaharFinalWinner
       });
-      broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+      broadcastRealtime('andar_bahar_state_update', { state: andarBaharState });
     }
   } else if (andarBaharState.phase === 'dealing') {
     andarBaharState.countdown -= 1;
@@ -144,13 +144,13 @@ setInterval(async () => {
         andarBaharBets.delete(userId);
       }
 
-      broadcastSSE('andar_bahar_settled', {
+      broadcastRealtime('andar_bahar_settled', {
         roundId: andarBaharState.roundId,
         phase: 'settled',
         winner: andarBaharFinalWinner,
         recentWinners: andarBaharState.recentWinners
       });
-      broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+      broadcastRealtime('andar_bahar_state_update', { state: andarBaharState });
     }
   } else if (andarBaharState.phase === 'settled') {
     andarBaharState.countdown -= 1;
@@ -190,7 +190,7 @@ app.post('/api/games/andar-bahar/deal', requireAuth, requirePlayerForGames, asyn
   const multiplier = isWin ? (andarBaharFinalWinner === 'andar' ? 1.9 : 2.0) : 0;
   const winAmount = Math.floor(numAmount * multiplier);
 
-  broadcastSSE('andar_bahar_state_update', { state: andarBaharState });
+  broadcastRealtime('andar_bahar_state_update', { state: andarBaharState });
 
   return res.json({
     success: true,
