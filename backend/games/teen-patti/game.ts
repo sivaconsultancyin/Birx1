@@ -4,7 +4,7 @@ import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState,
 
 /** Server-authoritative teen-patti module. All shared infrastructure is injected by the thin router. */
 export function registerTeenPattiGame(app: any, deps: any) {
-  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastSSE, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
+  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
 let teenPattiState: TeenPattiState = createAuthoritativeTeenPattiRound('Player', undefined, 50);
@@ -20,7 +20,7 @@ setInterval(async () => {
       teenPattiState.phase = 'lock';
       teenPattiState.countdown = 1;
       teenPattiState.phaseEndsAt = Date.now() + 1000;
-      broadcastSSE('teen_patti_betting_closed', {
+      broadcastRealtime('teen_patti_betting_closed', {
         roundId: teenPattiState.roundId,
         phase: 'lock'
       });
@@ -31,7 +31,7 @@ setInterval(async () => {
       teenPattiState.phase = 'deal';
       teenPattiState.countdown = 5;
       teenPattiState.phaseEndsAt = Date.now() + 5000;
-      broadcastSSE('teen_patti_dealing_started', {
+      broadcastRealtime('teen_patti_dealing_started', {
         roundId: teenPattiState.roundId,
         phase: 'deal',
         duration: 5000
@@ -47,7 +47,7 @@ setInterval(async () => {
         teenPattiState.dealer.revealed = true;
       }
       teenPattiState.phaseEndsAt = Date.now() + 2000;
-      broadcastSSE('teen_patti_dealer_revealed', {
+      broadcastRealtime('teen_patti_dealer_revealed', {
         roundId: teenPattiState.roundId,
         phase: 'compare',
         dealer: teenPattiState.dealer
@@ -120,7 +120,7 @@ setInterval(async () => {
       teenPattiState.phaseEndsAt = Date.now() + 4000;
 
       const sanitized = sanitizeTeenPattiState(teenPattiState);
-      broadcastSSE('teen_patti_result', {
+      broadcastRealtime('teen_patti_result', {
         roundId: teenPattiState.roundId,
         phase: 'result',
         state: sanitized,
@@ -128,20 +128,20 @@ setInterval(async () => {
         dealer: teenPattiState.dealer
       });
       if (userSettlementDetail) {
-        broadcastSSE('teen_patti_settlement', userSettlementDetail);
+        broadcastRealtime('teen_patti_settlement', userSettlementDetail);
       }
-      broadcastSSE('wallet_updated', { userId: userPlayer?.id });
+      broadcastRealtime('wallet_updated', { userId: userPlayer?.id });
     }
   } else if (teenPattiState.phase === 'result') {
     teenPattiState.countdown -= 1;
     if (teenPattiState.countdown <= 0) {
       teenPattiState = createAuthoritativeTeenPattiRound('Player', undefined, 50);
-      broadcastSSE('teen_patti_round_started', {
+      broadcastRealtime('teen_patti_round_started', {
         roundId: teenPattiState.roundId,
         countdown: 15,
         bettingEndsAt: teenPattiState.bettingEndsAt
       });
-      broadcastSSE('teen_patti_betting_open', {
+      broadcastRealtime('teen_patti_betting_open', {
         roundId: teenPattiState.roundId,
         countdown: 15
       });
@@ -189,7 +189,7 @@ const handlePostTeenPattiBet = async (req: Request, res: Response) => {
   }
   teenPattiState.pot += additionalBet;
 
-  broadcastSSE('teen_patti_bet_placed', {
+  broadcastRealtime('teen_patti_bet_placed', {
     roundId: teenPattiState.roundId,
     playerId: userPlayer.id,
     betAmount: userPlayer.currentBet,
