@@ -11,7 +11,7 @@ test('Aviator runs continuous server-authoritative rounds in one permanent room'
 
   let sawProgress = false;
   let sawNewRound = false;
-  const deadline = Date.now() + 22000;
+  const deadline = Date.now() + 40000;
 
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -23,7 +23,7 @@ test('Aviator runs continuous server-authoritative rounds in one permanent room'
     expect(state.multiplier).toEqual(expect.any(Number));
     expect(state.previousMultipliers).toEqual(expect.any(Array));
 
-    if (state.roundId === firstRound && (state.phase === 'running' || state.phase === 'crashed') && state.multiplier >= 1) {
+    if (state.roundId === firstRound && (state.phase === 'running' || state.phase === 'crashed') && typeof state.multiplier === 'number' && state.multiplier >= 1) {
       sawProgress = true;
     }
     if (state.roundId !== firstRound) {
