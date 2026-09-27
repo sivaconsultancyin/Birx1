@@ -181,7 +181,7 @@ function broadcastRealtime(event: string, data: any) {
   }
 }
 
-websocketServer.on('connection', (socket: WebSocket, user: User) => {
+websocketServer.on('connection', (socket: WebSocket, user: any) => {
   const client = { socket, userId: user.id };
   websocketClients.add(client);
   socket.send(JSON.stringify({ type: 'connected', time: Date.now() }));
