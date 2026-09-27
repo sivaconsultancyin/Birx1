@@ -1,4 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
+import { createServer as createHttpServer } from 'node:http';
+// @ts-ignore - ws is dependency-backed and ships its own runtime API.
+import { WebSocketServer, WebSocket } from 'ws';
 import { registerRouletteGame } from './games/roulette/game.ts';
 import { registerTeenPattiGame } from './games/teen-patti/game.ts';
 import { registerAviatorGame } from './games/aviator/game.ts';
@@ -160,44 +163,49 @@ async function creditForUser(req: Request, amount: number, description: string, 
   return supabaseRepo.atomicCredit(user.id, amount, 'payout', description, gameId, idempotencyKey);
 }
 // -------------------------------------------------------------
-// SSE STREAM FOR REAL-TIME EVENTS
+// WEBSOCKET REALTIME TRANSPORT
 // -------------------------------------------------------------
-const sseClients: Array<{ res: Response; userId: string }> = [];
+const websocketClients = new Set<{ socket: WebSocket; userId: string }>();
+const websocketServer = new WebSocketServer({ noServer: true });
 
-function broadcastSSE(event: string, data: any) {
-  const payloadData = { type: event, ...data };
-  const messagePayload = `data: ${JSON.stringify(payloadData)}\n\n`;
-  const eventPayload = `event: ${event}\ndata: ${JSON.stringify(payloadData)}\n\n`;
-  sseClients.forEach(({ res, userId }) => {
+function broadcastRealtime(event: string, data: any) {
+  const payload = JSON.stringify({ type: event, ...data });
+  for (const client of websocketClients) {
     const targetUserId = data?.userId || data?.playerId || null;
-    if (targetUserId && targetUserId !== userId) return;
-    try { res.write(messagePayload); res.write(eventPayload); } catch { /* client dropped */ }
-  });
+    if (targetUserId && targetUserId !== client.userId) continue;
+    if (client.socket.readyState !== WebSocket.OPEN) {
+      websocketClients.delete(client);
+      continue;
+    }
+    try { client.socket.send(payload); } catch { websocketClients.delete(client); }
+  }
 }
 
-const handleSSEConnection = async (req: Request, res: Response) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders?.();
-  res.write(': connected\n\n');
-
-  const client = { res, userId: req.user!.id };
-  sseClients.push(client);
-  res.write(`data: ${JSON.stringify({ type: 'connected', time: Date.now() })}\n\n`);
-  const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 25000);
-  req.on('close', () => {
+websocketServer.on('connection', (socket: WebSocket, user: User) => {
+  const client = { socket, userId: user.id };
+  websocketClients.add(client);
+  socket.send(JSON.stringify({ type: 'connected', time: Date.now() }));
+  const heartbeat = setInterval(() => {
+    if (socket.readyState === WebSocket.OPEN) socket.ping();
+  }, 25000);
+  socket.on('close', () => {
     clearInterval(heartbeat);
-    const index = sseClients.indexOf(client);
-    if (index !== -1) sseClients.splice(index, 1);
+    websocketClients.delete(client);
   });
-};
+  socket.on('error', () => {
+    clearInterval(heartbeat);
+    websocketClients.delete(client);
+  });
+});
 
-app.get('/api/events/stream', requireAuth, requirePlayerForGames, handleSSEConnection);
-app.get('/api/realtime', requireAuth, requirePlayerForGames, handleSSEConnection);
+async function authenticateWebSocketRequest(req: import('node:http').IncomingMessage): Promise<User | null> {
+  const cookieHeader = String(req.headers.cookie || '');
+  const tokenMatch = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith('brix_access_token='));
+  const token = tokenMatch ? decodeURIComponent(tokenMatch.slice('brix_access_token='.length)) : '';
+  return token ? authService.resolveUserFromToken(token) : null;
+}
 
-// Supabase is the authoritative realtime source when configured.
-// One server-side subscription fans state changes out to every connected player.
+// Supabase remains the authoritative persistence/realtime source; WebSocket is the client transport.
 let stopAuthoritativeRealtime: (() => void) | null = null;
 function startAuthoritativeRealtimeBridge() {
   if (stopAuthoritativeRealtime || !getSupabaseConfigStatus().isConfigured) return;
@@ -207,7 +215,7 @@ function startAuthoritativeRealtimeBridge() {
     const state = row.state;
     const gameId = row.game_id;
     const roomId = state.roomId ?? (gameId === 'aviator' ? 'aviator-main' : null);
-    broadcastSSE('game_state', {
+    broadcastRealtime('game_state', {
       gameId,
       roomId,
       roundId: row.round_id ?? state.roundId ?? null,
@@ -515,7 +523,7 @@ app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response)
 
   const actor = req.user!;
   const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
-  broadcastSSE('wallet_updated', { userId: actor.id, wallet: result.wallet });
+  broadcastRealtime('wallet_updated', { userId: actor.id, wallet: result.wallet });
   return res.json({ success: true, wallet: result.wallet, request: result.request });
 });
 
@@ -529,7 +537,7 @@ app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response
   const actor = req.user!;
   try {
     const result = await walletService.requestWithdrawal(actor.id, numAmount, upiId || 'Bank Account', idempotencyKey);
-    broadcastSSE('wallet_updated', { userId: actor.id, wallet: result.wallet });
+    broadcastRealtime('wallet_updated', { userId: actor.id, wallet: result.wallet });
     return res.json({ success: true, wallet: result.wallet, request: result.request });
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
@@ -597,8 +605,29 @@ const startServer = async () => {
       app.use(vite.middlewares);
     }
 
-    app.listen(PORT, '0.0.0.0', () => {
+    const httpServer = createHttpServer(app);
+    httpServer.on('upgrade', async (req, socket, head) => {
+      if (req.url !== '/ws') {
+        socket.destroy();
+        return;
+      }
+      try {
+        const user = await authenticateWebSocketRequest(req);
+        if (!user) {
+          socket.write('HTTP/1.1 401 Unauthorized\\r\\n\\r\\n');
+          socket.destroy();
+          return;
+        }
+        websocketServer.handleUpgrade(req, socket, head, (ws) => {
+          websocketServer.emit('connection', ws, user);
+        });
+      } catch {
+        socket.destroy();
+      }
+    });
+    httpServer.listen(PORT, '0.0.0.0', () => {
       console.log(`[server] listening on http://0.0.0.0:${PORT}`);
+      console.log('[realtime] WebSocket endpoint enabled at /ws');
     });
   } catch (error) {
     console.error('[server] startup failed:', error);
