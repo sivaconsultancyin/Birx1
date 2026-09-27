@@ -41,11 +41,10 @@ test('two clients observe Aviator round transitions for the permanent room', asy
 
   for (const events of [eventsA, eventsB]) {
     expect(events.some(e => e.type === 'connected')).toBeTruthy();
-    expect(events.some(e => e.gameId === 'aviator' && e.roomId === 'aviator-main')).toBeTruthy();
   }
 
-  const roundsA = eventsA.filter(e => e.type === 'game_state' && e.gameId === 'aviator').map(e => e.roundId).filter(Boolean);
-  const roundsB = eventsB.filter(e => e.type === 'game_state' && e.gameId === 'aviator').map(e => e.roundId).filter(Boolean);
+  const roundsA = eventsA.filter(e => e.type === 'game_state' && e.gameId === 'aviator' && (e.roomId === 'aviator-main' || e.state?.roomId === 'aviator-main')).map(e => e.roundId ?? e.state?.roundId).filter(Boolean);
+  const roundsB = eventsB.filter(e => e.type === 'game_state' && e.gameId === 'aviator' && (e.roomId === 'aviator-main' || e.state?.roomId === 'aviator-main')).map(e => e.roundId ?? e.state?.roundId).filter(Boolean);
   expect(roundsA.length).toBeGreaterThan(0);
   expect(roundsB.length).toBeGreaterThan(0);
   expect(roundsA.some(id => roundsB.includes(id))).toBeTruthy();
