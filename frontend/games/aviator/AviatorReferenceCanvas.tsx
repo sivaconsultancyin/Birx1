@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { CanvasRenderer } from './reference/renderer/CanvasRenderer.js';
 import { GameState } from './reference/engine/GameStates.js';
+import { SoundEngine } from './reference/audio/SoundEngine.js';
 
 type Props = {
   phase: string;
@@ -24,6 +25,7 @@ export const AviatorReferenceCanvas: React.FC<Props> = ({
   const rendererRef = useRef<CanvasRenderer | null>(null);
   const latestRef = useRef({ phase, multiplier, crashMultiplier, countdown });
   const previousPhaseRef = useRef(phase);
+  const soundRef = useRef<SoundEngine | null>(null);
 
   latestRef.current = { phase, multiplier, crashMultiplier, countdown };
 
@@ -34,6 +36,13 @@ export const AviatorReferenceCanvas: React.FC<Props> = ({
     currentFlightTimeMs: 0,
     countdownRemainingMs: Math.max(0, countdown * 1000),
   }), [phase, multiplier, crashMultiplier, countdown]);
+
+  useEffect(() => {
+    const sound = new SoundEngine();
+    soundRef.current = sound;
+    sound.setVolume(muted ? 0 : 0.5);
+    return () => { sound.dispose(); soundRef.current = null; };
+  }, [muted]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -87,6 +96,13 @@ export const AviatorReferenceCanvas: React.FC<Props> = ({
   }, []);
 
   useEffect(() => {
+    const sound = soundRef.current;
+    if (sound) {
+      sound.setVolume(muted ? 0 : 0.5);
+      if (previousPhaseRef.current !== phase && phase === 'running') sound.flightStart();
+      if (previousPhaseRef.current !== phase && phase === 'crashed') sound.crash();
+      if (phase === 'running') sound.updateMultiplier(Number(multiplier || 1));
+    }
     if (previousPhaseRef.current !== phase && phase === 'crashed') {
       const renderer = rendererRef.current;
       if (renderer) {
