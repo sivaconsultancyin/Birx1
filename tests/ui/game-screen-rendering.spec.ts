@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+test.describe.configure({ mode: 'serial' });
+
 async function authenticate(page: any) {
   const mobile = process.env.E2E_TEST_MOBILE;
   const password = process.env.E2E_TEST_PASSWORD;
