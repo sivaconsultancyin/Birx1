@@ -25,6 +25,7 @@ let lastHydratedVersion = 0;
 let authoritativeVersion = 0;
 let currentCrashTarget = generateCrashPoint();
 let aviatorTimer: NodeJS.Timeout | null = null;
+let flightStartedAt = 0;
 let leaseHeartbeat: NodeJS.Timeout | null = null;
 
 function stopLeaseHeartbeat() {
@@ -126,13 +127,14 @@ async function runAviatorCycle() {
 
 async function startAviatorFlight() {
   aviatorState.phase = 'running';
+  flightStartedAt = Date.now();
   aviatorState.multiplier = 1.0;
 
   await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'in_flight', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
 
   broadcastSSE('betting_closed', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
-  const startTime = Date.now();
+  const startTime = flightStartedAt || Date.now();
   const flightInterval = setInterval(async () => {
     const elapsedSec = (Date.now() - startTime) / 1000;
     // Exponential curve: 1 + 0.06 * t^1.7
@@ -204,7 +206,7 @@ async function startAviatorFlight() {
       broadcastSSE('aviator_tick', {
         gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId,
         phase: aviatorState.phase, multiplier: aviatorState.multiplier,
-        countdown: aviatorState.countdown
+        countdown: aviatorState.countdown, serverTime: Date.now(), flightStartedAt
       });
       await persistAviatorState();
     }
@@ -224,6 +226,8 @@ app.get('/api/games/aviator/state', async (req: Request, res: Response) => {
   res.json({
     state: {
       ...aviatorState,
+      serverTime: Date.now(),
+      flightStartedAt,
       currentBet: userId ? (aviatorBets.get(userId) ?? null) : null
     }
   });
