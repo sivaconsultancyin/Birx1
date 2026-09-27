@@ -4,7 +4,7 @@ import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState,
 
 /** Server-authoritative aviator module. All shared infrastructure is injected by the thin router. */
 export function registerAviatorGame(app: any, deps: any) {
-  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastSSE, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
+  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
 const AVIATOR_ROOM_ID = 'aviator-main';
@@ -111,7 +111,7 @@ async function runAviatorCycle() {
   // Bets are keyed by authenticated user and survive the round reset independently.
   currentCrashTarget = generateCrashPoint();
 
-  broadcastSSE('round_started', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
+  broadcastRealtime('round_started', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
   await persistAviatorState();
 
@@ -132,7 +132,7 @@ async function startAviatorFlight() {
 
   await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'in_flight', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
 
-  broadcastSSE('betting_closed', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
+  broadcastRealtime('betting_closed', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
   const startTime = flightStartedAt || Date.now();
   const flightInterval = setInterval(async () => {
@@ -167,7 +167,7 @@ async function startAviatorFlight() {
         }
       }
 
-      broadcastSSE('result', {
+      broadcastRealtime('result', {
         gameId: 'aviator',
         roomId: AVIATOR_ROOM_ID,
         roundId: aviatorState.roundId,
@@ -203,7 +203,7 @@ async function startAviatorFlight() {
       aviatorState.multiplier = nextMult;
       // SSE is the primary high-frequency live transport. Persisting the same tick
       // to Supabase remains available for authoritative resync, but clients do not poll it.
-      broadcastSSE('aviator_tick', {
+      broadcastRealtime('aviator_tick', {
         gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId,
         phase: aviatorState.phase, multiplier: aviatorState.multiplier,
         countdown: aviatorState.countdown, serverTime: Date.now(), flightStartedAt
