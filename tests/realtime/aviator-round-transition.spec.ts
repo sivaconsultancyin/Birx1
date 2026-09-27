@@ -16,17 +16,38 @@ async function login(request: any) {
 
 async function collectAviatorEvents(cookie: string, durationMs: number) {
   const wsUrl = (process.env.BASE_URL || 'http://127.0.0.1:3000').replace(/^http/, 'ws') + '/ws';
+
   return await new Promise<any[]>((resolve, reject) => {
     const events: any[] = [];
+    let collectionTimer: ReturnType<typeof setTimeout> | null = null;
+    const handshakeTimer = setTimeout(() => {
+      ws.close();
+      reject(new Error('WebSocket authentication/handshake timed out'));
+    }, 10000);
+
     const ws = new WebSocket(wsUrl, { headers: { Cookie: cookie } });
-    const timer = setTimeout(() => { ws.close(); resolve(events); }, durationMs);
+
     ws.on('message', raw => {
       try {
         const data = JSON.parse(raw.toString());
-        if (data.gameId === 'aviator' || data.type === 'game_state' && data.gameId === 'aviator') events.push(data);
+        if (data.type === 'connected' && !collectionTimer) {
+          clearTimeout(handshakeTimer);
+          collectionTimer = setTimeout(() => {
+            ws.close();
+            resolve(events);
+          }, durationMs);
+        }
+        if (data.gameId === 'aviator' || (data.type === 'game_state' && data.gameId === 'aviator')) {
+          events.push(data);
+        }
       } catch {}
     });
-    ws.on('error', reject);
+
+    ws.on('error', error => {
+      clearTimeout(handshakeTimer);
+      if (collectionTimer) clearTimeout(collectionTimer);
+      reject(error);
+    });
   });
 }
 
