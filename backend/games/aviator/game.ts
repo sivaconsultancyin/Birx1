@@ -148,8 +148,10 @@ async function startAviatorFlight() {
 
       // If user had an active bet that didn't cash out -> settled as loss
       for (const [userId, currentAviatorBet] of aviatorBets) {
-        await supabaseRepo.settleGameBet(currentAviatorBet.betId, 'lost', currentCrashTarget, 0);
         if (!currentAviatorBet.cashedOut) {
+          try { await supabaseRepo.settleGameBet(currentAviatorBet.betId, 'lost', currentCrashTarget, 0); }
+          catch (e) { console.error('[Aviator] Failed to persist lost bet:', e); }
+
           recordHistory({
           gameId: 'aviator',
           gameName: 'Aviator',
@@ -172,8 +174,9 @@ async function startAviatorFlight() {
       });
 
       const roundStats = aviatorRoundStats.get(aviatorState.roundId) || { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 };
-      await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'result', { crashMultiplier: currentCrashTarget, finishedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
-      await supabaseRepo.recordSettlement({
+      try {
+        await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'result', { crashMultiplier: currentCrashTarget, finishedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
+        await supabaseRepo.recordSettlement({
         id: `av_settlement_${aviatorState.roundId}`,
         roundId: aviatorState.roundId,
         gameId: 'aviator',
@@ -184,7 +187,10 @@ async function startAviatorFlight() {
         outcomeSummary: `Aviator crashed at ${currentCrashTarget}x`,
         details: { crashMultiplier: currentCrashTarget, roomId: AVIATOR_ROOM_ID }
       });
-      await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'settled', { crashMultiplier: currentCrashTarget, settlementId: `av_settlement_${aviatorState.roundId}`, roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
+        await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'settled', { crashMultiplier: currentCrashTarget, settlementId: `av_settlement_${aviatorState.roundId}`, roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
+      } catch (e) {
+        console.error('[Aviator] Round audit persistence failed; live game result remains authoritative:', e);
+      }
       aviatorRoundStats.delete(aviatorState.roundId);
 
       // Persist the terminal state, then start the next round in the same permanent room.
@@ -237,7 +243,23 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
 
   const betId = `av_bet_${crypto.randomUUID()}`;
   const idempotencyKey = `aviator_bet_${aviatorState.roundId}_${req.user!.id}`;
-  try { await debitForUser(req, numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator', idempotencyKey); } catch (e: any) {
+
+  // Persist the bet before wallet mutation so a DB/E2E failure can never leave a
+  // successfully debited wallet with no corresponding bet row.
+  try {
+    await supabaseRepo.recordGameBet({
+      id: betId, roundId: aviatorState.roundId, userId: req.user!.id, gameId: 'aviator',
+      betType: 'aviator', betValue: { roomId: AVIATOR_ROOM_ID }, amount: numAmount,
+      status: 'placed', idempotencyKey
+    });
+  } catch (e: any) {
+    return res.status(503).json({ error: 'Game database is temporarily unavailable' });
+  }
+
+  try {
+    await debitForUser(req, numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator', idempotencyKey);
+  } catch (e: any) {
+    try { await supabaseRepo.settleGameBet(betId, 'cancelled' as any, 0, 0); } catch {}
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
@@ -251,11 +273,6 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
   roundStats.totalBets += 1;
   roundStats.totalBetAmount += numAmount;
   aviatorRoundStats.set(aviatorState.roundId, roundStats);
-  await supabaseRepo.recordGameBet({
-    id: betId, roundId: aviatorState.roundId, userId: req.user!.id, gameId: 'aviator',
-    betType: 'aviator', betValue: { roomId: AVIATOR_ROOM_ID }, amount: numAmount,
-    status: 'placed', idempotencyKey
-  });
   await persistAviatorState();
 
   return res.json({
@@ -286,7 +303,11 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async
   aviatorBets.delete(req.user!.id);
 
   await creditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator', `aviator_payout_${currentAviatorBet.betId}`);
-  await supabaseRepo.settleGameBet(currentAviatorBet.betId, 'won', cashMultiplier, payout);
+  try {
+    await supabaseRepo.settleGameBet(currentAviatorBet.betId, 'won', cashMultiplier, payout);
+  } catch (e) {
+    console.error('[Aviator] Cashout wallet credited but bet audit persistence failed:', e);
+  }
   const roundStats = aviatorRoundStats.get(aviatorState.roundId) || { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 };
   roundStats.totalPayoutAmount += payout;
   aviatorRoundStats.set(aviatorState.roundId, roundStats);
