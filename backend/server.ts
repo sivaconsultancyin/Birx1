@@ -226,6 +226,21 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
 });
 
+app.get('/api/ready', async (_req: Request, res: Response) => {
+  try {
+    const db = await supabaseRepo.checkConnectivity();
+    if (!db.configured) {
+      return res.status(503).json({ status: 'not_ready', reason: 'supabase_not_configured' });
+    }
+    if (!db.reachable) {
+      return res.status(503).json({ status: 'not_ready', reason: 'supabase_unreachable' });
+    }
+    return res.json({ status: 'ready', dependencies: { supabase: 'ok' }, timestamp: Date.now() });
+  } catch {
+    return res.status(503).json({ status: 'not_ready', reason: 'dependency_check_failed' });
+  }
+});
+
 // -------------------------------------------------------------
  // AUTH ENDPOINTS
  // -------------------------------------------------------------
