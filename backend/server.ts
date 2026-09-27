@@ -590,7 +590,7 @@ if (!skipGameLoops) {
 const startServer = async () => {
   try {
     const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction) {
+    // Browsers request /favicon.ico automatically; return an explicit empty response so this is not a real missing resource.\n    app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204).end());\n    if (isProduction) {
       const distPath = path.resolve(process.cwd(), 'dist');
       app.use(express.static(distPath));
       app.get('*', (req: Request, res: Response, next: NextFunction) => {
