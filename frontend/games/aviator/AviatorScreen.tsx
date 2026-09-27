@@ -5,6 +5,7 @@ import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts'
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
 import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
+import { AviatorReferenceCanvas } from './AviatorReferenceCanvas';
 
 interface AviatorScreenProps {
   wallet: Wallet;
@@ -231,61 +232,19 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
           </div>
 
           <section className="aviator-reference-arena">
-            <div className="aviator-stars" aria-hidden="true">
-              {Array.from({ length: 34 }, (_, i) => <i key={i} style={{ ['--i' as any]: i }} />)}
-            </div>
-            <div className="aviator-cloud cloud-one" />
-            <div className="aviator-cloud cloud-two" />
-
+            <AviatorReferenceCanvas
+              phase={phase}
+              multiplier={multiplier}
+              crashMultiplier={gameState?.crashMultiplier}
+              countdown={gameState?.countdown}
+              muted={muted}
+              onToggleMute={() => setMuted((v) => !v)}
+            />
             <div className="aviator-arena-top">
               <span className="aviator-round-id">ROUND {gameState?.roundId || 'AV-SYNC'}</span>
               <span className={`aviator-status ${isRunning ? 'running' : isCrashed ? 'crashed' : 'waiting'}`}>
                 {isRunning ? 'FLYING AWAY' : isCrashed ? `FLEW AWAY · ${(gameState?.crashMultiplier || multiplier).toFixed(2)}x` : `NEXT FLIGHT · ${gameState?.countdown || 5}s`}
               </span>
-            </div>
-
-            <svg className="aviator-reference-curve" viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true">
-              <defs>
-                <linearGradient id="aviatorCurve" x1="0%" y1="100%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#ff2d55" stopOpacity=".18" />
-                  <stop offset="55%" stopColor="#ff4b3e" stopOpacity=".55" />
-                  <stop offset="100%" stopColor="#ff9f43" stopOpacity=".95" />
-                </linearGradient>
-                <linearGradient id="aviatorFill" x1="0%" y1="100%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#ff2d55" stopOpacity=".02" />
-                  <stop offset="100%" stopColor="#ff7a45" stopOpacity=".22" />
-                </linearGradient>
-              </defs>
-              <path d={`M 0 550 C 180 540, 250 ${500 - progress * 100}, 390 ${460 - progress * 210} S 670 ${300 - progress * 200}, 1000 ${60 - progress * 40}`} fill="none" stroke="url(#aviatorCurve)" strokeWidth="6" strokeLinecap="round" />
-              <path d={`M 0 550 C 180 540, 250 ${500 - progress * 100}, 390 ${460 - progress * 210} S 670 ${300 - progress * 200}, 1000 ${60 - progress * 40} L 1000 560 L 0 560 Z`} fill="url(#aviatorFill)" />
-            </svg>
-
-            <div className={`aviator-reference-multiplier ${isCrashed ? 'crashed' : ''}`}>
-              {isCrashed && <div className="aviator-flew-away">FLEW AWAY</div>}
-              <strong>{isCrashed ? (gameState?.crashMultiplier || multiplier).toFixed(2) : isRunning ? multiplier.toFixed(2) : '1.00'}x</strong>
-              {!isRunning && !isCrashed && <span>WAITING FOR TAKEOFF</span>}
-            </div>
-
-            {isRunning && (
-              <div className="aviator-reference-plane" style={{ left: `${planeX}%`, top: `${planeY}%` }}>
-                <Plane size={58} fill="currentColor" />
-                <span />
-              </div>
-            )}
-
-            {!isRunning && !isCrashed && (
-              <div className="aviator-takeoff">
-                <span>FLIGHT STARTS IN</span>
-                <strong>{gameState?.countdown || 5}</strong>
-              </div>
-            )}
-
-            <div className="aviator-arena-tools">
-              <button type="button" onClick={() => setMuted((v) => !v)} aria-label="Toggle sound">
-                {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
-              </button>
-              <button type="button" onClick={() => setShowMenu(true)} aria-label="Open menu"><Menu size={17} /></button>
-              <button type="button" onClick={() => setShowChat(true)} aria-label="Open chat"><MessageCircle size={17} /></button>
             </div>
           </section>
 
