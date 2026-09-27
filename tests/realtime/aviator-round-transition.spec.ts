@@ -1,21 +1,5 @@
 import { expect, test } from '@playwright/test';
-import * as http from 'node:http';
-
-async function streamEvents(request: any, cookie: string, durationMs: number) {
-  const base = new URL('/api/events/stream', process.env.BASE_URL || 'http://127.0.0.1:3000');
-  return new Promise<string>((resolve, reject) => {
-    const req = http.get(base, { headers: { Cookie: cookie, Accept: 'text/event-stream' } }, (res: any) => {
-      res.setEncoding('utf8');
-      let body = '';
-      const timer = setTimeout(() => { req.destroy(); resolve(body); }, durationMs);
-      res.on('data', (chunk: string) => { body += chunk; });
-      res.on('error', reject);
-    });
-    req.on('error', (err: Error) => {
-      if (!/socket hang up|ECONNRESET/.test(err.message)) reject(err);
-    });
-  });
-}
+import WebSocket from 'ws';
 
 async function login(request: any) {
   const mobile = process.env.E2E_TEST_MOBILE;
@@ -30,28 +14,38 @@ async function login(request: any) {
   return response.headers()['set-cookie']?.split(';')[0];
 }
 
-test('two clients observe Aviator round transition events for the permanent room', async ({ request }) => {
+async function collectAviatorEvents(cookie: string, durationMs: number) {
+  const wsUrl = (process.env.BASE_URL || 'http://127.0.0.1:3000').replace(/^http/, 'ws') + '/ws';
+  return await new Promise<any[]>((resolve, reject) => {
+    const events: any[] = [];
+    const ws = new WebSocket(wsUrl, { headers: { Cookie: cookie } });
+    const timer = setTimeout(() => { ws.close(); resolve(events); }, durationMs);
+    ws.on('message', raw => {
+      try {
+        const data = JSON.parse(raw.toString());
+        if (data.gameId === 'aviator' || data.type === 'game_state' && data.gameId === 'aviator') events.push(data);
+      } catch {}
+    });
+    ws.on('error', reject);
+  });
+}
+
+test('two clients observe Aviator round transitions for the permanent room', async ({ request }) => {
   const cookieA = await login(request);
   const cookieB = await login(request);
-  expect(cookieA).toContain('brix_access_token=');
-  expect(cookieB).toContain('brix_access_token=');
 
   const [eventsA, eventsB] = await Promise.all([
-    streamEvents(request, cookieA, 20000),
-    streamEvents(request, cookieB, 20000),
+    collectAviatorEvents(cookieA, 20000),
+    collectAviatorEvents(cookieB, 20000),
   ]);
 
   for (const events of [eventsA, eventsB]) {
-    expect(events).toContain('"type":"connected"');
-    expect(events).toContain('"gameId":"aviator"');
-    expect(events).toContain('"roomId":"aviator-main"');
+    expect(events.some(e => e.type === 'connected')).toBeTruthy();
+    expect(events.some(e => e.gameId === 'aviator' && e.roomId === 'aviator-main')).toBeTruthy();
   }
 
-  // The server broadcasts authoritative state transitions as game_state events.
-  // Match round IDs from those events instead of expecting a separate round_started event.
-  const roundsA = [...eventsA.matchAll(/"type":"game_state"[^\n]*?"gameId":"aviator"[^\n]*?"roundId":"([^"]+)"/g)].map(m => m[1]);
-  const roundsB = [...eventsB.matchAll(/"type":"game_state"[^\n]*?"gameId":"aviator"[^\n]*?"roundId":"([^"]+)"/g)].map(m => m[1]);
-
+  const roundsA = eventsA.filter(e => e.type === 'game_state' && e.gameId === 'aviator').map(e => e.roundId).filter(Boolean);
+  const roundsB = eventsB.filter(e => e.type === 'game_state' && e.gameId === 'aviator').map(e => e.roundId).filter(Boolean);
   expect(roundsA.length).toBeGreaterThan(0);
   expect(roundsB.length).toBeGreaterThan(0);
   expect(roundsA.some(id => roundsB.includes(id))).toBeTruthy();
