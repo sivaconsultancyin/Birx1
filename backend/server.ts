@@ -566,7 +566,7 @@ app.get('/api/games/history', requireAuth, requirePlayerForGames, (_req: Request
 // -------------------------------------------------------------
 const gameModuleDeps = {
   supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService,
-  recordHistory, broadcastSSE, acquireGameLease, safeSaveAuthoritativeGameState,
+  recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState,
   safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser,
   generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands,
   computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState,
