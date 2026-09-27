@@ -4,7 +4,7 @@ import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState,
 
 /** Server-authoritative roulette module. All shared infrastructure is injected by the thin router. */
 export function registerRouletteGame(app: any, deps: any) {
-  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastSSE, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
+  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
 // Exact European Roulette wheel sequence (37 pockets, single 0)
@@ -270,7 +270,7 @@ setInterval(async () => {
     if (rouletteState.countdown <= 0) {
       rouletteState.phase = 'closed';
       rouletteState.countdown = 2;
-      broadcastSSE('roulette_betting_closed', { roundId: rouletteState.roundId });
+      broadcastRealtime('roulette_betting_closed', { roundId: rouletteState.roundId });
     }
   } else if (rouletteState.phase === 'closed') {
     rouletteState.countdown -= 1;
@@ -283,7 +283,7 @@ setInterval(async () => {
       rouletteState.winningNumber = winningNum;
       rouletteState.winningColor = winningNum === 0 ? 'green' : RED_NUMBERS.includes(winningNum) ? 'red' : 'black';
 
-      broadcastSSE('roulette_spin_started', {
+      broadcastRealtime('roulette_spin_started', {
         roundId: rouletteState.roundId,
         winningNumber: winningNum,
         winningColor: rouletteState.winningColor,
@@ -343,14 +343,14 @@ setInterval(async () => {
         recentResults: rouletteState.recentResults
       };
 
-      broadcastSSE('roulette_result', {
+      broadcastRealtime('roulette_result', {
         roundId: rouletteState.roundId,
         winningNumber: winningNum,
         winningColor: settlement.winningColor,
         winningCategory: settlement.winningCategory
       });
-      broadcastSSE('roulette_settlement', roundSettlements[rouletteState.roundId]);
-      broadcastSSE('roulette_wallet_updated', { gameId: 'roulette' });
+      broadcastRealtime('roulette_settlement', roundSettlements[rouletteState.roundId]);
+      broadcastRealtime('roulette_wallet_updated', { gameId: 'roulette' });
     }
   } else if (rouletteState.phase === 'result') {
     rouletteState.countdown -= 1;
@@ -363,11 +363,11 @@ setInterval(async () => {
       rouletteState.serverSeedHash = 'd3b07384d113edec49eaa6238ad5ff00' + crypto.randomBytes(4).toString('hex');
       currentRoundBets[newRoundId] = [];
 
-      broadcastSSE('roulette_round_started', {
+      broadcastRealtime('roulette_round_started', {
         roundId: newRoundId,
         countdown: 15
       });
-      broadcastSSE('roulette_betting_open', {
+      broadcastRealtime('roulette_betting_open', {
         roundId: newRoundId,
         countdown: 15
       });
@@ -501,7 +501,7 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
     processedRouletteIdempotency.set(idempotencyKey, responsePayload);
   }
 
-  broadcastSSE('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
+  broadcastRealtime('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
   return res.json(responsePayload);
 };
 app.post('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handlePostRouletteBets);
@@ -626,10 +626,10 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
     processedRouletteIdempotency.set(idempotencyKey, fullSettlementResult);
   }
 
-  broadcastSSE('roulette_spin_started', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor });
-  broadcastSSE('roulette_result', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, category: settlement.winningCategory });
-  broadcastSSE('roulette_settlement', fullSettlementResult);
-  broadcastSSE('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
+  broadcastRealtime('roulette_spin_started', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor });
+  broadcastRealtime('roulette_result', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, category: settlement.winningCategory });
+  broadcastRealtime('roulette_settlement', fullSettlementResult);
+  broadcastRealtime('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
 
   return res.json(fullSettlementResult);
 };
