@@ -590,7 +590,9 @@ if (!skipGameLoops) {
 const startServer = async () => {
   try {
     const isProduction = process.env.NODE_ENV === 'production';
-    // Browsers request /favicon.ico automatically; return an explicit empty response so this is not a real missing resource.\n    app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204).end());\n    if (isProduction) {
+    // Browsers request /favicon.ico automatically; return an explicit empty response so this is not a real missing resource.
+    app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204).end());
+    if (isProduction) {
       const distPath = path.resolve(process.cwd(), 'dist');
       app.use(express.static(distPath));
       app.get('*', (req: Request, res: Response, next: NextFunction) => {
@@ -614,7 +616,9 @@ const startServer = async () => {
       try {
         const user = await authenticateWebSocketRequest(req);
         if (!user) {
-          socket.write('HTTP/1.1 401 Unauthorized\\r\\n\\r\\n');
+          socket.write('HTTP/1.1 401 Unauthorized\\r\
+\\r\
+');
           socket.destroy();
           return;
         }
