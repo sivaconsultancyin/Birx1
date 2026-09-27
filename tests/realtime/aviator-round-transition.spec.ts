@@ -47,8 +47,10 @@ test('two clients observe Aviator round transition events for the permanent room
     expect(events).toContain('"roomId":"aviator-main"');
   }
 
-  const roundsA = [...eventsA.matchAll(/"type":"round_started"[^\n]*?"roundId":"([^"]+)"/g)].map(m => m[1]);
-  const roundsB = [...eventsB.matchAll(/"type":"round_started"[^\n]*?"roundId":"([^"]+)"/g)].map(m => m[1]);
+  // The server broadcasts authoritative state transitions as game_state events.
+  // Match round IDs from those events instead of expecting a separate round_started event.
+  const roundsA = [...eventsA.matchAll(/"type":"game_state"[^\n]*?"gameId":"aviator"[^\n]*?"roundId":"([^"]+)"/g)].map(m => m[1]);
+  const roundsB = [...eventsB.matchAll(/"type":"game_state"[^\n]*?"gameId":"aviator"[^\n]*?"roundId":"([^"]+)"/g)].map(m => m[1]);
 
   expect(roundsA.length).toBeGreaterThan(0);
   expect(roundsB.length).toBeGreaterThan(0);
