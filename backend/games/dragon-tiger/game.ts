@@ -4,7 +4,7 @@ import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState,
 
 /** Server-authoritative dragon-tiger module. All shared infrastructure is injected by the thin router. */
 export function registerDragonTigerGame(app: any, deps: any) {
-  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastSSE, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
+  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
 let dragonTigerState: DragonTigerState = {
@@ -60,7 +60,7 @@ app.post('/api/games/dragon-tiger/deal', requireAuth, requirePlayerForGames, asy
   if (dragonTigerState.recentResults.length > 15) dragonTigerState.recentResults.pop();
   dragonTigerState.roundId = 'DT-' + crypto.randomInt(1000, 10000);
 
-  broadcastSSE('dragon_tiger_result', {
+  broadcastRealtime('dragon_tiger_result', {
     gameId: 'dragon-tiger',
     roundId: dragonTigerState.roundId,
     dragonCard,
