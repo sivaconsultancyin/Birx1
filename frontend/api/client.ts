@@ -458,80 +458,47 @@ export const gamesApi = {
 };
 
 // -------------------------------------------------------------
-// REALTIME SSE SUBSCRIBER
+// -------------------------------------------------------------
+// WEBSOCKET REALTIME SUBSCRIBER
 // -------------------------------------------------------------
 export function subscribeToRealtimeEvents(onEvent: (payload: RealtimeEventPayload) => void): () => void {
-  try {
-    const eventSource = new EventSource('/api/events/stream', { withCredentials: true });
+  let socket: WebSocket | null = null;
+  let closed = false;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const handleGenericEvent = (e: MessageEvent, name: string) => {
+  const connect = () => {
+    if (closed) return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+    socket.onmessage = (event) => {
       try {
-        const parsed = JSON.parse(e.data);
-        onEvent({
-          event: name as any,
-          data: parsed,
-          timestamp: Date.now()
-        });
+        const parsed = JSON.parse(event.data);
+        const name = parsed.type || 'message';
+        onEvent({ event: name as any, data: parsed, timestamp: Date.now() });
       } catch {
-        // ignore parse error
+        // Ignore malformed realtime payloads.
       }
     };
 
-    const eventNames = [
-      'round_started',
-      'betting_open',
-      'betting_closed',
-      'card_revealed',
-      'result',
-      'settlement',
-      'wallet_updated',
-      'teen_patti_round_started',
-      'teen_patti_betting_open',
-      'teen_patti_betting_closed',
-      'teen_patti_dealing_started',
-      'teen_patti_dealer_revealed',
-      'teen_patti_result',
-      'teen_patti_settlement',
-      'teen_patti_bet_placed',
-      'aviator_tick',
-      'andar_bahar_state_update',
-      'andar_bahar_shuffling',
-      'andar_bahar_dealing',
-      'andar_bahar_settled',
-      'roulette_round_started',
-      'roulette_betting_open',
-      'roulette_betting_closed',
-      'roulette_spin_started',
-      'roulette_result',
-      'roulette_settlement',
-      'dice_result',
-      'dragon_tiger_result'
-    ];
-
-    eventNames.forEach((evtName) => {
-      eventSource.addEventListener(evtName, (e) => handleGenericEvent(e as MessageEvent, evtName));
-    });
-
-    eventSource.onmessage = (e) => {
-      try {
-        const parsed = JSON.parse(e.data);
-        const evt = parsed.type || 'message';
-        onEvent({
-          event: evt as any,
-          data: parsed,
-          timestamp: Date.now()
-        });
-      } catch {
-        // ignore parse error
-      }
+    socket.onclose = () => {
+      if (closed) return;
+      reconnectTimer = setTimeout(connect, 1000);
     };
 
-    return () => {
-      eventSource.close();
+    socket.onerror = () => {
+      socket?.close();
     };
-  } catch {
-    return () => {};
-  }
+  };
+
+  connect();
+
+  return () => {
+    closed = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    socket?.close();
+    socket = null;
+  };
 }
 
 export function subscribeToEvents(onEvent: (event: { type: string; data?: any }) => void): () => void {
@@ -542,4 +509,3 @@ export function subscribeToEvents(onEvent: (event: { type: string; data?: any })
     });
   });
 }
-
