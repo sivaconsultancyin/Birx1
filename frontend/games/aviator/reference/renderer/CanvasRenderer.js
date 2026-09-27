@@ -33,7 +33,7 @@ export class CanvasRenderer {
     this._canvas.height = height * this._dpr;
     this._canvas.style.width = width + 'px';
     this._canvas.style.height = height + 'px';
-    this._ctx.scale(this._dpr, this._dpr);
+    this._ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
 
     this._background.resize(width, height);
     this._flightPath.resize(width, height);
