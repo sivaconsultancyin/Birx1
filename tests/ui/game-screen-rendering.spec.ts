@@ -34,8 +34,10 @@ test('all user-visible game screens render without browser errors', async ({ pag
       await page.locator(`#btn-play-${id}`).click();
       await expect(page.getByText(heading).first()).toBeVisible({ timeout: 10000 });
       await expect(page.locator('body')).not.toContainText(/Supabase unavailable/i);
-      await page.goBack();
-      await expect(page.locator('#screen-games')).toBeVisible({ timeout: 10000 });
+      await page.goto('/');
+      await expect(page.locator('#bottom-navigation')).toBeVisible({ timeout: 15000 });
+      await page.locator('#nav-tab-games').click();
+      await expect(page.locator('#screen-games')).toBeVisible({ timeout: 15000 });
     });
   }
 
