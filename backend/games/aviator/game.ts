@@ -19,6 +19,8 @@ let aviatorState: AviatorState = {
 };
 
 const aviatorBets = new Map<string, AviatorBet>();
+const aviatorRoundStats = new Map<string, { totalBets: number; totalBetAmount: number; totalPayoutAmount: number }>();
+let aviatorRoundSequence = Date.now();
 let lastHydratedVersion = 0;
 let authoritativeVersion = 0;
 let currentCrashTarget = generateCrashPoint();
@@ -101,7 +103,10 @@ async function runAviatorCycle() {
   aviatorState.multiplier = 1.0;
   aviatorState.crashMultiplier = null;
   aviatorState.countdown = 5;
-  aviatorState.roundId = 'AV-' + crypto.randomInt(1000, 10000);
+  aviatorState.roundId = 'AV-' + crypto.randomInt(1000, 10000) + '-' + crypto.randomUUID().slice(0, 8);
+  aviatorRoundSequence += 1;
+  aviatorRoundStats.set(aviatorState.roundId, { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 });
+  await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'betting', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
   // Bets are keyed by authenticated user and survive the round reset independently.
   currentCrashTarget = generateCrashPoint();
 
@@ -123,6 +128,8 @@ async function startAviatorFlight() {
   aviatorState.phase = 'running';
   aviatorState.multiplier = 1.0;
 
+  await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'in_flight', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
+
   broadcastSSE('betting_closed', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
   const startTime = Date.now();
@@ -141,6 +148,7 @@ async function startAviatorFlight() {
 
       // If user had an active bet that didn't cash out -> settled as loss
       for (const [userId, currentAviatorBet] of aviatorBets) {
+        await supabaseRepo.settleGameBet(currentAviatorBet.betId, 'lost', currentCrashTarget, 0);
         if (!currentAviatorBet.cashedOut) {
           recordHistory({
           gameId: 'aviator',
@@ -162,6 +170,22 @@ async function startAviatorFlight() {
         multiplier: currentCrashTarget,
         crashed: true
       });
+
+      const roundStats = aviatorRoundStats.get(aviatorState.roundId) || { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 };
+      await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'result', { crashMultiplier: currentCrashTarget, finishedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
+      await supabaseRepo.recordSettlement({
+        id: `av_settlement_${aviatorState.roundId}`,
+        roundId: aviatorState.roundId,
+        gameId: 'aviator',
+        totalBetsCount: roundStats.totalBets,
+        totalBetAmount: roundStats.totalBetAmount,
+        totalPayoutAmount: roundStats.totalPayoutAmount,
+        netHouseResult: roundStats.totalBetAmount - roundStats.totalPayoutAmount,
+        outcomeSummary: `Aviator crashed at ${currentCrashTarget}x`,
+        details: { crashMultiplier: currentCrashTarget, roomId: AVIATOR_ROOM_ID }
+      });
+      await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'settled', { crashMultiplier: currentCrashTarget, settlementId: `av_settlement_${aviatorState.roundId}`, roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
+      aviatorRoundStats.delete(aviatorState.roundId);
 
       // Persist the terminal state, then start the next round in the same permanent room.
       await persistAviatorState();
@@ -223,6 +247,15 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
     cashedOut: false
   };
   aviatorBets.set(req.user!.id, currentAviatorBet);
+  const roundStats = aviatorRoundStats.get(aviatorState.roundId) || { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 };
+  roundStats.totalBets += 1;
+  roundStats.totalBetAmount += numAmount;
+  aviatorRoundStats.set(aviatorState.roundId, roundStats);
+  await supabaseRepo.recordGameBet({
+    id: betId, roundId: aviatorState.roundId, userId: req.user!.id, gameId: 'aviator',
+    betType: 'aviator', betValue: { roomId: AVIATOR_ROOM_ID }, amount: numAmount,
+    status: 'placed', idempotencyKey
+  });
   await persistAviatorState();
 
   return res.json({
@@ -252,7 +285,11 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async
   currentAviatorBet.winAmount = payout;
   aviatorBets.delete(req.user!.id);
 
-  await creditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator');
+  await creditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator', `aviator_payout_${currentAviatorBet.betId}`);
+  await supabaseRepo.settleGameBet(currentAviatorBet.betId, 'won', cashMultiplier, payout);
+  const roundStats = aviatorRoundStats.get(aviatorState.roundId) || { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 };
+  roundStats.totalPayoutAmount += payout;
+  aviatorRoundStats.set(aviatorState.roundId, roundStats);
   await persistAviatorState();
 
   recordHistory({
