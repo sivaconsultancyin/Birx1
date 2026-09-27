@@ -4,7 +4,7 @@ import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState,
 
 /** Server-authoritative dice module. All shared infrastructure is injected by the thin router. */
 export function registerDiceGame(app: any, deps: any) {
-  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastSSE, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
+  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
 let diceState: DiceState = {
@@ -60,7 +60,7 @@ app.post('/api/games/dice/roll', requireAuth, requirePlayerForGames, async (req:
   if (diceState.recentSums.length > 10) diceState.recentSums.pop();
   diceState.roundId = 'DC-' + crypto.randomInt(1000, 10000);
 
-  broadcastSSE('dice_result', {
+  broadcastRealtime('dice_result', {
     gameId: 'dice',
     roundId: diceState.roundId,
     dice1: d1,
