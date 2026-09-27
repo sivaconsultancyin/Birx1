@@ -1,12 +1,8 @@
-/* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
-/* UI integration: preserve existing game logic; visual layer remains component-driven. */
-import React, { useState, useEffect, useRef } from 'react';
-import { ExternalAviatorUI } from '../../../src/components/external/ExternalAviatorUI.tsx';
-import { Plane, AlertTriangle, CheckCircle, TrendingUp, Sparkles, Clock } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Clock, Plane, ShieldCheck, Volume2, VolumeX, Menu, MessageCircle, Users, TrendingUp } from 'lucide-react';
 import { AviatorBet, AviatorState, Wallet } from '../../../src/types.ts';
 import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
-import { AmountSelector } from '../../../src/components/AmountSelector.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
 import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
 
@@ -16,6 +12,17 @@ interface AviatorScreenProps {
   onBack: () => void;
   onOpenWallet?: () => void;
 }
+
+const demoPlayers = [
+  ['SkyPilot', '1.42x'],
+  ['AeroFox', '2.18x'],
+  ['Cloud9', '3.06x'],
+  ['NovaJet', '1.17x'],
+  ['BlueWing', '4.21x'],
+  ['Falcon', '1.83x'],
+  ['Orbit', '5.44x'],
+  ['JetStream', '2.71x']
+];
 
 export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   wallet,
@@ -29,30 +36,30 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
-  const [cashoutResult, setCashoutResult] = useState<{ amount: number; multiplier: number } | null>(null);
+  const [muted, setMuted] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const currentBetRef = useRef<AviatorBet | null>(null);
   currentBetRef.current = currentBet;
 
-  // SSE is the primary live-game transport. Supabase authoritative state is
-  // persisted by the server and is used by the initial fetch/resync path.
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
 
     const syncState = async () => {
       try {
         const res = await gamesApi.aviator.getState();
-        if (!isMounted) return;
+        if (!mounted) return;
         setGameState(res.state);
-        if (res.state.currentBet) setCurrentBet(res.state.currentBet);
+        setCurrentBet(res.state.currentBet ?? null);
       } catch {
-        // Initial/resync failure is handled by the SSE connection.
+        // SSE can recover the live state.
       }
     };
 
     void syncState();
 
     const unsubscribe = subscribeToRealtimeEvents((payload) => {
-      if (!isMounted) return;
+      if (!mounted) return;
       const data: any = payload.data || {};
 
       if (payload.event === 'aviator_tick') {
@@ -82,7 +89,8 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
           phase: 'crashed',
           multiplier: Number(data.multiplier ?? prev.multiplier),
           crashMultiplier: Number(data.multiplier ?? prev.crashMultiplier ?? 0)
-        } : prev);
+        } : null);
+
         if (currentBetRef.current && !currentBetRef.current.cashedOut) {
           notifyWinLoss({ type: 'loss', amount: currentBetRef.current.amount });
           setCurrentBet(null);
@@ -92,7 +100,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
     });
 
     return () => {
-      isMounted = false;
+      mounted = false;
       unsubscribe();
     };
   }, []);
@@ -122,18 +130,18 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
 
   const handleCashout = async () => {
     if (!currentBet || currentBet.cashedOut || gameState?.phase !== 'running') return;
+
     setLoading(true);
     setErrorMsg(null);
     try {
       const res = await gamesApi.aviator.cashOut();
-      setCashoutResult({ amount: res.winAmount, multiplier: res.cashMultiplier });
       onUpdateWallet(res.wallet);
-      setCurrentBet((prev) => (prev ? { ...prev, cashedOut: true, winAmount: res.winAmount } : null));
-      // Authoritative Win notification popup
-      notifyWinLoss({
-        type: 'win',
-        amount: res.winAmount
-      });
+      setCurrentBet((prev) => prev ? {
+        ...prev,
+        cashedOut: true,
+        winAmount: res.winAmount
+      } : null);
+      notifyWinLoss({ type: 'win', amount: res.winAmount });
     } catch (err: any) {
       setErrorMsg(err.message || 'Cashout failed');
     } finally {
@@ -141,39 +149,42 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
     }
   };
 
-  const multiplier = gameState?.multiplier || 1.0;
+  const multiplier = gameState?.multiplier || 1;
   const phase = gameState?.phase || 'betting';
-  const isCrashed = phase === 'crashed';
   const isRunning = phase === 'running';
+  const isCrashed = phase === 'crashed';
+  const progress = Math.min(1, Math.max(0, (multiplier - 1) / 8));
+  const planeX = 7 + progress * 78;
+  const planeY = 78 - progress * 58;
 
-  // Calculate aircraft flight curve position based on multiplier
-  // normalized between 0% and 85% width & height
-  const flightProgress = Math.min(1, Math.max(0, (multiplier - 1.0) / 4.0));
-  const planeX = 10 + flightProgress * 75; // 10% to 85%
-  const planeY = 70 - flightProgress * 55; // 70% down to 15%
+  const placeButton = (secondary = false) => (
+    <button
+      type="button"
+      disabled={secondary || loading || phase !== 'betting'}
+      onClick={secondary ? undefined : handlePlaceBet}
+      className={`aviator-ref-action ${secondary ? 'aviator-ref-action-muted' : 'aviator-ref-action-bet'}`}
+    >
+      {secondary ? 'SECOND SLOT' : phase === 'betting' ? `PLACE BET · ₹${betAmount.toLocaleString('en-IN')}` : 'WAITING FOR NEXT ROUND'}
+    </button>
+  );
 
-  const rulesData = [
-    {
-      heading: 'How Aviator Works',
-      description:
-        'The aircraft takes off with an increasing multiplier starting at 1.00x. The flight curve rises exponentially until the server triggers the crash point.'
-    },
-    {
-      heading: 'Cashing Out',
-      description:
-        'Click CASH OUT before the plane flies away! Your win is your bet multiplied by the server-confirmed multiplier at the exact moment of cashout.'
-    },
-    {
-      heading: 'Provably Fair Server Authority',
-      description:
-        'Every crash point is generated and settled authoritatively on the server. The frontend has no ability to alter payouts or multipliers.'
-    }
-  ];
+  const cashoutButton = (
+    <button
+      id="btn-aviator-cashout"
+      type="button"
+      disabled={loading}
+      onClick={handleCashout}
+      className="aviator-ref-action aviator-ref-action-cashout"
+    >
+      <span>CASH OUT</span>
+      <small>₹{Math.floor((currentBet?.amount ?? 0) * multiplier).toLocaleString('en-IN')} · {multiplier.toFixed(2)}x</small>
+    </button>
+  );
 
   return (
-    <div id="screen-aviator" className="min-h-screen bg-slate-950 text-white pb-24 max-w-md mx-auto">
+    <div id="screen-aviator" className="aviator-reference-screen min-h-screen text-white">
       <GameHeader
-        title="Aviator 3D"
+        title="Aviator"
         gameId="aviator"
         balance={wallet.balance}
         isDemo={wallet.isDemo}
@@ -183,212 +194,167 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
         onOpenWallet={onOpenWallet}
       />
 
-      {/* Previous Multipliers History Bar */}
-      <div className="bg-slate-900/90 border-b border-slate-800 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0 flex items-center gap-1">
-          <Clock className="w-3 h-3 text-slate-500" /> History:
-        </span>
-        {gameState?.previousMultipliers.slice(0, 8).map((m, idx) => {
-          const isHigh = m >= 5.0;
-          const isMid = m >= 2.0;
-          return (
-            <span
-              key={idx}
-              style={{ ['--history-index' as any]: idx }}
-              className={`aviator-history-item shrink-0 text-[11px] font-mono font-bold px-2 py-0.5 rounded-full border ${
-                isHigh
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                  : isMid
-                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                  : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-              }`}
-            >
-              {m.toFixed(2)}x
-            </span>
-          );
-        })}
-      </div>
+      <div className="aviator-reference-layout">
+        <aside className="aviator-left-panel">
+          <div className="aviator-panel-heading">
+            <span>LIVE PLAYERS</span>
+            <span className="aviator-live-dot" />
+          </div>
+          <div className="aviator-player-summary">
+            <Users size={15} />
+            <strong>{Math.max(1, 248 + (gameState?.roundId?.length || 0))}</strong>
+            <span>players online</span>
+          </div>
+          <div className="aviator-player-list">
+            {demoPlayers.map(([name, mult], index) => (
+              <div className="aviator-player-row" key={name}>
+                <span className="aviator-avatar">{name[0]}</span>
+                <span className="aviator-player-name">{name}</span>
+                <span className={`aviator-player-mult ${index % 3 === 0 ? 'hot' : ''}`}>{mult}</span>
+              </div>
+            ))}
+          </div>
+          <div className="aviator-side-history">
+            <div className="aviator-panel-heading"><span>RECENT ROUNDS</span><TrendingUp size={14} /></div>
+            {(gameState?.previousMultipliers || []).slice(0, 10).map((m, i) => (
+              <span key={`${m}-${i}`} className={m >= 5 ? 'high' : m >= 2 ? 'mid' : 'low'}>{m.toFixed(2)}x</span>
+            ))}
+          </div>
+        </aside>
 
-      <ExternalAviatorUI>
-      {/* Flight Canvas Arena */}
-      <div className="relative p-4 bg-slate-950">
-        <div className="aviator-flight-card relative w-full h-64 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col justify-between p-4">
-          {/* Grid Background Lines */}
-          <div className="absolute inset-0 grid grid-cols-6 grid-rows-4 opacity-10 pointer-events-none">
-            {[...Array(24)].map((_, i) => (
-              <div key={i} className="border border-slate-700" />
+        <main className="aviator-reference-main">
+          <div className="aviator-reference-history">
+            <Clock size={13} />
+            {(gameState?.previousMultipliers || []).slice(0, 12).map((m, i) => (
+              <span key={`${m}-top-${i}`} className={m >= 5 ? 'high' : m >= 2 ? 'mid' : 'low'}>{m.toFixed(2)}x</span>
             ))}
           </div>
 
-          {/* Top Info Pill */}
-          <div className="relative z-10 flex items-center justify-between">
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-800">
-              ID: {gameState?.roundId || 'AV-SYNC'}
-            </span>
+          <section className="aviator-reference-arena">
+            <div className="aviator-stars" aria-hidden="true">
+              {Array.from({ length: 34 }, (_, i) => <i key={i} style={{ ['--i' as any]: i }} />)}
+            </div>
+            <div className="aviator-cloud cloud-one" />
+            <div className="aviator-cloud cloud-two" />
 
-            {phase === 'betting' && (
-              <span className="text-xs font-bold text-amber-400 bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/40 animate-pulse">
-                NEXT FLIGHT IN {gameState?.countdown || 5}s
+            <div className="aviator-arena-top">
+              <span className="aviator-round-id">ROUND {gameState?.roundId || 'AV-SYNC'}</span>
+              <span className={`aviator-status ${isRunning ? 'running' : isCrashed ? 'crashed' : 'waiting'}`}>
+                {isRunning ? 'FLYING AWAY' : isCrashed ? `FLEW AWAY · ${(gameState?.crashMultiplier || multiplier).toFixed(2)}x` : `NEXT FLIGHT · ${gameState?.countdown || 5}s`}
               </span>
-            )}
+            </div>
+
+            <svg className="aviator-reference-curve" viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="aviatorCurve" x1="0%" y1="100%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#ff2d55" stopOpacity=".18" />
+                  <stop offset="55%" stopColor="#ff4b3e" stopOpacity=".55" />
+                  <stop offset="100%" stopColor="#ff9f43" stopOpacity=".95" />
+                </linearGradient>
+                <linearGradient id="aviatorFill" x1="0%" y1="100%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#ff2d55" stopOpacity=".02" />
+                  <stop offset="100%" stopColor="#ff7a45" stopOpacity=".22" />
+                </linearGradient>
+              </defs>
+              <path d={`M 0 550 C 180 540, 250 ${500 - progress * 100}, 390 ${460 - progress * 210} S 670 ${300 - progress * 200}, 1000 ${60 - progress * 40}`} fill="none" stroke="url(#aviatorCurve)" strokeWidth="6" strokeLinecap="round" />
+              <path d={`M 0 550 C 180 540, 250 ${500 - progress * 100}, 390 ${460 - progress * 210} S 670 ${300 - progress * 200}, 1000 ${60 - progress * 40} L 1000 560 L 0 560 Z`} fill="url(#aviatorFill)" />
+            </svg>
+
+            <div className={`aviator-reference-multiplier ${isCrashed ? 'crashed' : ''}`}>
+              {isCrashed && <div className="aviator-flew-away">FLEW AWAY</div>}
+              <strong>{isCrashed ? (gameState?.crashMultiplier || multiplier).toFixed(2) : isRunning ? multiplier.toFixed(2) : '1.00'}x</strong>
+              {!isRunning && !isCrashed && <span>WAITING FOR TAKEOFF</span>}
+            </div>
+
             {isRunning && (
-              <span className="text-xs font-bold text-emerald-400 bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/40 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                FLYING AWAY
-              </span>
-            )}
-            {isCrashed && (
-              <span className="text-xs font-black text-rose-400 bg-rose-500/20 px-3 py-1 rounded-full border border-rose-500/40">
-                FLEW AWAY @ {gameState?.crashMultiplier?.toFixed(2)}x
-              </span>
-            )}
-          </div>
-
-          {/* SVG Flight Trail Curve */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-            {isRunning && (
-              <>
-                <defs>
-                  <linearGradient id="curveGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#ef4444" stopOpacity="0.2" />
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.8" />
-                  </linearGradient>
-                </defs>
-                <path
-                  d={`M 10 240 Q ${planeX * 2} 240, ${planeX * 3.6} ${planeY * 2.5}`}
-                  fill="none"
-                  stroke="url(#curveGradient)"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  className="aviator-trail"
-                />
-              </>
-            )}
-          </svg>
-
-          {/* Center Huge Multiplier Display */}
-          <div className="relative z-10 self-center flex flex-col items-center">
-            {isCrashed ? (
-              <div className="text-center animate-shake">
-                <div className="text-4xl font-black text-rose-500 tracking-tight drop-shadow-md">
-                  {gameState?.crashMultiplier?.toFixed(2)}x
-                </div>
-                <div className="text-xs uppercase font-extrabold text-rose-400 tracking-widest mt-1">
-                  CRASHED
-                </div>
-              </div>
-            ) : isRunning ? (
-              <div className="text-center">
-                <div className="aviator-multiplier-live text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 tracking-tight drop-shadow-lg">
-                  {multiplier.toFixed(2)}x
-                </div>
-                <div className="text-[11px] text-amber-400/80 font-bold uppercase tracking-wider mt-0.5">
-                  CURRENT MULTIPLIER
-                </div>
-              </div>
-            ) : (
-              <div className="text-center">
-                <div className="text-3xl font-black text-slate-400">WAITING</div>
-                <div className="text-xs text-slate-500 mt-0.5">Place your bet before departure</div>
+              <div className="aviator-reference-plane" style={{ left: `${planeX}%`, top: `${planeY}%` }}>
+                <Plane size={58} fill="currentColor" />
+                <span />
               </div>
             )}
-          </div>
 
-          {/* Flying Aircraft Element */}
-          {isRunning && (
-            <div
-              className="absolute z-20 transition-all duration-150 pointer-events-none"
-              style={{
-                left: `${planeX}%`,
-                top: `${planeY}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-            >
-              <div className="relative flex items-center justify-center">
-                <Plane className="aviator-plane w-10 h-10 text-rose-500 fill-rose-500 -rotate-12 drop-shadow-xl" />
-                <span className="absolute -left-3 w-4 h-1 bg-amber-400 rounded-full blur-sm" />
+            {!isRunning && !isCrashed && (
+              <div className="aviator-takeoff">
+                <span>FLIGHT STARTS IN</span>
+                <strong>{gameState?.countdown || 5}</strong>
+              </div>
+            )}
+
+            <div className="aviator-arena-tools">
+              <button type="button" onClick={() => setMuted((v) => !v)} aria-label="Toggle sound">
+                {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+              </button>
+              <button type="button" onClick={() => setShowMenu(true)} aria-label="Open menu"><Menu size={17} /></button>
+              <button type="button" onClick={() => setShowChat(true)} aria-label="Open chat"><MessageCircle size={17} /></button>
+            </div>
+          </section>
+
+          {errorMsg && <div className="aviator-reference-error">{errorMsg}</div>}
+
+          <section className="aviator-ref-bet-row">
+            <div className="aviator-ref-bet-card">
+              <div className="aviator-ref-tabs"><span className="active">BET</span><span>AUTO</span></div>
+              <div className="aviator-ref-card-body">
+                <div className="aviator-ref-amount">
+                  <button type="button" onClick={() => setBetAmount((v) => Math.max(10, v - 10))}>−</button>
+                  <strong>₹{betAmount.toLocaleString('en-IN')}</strong>
+                  <button type="button" onClick={() => setBetAmount((v) => Math.min(25000, v + 10))}>+</button>
+                </div>
+                <div className="aviator-ref-quick">
+                  {[50, 100, 500, 1000].map((n) => <button type="button" key={n} onClick={() => setBetAmount(n)}>₹{n}</button>)}
+                </div>
+                {currentBet && !currentBet.cashedOut && isRunning ? cashoutButton : placeButton()}
               </div>
             </div>
-          )}
 
-          {/* Bottom runway strip */}
-          <div className="relative z-10 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-800/80 pt-2">
-            <span>Server Hash Verified</span>
-            <span>RNG Fair</span>
-          </div>
-        </div>
+            <div className="aviator-ref-bet-card">
+              <div className="aviator-ref-tabs"><span>BET</span><span className="active">AUTO</span></div>
+              <div className="aviator-ref-card-body">
+                <div className="aviator-auto-row"><span>AUTO CASHOUT</span><strong>2.00x</strong></div>
+                <div className="aviator-auto-row"><span>AUTO BET</span><b>OFF</b></div>
+                <div className="aviator-ref-secondary-note">Visual slot preserved from the reference UI. Your current server supports one active bet per player.</div>
+                {placeButton(true)}
+              </div>
+            </div>
+          </section>
+
+          <footer className="aviator-reference-footer">
+            <button type="button" onClick={() => setShowRules(true)}><ShieldCheck size={14} /> Server-authoritative game</button>
+            <span>Round state synced in real time</span>
+          </footer>
+        </main>
       </div>
 
-      </ExternalAviatorUI>
-      {errorMsg && (
-        <div className="mx-4 mb-2 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-center">
-          {errorMsg}
+      {showMenu && (
+        <div className="aviator-ref-modal-backdrop" onClick={() => setShowMenu(false)}>
+          <div className="aviator-ref-menu" onClick={(e) => e.stopPropagation()}>
+            <div className="aviator-ref-menu-title">GAME MENU</div>
+            <button type="button" onClick={() => { setShowRules(true); setShowMenu(false); }}>How to play</button>
+            <button type="button" onClick={() => setMuted((v) => !v)}>{muted ? 'Enable sound' : 'Mute sound'}</button>
+            <button type="button" onClick={() => setShowMenu(false)}>Close</button>
+          </div>
         </div>
       )}
 
-      {/* Betting Box Controls */}
-      <div className="px-4 space-y-3">
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Stake Amount</span>
-            {currentBet && (
-              <span className="text-xs font-bold text-emerald-400">
-                Active Bet: ₹{currentBet.amount}
-              </span>
-            )}
-          </div>
-
-          <AmountSelector
-            currentAmount={betAmount}
-            onAmountChange={setBetAmount}
-            minAmount={10}
-            maxAmount={25000}
-            disabled={loading || (currentBet !== null && !currentBet.cashedOut)}
-          />
-
-          {/* Primary Action Button */}
-          <div className="mt-4">
-            {isRunning && currentBet && !currentBet.cashedOut ? (
-              <button
-                id="btn-aviator-cashout"
-                type="button"
-                disabled={loading}
-                onClick={handleCashout}
-                className="aviator-action-primary w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-500/25 active:scale-95 transition-transform cursor-pointer flex flex-col items-center justify-center leading-tight"
-              >
-                <span>CASH OUT NOW</span>
-                <span className="text-xs font-extrabold text-slate-900">
-                  ₹{(Math.floor((currentBet?.amount ?? 0) * (multiplier ?? 1)) || 0).toLocaleString('en-IN')} ({(multiplier ?? 1).toFixed(2)}x)
-                </span>
-              </button>
-            ) : currentBet && currentBet.cashedOut ? (
-              <div className="w-full py-3.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-center font-bold text-xs">
-                Cashed Out ₹{currentBet.winAmount}! Waiting for next round...
-              </div>
-            ) : (
-              <button
-                id="btn-aviator-place-bet"
-                type="button"
-                disabled={loading || phase !== 'betting'}
-                onClick={handlePlaceBet}
-                className="aviator-action-primary w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>
-                  {phase === 'betting'
-                    ? `PLACE BET (₹${betAmount})`
-                    : 'WAITING FOR NEXT ROUND...'}
-                </span>
-              </button>
-            )}
+      {showChat && (
+        <div className="aviator-ref-modal-backdrop" onClick={() => setShowChat(false)}>
+          <div className="aviator-ref-chat" onClick={(e) => e.stopPropagation()}>
+            <div className="aviator-ref-menu-title">LIVE CHAT</div>
+            <p>Realtime game events are shown in the main arena.</p>
+            <button type="button" onClick={() => setShowChat(false)}>Close</button>
           </div>
         </div>
-      </div>
+      )}
 
       <RulesModal
         isOpen={showRules}
         onClose={() => setShowRules(false)}
         title="Aviator"
-        rules={rulesData}
+        rules={[
+          { heading: 'Flight', description: 'The multiplier increases while the server-authoritative flight is running.' },
+          { heading: 'Round Sync', description: 'Round state is synchronized through the existing realtime transport.' },
+          { heading: 'Cash Out', description: 'The existing server endpoint remains authoritative for settlement.' }
+        ]}
       />
     </div>
   );
