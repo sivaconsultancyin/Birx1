@@ -628,30 +628,59 @@ export const supabaseRepo = {
     }));
   },
 
-  // GAME ROUND PERSISTENCE
-  async recordGameRound(roundId: string, gameId: string, phase: string, resultData: any) {
-    dbStore.gameRounds.set(roundId, {
-      id: roundId,
-      gameId,
-      phase,
-      resultData,
-      updatedAt: new Date().toISOString()
-    });
+  // AVIATOR ROUND/BET/SETTLEMENT PERSISTENCE
+  async recordGameBet(input: { id: string; roundId: string; userId: string; gameId: string; betType: string; betValue?: any; amount: number; multiplier?: number | null; payout?: number | null; status: string; idempotencyKey?: string | null; settledAt?: string | null }) {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const row: any = {
+      id: input.id, round_id: input.roundId, user_id: input.userId, game_id: input.gameId,
+      bet_type: input.betType, bet_value: input.betValue ?? null, amount: input.amount,
+      multiplier: input.multiplier ?? null, payout: input.payout ?? null, status: input.status,
+      idempotency_key: input.idempotencyKey ?? null, settled_at: input.settledAt ?? null
+    };
+    const { data, error } = await admin.from('bets').upsert(row, { onConflict: 'id' }).select('*').single();
+    if (error || !data) throw new Error(error?.message || 'Failed to persist game bet');
+    return data;
+  },
 
+  async settleGameBet(betId: string, status: 'won' | 'lost', multiplier: number, payout: number) {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('bets').update({
+      status, multiplier, payout, settled_at: new Date().toISOString()
+    }).eq('id', betId).select('*').single();
+    if (error || !data) throw new Error(error?.message || 'Failed to settle game bet');
+    return data;
+  },
+
+  async recordSettlement(input: { id: string; roundId: string; gameId: string; totalBetsCount: number; totalBetAmount: number; totalPayoutAmount: number; netHouseResult: number; outcomeSummary: string; details?: any }) {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('settlements').upsert({
+      id: input.id, round_id: input.roundId, game_id: input.gameId,
+      total_bets_count: input.totalBetsCount, total_bet_amount: input.totalBetAmount,
+      total_payout_amount: input.totalPayoutAmount, net_house_result: input.netHouseResult,
+      outcome_summary: input.outcomeSummary, details: input.details ?? null,
+      status: 'settled', settled_at: new Date().toISOString()
+    }, { onConflict: 'id' }).select('*').single();
+    if (error || !data) throw new Error(error?.message || 'Failed to persist settlement');
+    return data;
+  },
+
+  // GAME ROUND PERSISTENCE
+  async recordGameRound(roundId: string, gameId: string, phase: string, resultData: any, roundNumber?: number) {
+    const now = new Date().toISOString();
+    dbStore.gameRounds.set(roundId, { id: roundId, gameId, phase, resultData, updatedAt: now });
     const admin = getSupabaseAdmin();
     if (admin) {
-      try {
-        await admin.from('game_rounds').upsert({
-          id: roundId,
-          game_id: gameId,
-          phase,
-          result_data: resultData,
-          closed_at: phase === 'closed' || phase === 'settled' ? new Date().toISOString() : null,
-          settled_at: phase === 'settled' ? new Date().toISOString() : null
-        });
-      } catch {
-        // ignore fallback
-      }
+      const { error } = await admin.from('game_rounds').upsert({
+        id: roundId, game_id: gameId, round_number: Number(roundNumber ?? Date.now()), phase,
+        result_data: resultData ?? null,
+        started_at: resultData?.startedAt || now,
+        closed_at: ['closed','result','settled'].includes(phase) ? now : null,
+        settled_at: phase === 'settled' ? now : null
+      }, { onConflict: 'id' });
+      if (error) throw new Error(error.message);
     }
   },
 
