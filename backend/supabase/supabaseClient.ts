@@ -199,6 +199,12 @@ seedInitialStore();
 // AUTHORITATIVE SUPABASE REPOSITORY
 // ---------------------------------------------------------------------
 export const supabaseRepo = {
+  async checkConnectivity(): Promise<{ configured: boolean; reachable: boolean }> {
+    const admin = getSupabaseAdmin();
+    if (!admin) return { configured: false, reachable: false };
+    const { error } = await admin.from('users').select('id').limit(1);
+    return { configured: true, reachable: !error };
+  },
   // USER QUERIES
   async getUserByAuthId(authUserId: string): Promise<User | null> {
     const admin = getSupabaseAdmin();
