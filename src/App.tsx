@@ -44,8 +44,9 @@ export default function App() {
     }));
   };
 
-  // Check initial session & wallet
+  // Check initial session & wallet only when a persisted token exists.
   useEffect(() => {
+    if (!localStorage.getItem('brix_token')) return;
     const initApp = async () => {
       try {
         const authData = await authApi.getMe();
@@ -62,8 +63,10 @@ export default function App() {
     initApp();
   }, []);
 
-  // Listen to real-time events via WebSocket
+  // Listen to real-time events only after authentication.
+  // The realtime client is shared, so game screens reuse this same socket.
   useEffect(() => {
+    if (!user) return;
     const unsubscribe = subscribeToEvents((event) => {
       if (event.type === 'WALLET_UPDATE' && event.data) {
         handleUpdateWallet(event.data);
@@ -75,7 +78,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const handleAuthSuccess = (userData: User, walletData: Wallet) => {
     setUser(userData);
