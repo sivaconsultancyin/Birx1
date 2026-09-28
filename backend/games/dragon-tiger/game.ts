@@ -3,11 +3,14 @@ import type { Request, Response } from 'express';
 import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState, AviatorBet, AviatorState, DiceState, DragonTigerState, DragonTigerBetSide, AndarBaharState, AndarBaharSide, GameHistoryEntry, User, Wallet, Transaction } from '../../types.ts';
 
 /** Server-authoritative dragon-tiger module. All shared infrastructure is injected by the thin router. */
+const GAME_ROOM_ID = 'dragon-tiger-main';
+
 export function registerDragonTigerGame(app: any, deps: any) {
   const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
 let dragonTigerState: DragonTigerState = {
+  roomId: GAME_ROOM_ID,
   roundId: 'DT-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
   dragonCard: { suit: 'hearts', rank: 'K', value: 13 },
@@ -18,8 +21,36 @@ let dragonTigerState: DragonTigerState = {
 };
 
 app.get('/api/games/dragon-tiger/state', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
-  res.json({ state: dragonTigerState });
+  res.json({ state: { ...dragonTigerState, gameId: 'dragon-tiger', roomId: GAME_ROOM_ID } });
 });
+
+let dragonTigerHydrated = false;
+setInterval(async () => {
+  if (!(await acquireGameLease('dragon-tiger'))) return;
+  if (!dragonTigerHydrated) {
+    const persisted = await safeGetAuthoritativeGameState('dragon-tiger');
+    if (persisted) dragonTigerState = { ...dragonTigerState, ...persisted, roomId: GAME_ROOM_ID };
+    dragonTigerHydrated = true;
+  }
+  if (dragonTigerState.phase === 'betting') {
+    dragonTigerState.countdown = Math.max(0, dragonTigerState.countdown - 1);
+    if (dragonTigerState.countdown === 0) dragonTigerState.phase = 'dealing';
+  } else if (dragonTigerState.phase === 'dealing') {
+    const deck = generateDeck();
+    const dragonCard = deck.pop()!; const tigerCard = deck.pop()!;
+    let winner: DragonTigerBetSide = 'tie';
+    if (dragonCard.value > tigerCard.value) winner = 'dragon';
+    else if (tigerCard.value > dragonCard.value) winner = 'tiger';
+    dragonTigerState.dragonCard = dragonCard; dragonTigerState.tigerCard = tigerCard;
+    dragonTigerState.winner = winner; dragonTigerState.recentResults = [winner, ...dragonTigerState.recentResults].slice(0, 15);
+    dragonTigerState.phase = 'settled';
+    broadcastRealtime('dragon_tiger_result', { gameId: 'dragon-tiger', roomId: GAME_ROOM_ID, roundId: dragonTigerState.roundId, dragonCard, tigerCard, winner, recentResults: dragonTigerState.recentResults });
+  } else {
+    dragonTigerState = { ...dragonTigerState, roomId: GAME_ROOM_ID, roundId: 'DT-' + crypto.randomInt(1000, 1000000), phase: 'betting', countdown: 10, dragonCard: null, tigerCard: null, winner: null };
+    broadcastRealtime('dragon_tiger_round_started', { gameId: 'dragon-tiger', roomId: GAME_ROOM_ID, roundId: dragonTigerState.roundId, phase: 'betting', countdown: 10 });
+  }
+  await safeSaveAuthoritativeGameState('dragon-tiger', dragonTigerState);
+}, 1000);
 
 app.post('/api/games/dragon-tiger/deal', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betSide, amount }: { betSide: DragonTigerBetSide; amount: number } = req.body;
