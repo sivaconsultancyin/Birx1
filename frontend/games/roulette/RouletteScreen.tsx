@@ -20,7 +20,7 @@ import {
   RouletteHistoryStats,
   Wallet
 } from '../../../src/types.ts';
-import { gamesApi } from '../../../src/api/client.ts';
+import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
 import { Countdown } from '../../../src/components/Countdown.tsx';
@@ -237,162 +237,93 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   const isBettingPhase = gameState?.phase === 'betting';
 
-  // 1. Initial State & Real-time Synchronization (SSE + Authoritative Polling)
+  // 1. Initial State & Real-time Synchronization (WebSocket)
   useEffect(() => {
     loadState();
     loadStats();
 
-    // Setup SSE connection to listen for synchronized round events
-    let sse: EventSource | null = null;
-    try {
-      sse = new EventSource('/api/realtime');
+    const unsubscribe = subscribeToRealtimeEvents((event) => {
+      const payload: any = event.data || {};
+      if (!payload || !payload.type) return;
 
-      const handleServerEvent = (payload: any) => {
-        if (!payload || !payload.type) return;
-
-        switch (payload.type) {
-          case 'roulette_round_started':
-          case 'roulette_betting_open': {
-            // Reset spin guard for the brand new round
-            hasSpunRoundRef.current = '';
-
-            // New round started by authoritative server
-            setGameState((prev) => {
-              const currentRound = prev?.roundId;
-              const newRound = payload.roundId;
-              // If rolling into a new round, save previous bets for Rebet
-              if (currentRound && currentRound !== newRound && confirmedBetsRef.current.length > 0) {
-                setPreviousBets(JSON.parse(JSON.stringify(confirmedBetsRef.current)));
-              }
-              return {
-                ...(prev || {
-                  winningNumber: 0,
-                  winningColor: 'green',
-                  recentResults: [],
-                  serverSeedHash: '',
-                  limits: { minimumBet: 10, maximumBet: 50000, maximumExposure: 500000 }
-                }),
-                roundId: payload.roundId,
-                phase: 'betting',
-                countdown: payload.countdown || 15
-              };
-            });
-
-            setCountdown(payload.countdown || 15);
-            setConfirmedBets([]);
-            setStagedBets([]);
-            setBetHistoryStack([]);
-            setIsSpinning(false);
-            setErrorMsg(null);
-            break;
-          }
-
-          case 'roulette_betting_closed': {
-            setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown || 2 } : null));
-            setCountdown(payload.countdown || 2);
-            // Clear unconfirmed staged chips since betting window has closed
-            setStagedBets([]);
-            break;
-          }
-
-          case 'roulette_spin_started': {
-            // Strictly prevent spinning more than once per round
-            const rId = payload.roundId || currentRoundIdRef.current;
-            if (hasSpunRoundRef.current === rId) {
-              break;
+      switch (payload.type) {
+        case 'roulette_round_started':
+        case 'roulette_betting_open': {
+          hasSpunRoundRef.current = '';
+          setGameState((prev) => {
+            const currentRound = prev?.roundId;
+            const newRound = payload.roundId;
+            if (currentRound && currentRound !== newRound && confirmedBetsRef.current.length > 0) {
+              setPreviousBets(JSON.parse(JSON.stringify(confirmedBetsRef.current)));
             }
-            hasSpunRoundRef.current = rId;
-
-            // Server has authoritatively determined the winning pocket before spin starts
-            setGameState((prev) => (prev ? { ...prev, phase: 'spinning', countdown: payload.countdown || 6 } : null));
-            setCountdown(payload.countdown || 6);
-            setWinningNumber(payload.winningNumber);
-            setWinningColor(payload.winningColor);
-            setIsSpinning(true);
-            setStagedBets([]);
-            break;
-          }
-
-          case 'roulette_result': {
-            setGameState((prev) => (prev ? { ...prev, phase: 'result', countdown: payload.countdown || 4 } : null));
-            setCountdown(payload.countdown || 4);
-            setWinningNumber(payload.winningNumber);
-            setWinningColor(payload.winningColor);
-            if (payload.winningCategory) setWinningCategory(payload.winningCategory);
-            // Do NOT re-trigger spin
-            setIsSpinning(false);
-            break;
-          }
-
-          case 'roulette_settlement': {
-            // Trigger settlement evaluation for the player's own confirmed bets
-            // Settlement occurs strictly AFTER the single spin and must not re-spin
-            setIsSpinning(false);
-            const playerBets = confirmedBetsRef.current;
-            if (playerBets.length > 0 && payload.winningNumber !== undefined) {
-              const settlement = calculatePlayerSettlement(payload.winningNumber, playerBets);
-              if (settlement.isWin && settlement.grossPayout > 0) {
-                notifyWinLoss({
-                  type: 'win',
-                  amount: settlement.grossPayout
-                });
-              } else if (settlement.totalBet > 0) {
-                notifyWinLoss({
-                  type: 'loss',
-                  amount: settlement.totalBet
-                });
-              }
-            }
-            loadStats();
-            break;
-          }
-
-          case 'roulette_wallet_updated': {
-            if (payload.wallet) {
-              onUpdateWallet(payload.wallet);
-            }
-            break;
-          }
+            return {
+              ...(prev || {
+                winningNumber: 0,
+                winningColor: 'green',
+                recentResults: [],
+                serverSeedHash: '',
+                limits: { minimumBet: 10, maximumBet: 50000, maximumExposure: 500000 }
+              }),
+              roundId: payload.roundId,
+              phase: 'betting',
+              countdown: payload.countdown || 15
+            };
+          });
+          setCountdown(payload.countdown || 15);
+          setConfirmedBets([]);
+          setStagedBets([]);
+          setBetHistoryStack([]);
+          setIsSpinning(false);
+          setErrorMsg(null);
+          break;
         }
-      };
-
-      // Handle standard message
-      sse.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          handleServerEvent(payload);
-        } catch {
-          // SSE JSON parse ignore
+        case 'roulette_betting_closed':
+          setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown || 2 } : null));
+          setCountdown(payload.countdown || 2);
+          setStagedBets([]);
+          break;
+        case 'roulette_spin_started': {
+          const rId = payload.roundId || currentRoundIdRef.current;
+          if (hasSpunRoundRef.current === rId) break;
+          hasSpunRoundRef.current = rId;
+          setGameState((prev) => (prev ? { ...prev, phase: 'spinning', countdown: payload.countdown || 6 } : null));
+          setCountdown(payload.countdown || 6);
+          setWinningNumber(payload.winningNumber);
+          setWinningColor(payload.winningColor);
+          setIsSpinning(true);
+          setStagedBets([]);
+          break;
         }
-      };
-
-      // Also listen to named events
-      const eventNames = [
-        'roulette_round_started',
-        'roulette_betting_open',
-        'roulette_betting_closed',
-        'roulette_spin_started',
-        'roulette_result',
-        'roulette_settlement',
-        'roulette_wallet_updated'
-      ];
-      eventNames.forEach((evt) => {
-        sse?.addEventListener(evt, (e: any) => {
-          try {
-            handleServerEvent(JSON.parse(e.data));
-          } catch {
-            // ignore
+        case 'roulette_result':
+          setGameState((prev) => (prev ? { ...prev, phase: 'result', countdown: payload.countdown || 4 } : null));
+          setCountdown(payload.countdown || 4);
+          setWinningNumber(payload.winningNumber);
+          setWinningColor(payload.winningColor);
+          if (payload.winningCategory) setWinningCategory(payload.winningCategory);
+          setIsSpinning(false);
+          break;
+        case 'roulette_settlement': {
+          setIsSpinning(false);
+          const playerBets = confirmedBetsRef.current;
+          if (playerBets.length > 0 && payload.winningNumber !== undefined) {
+            const settlement = calculatePlayerSettlement(payload.winningNumber, playerBets);
+            if (settlement.isWin && settlement.grossPayout > 0) {
+              notifyWinLoss({ type: 'win', amount: settlement.grossPayout });
+            } else if (settlement.totalBet > 0) {
+              notifyWinLoss({ type: 'loss', amount: settlement.totalBet });
+            }
           }
-        });
-      });
-    } catch {
-      // SSE fallback
-    }
+          loadStats();
+          break;
+        }
+        case 'roulette_wallet_updated':
+          if (payload.wallet) onUpdateWallet(payload.wallet);
+          break;
+      }
+    });
 
-    return () => {
-      if (sse) sse.close();
-    };
-  }, []);
+    return () => unsubscribe();
+  }, []);;
 
   const loadState = async () => {
     try {
