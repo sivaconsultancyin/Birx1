@@ -42,7 +42,7 @@ function startLeaseHeartbeat() {
     } catch (e) {
       console.warn('[Aviator] Lease renewal failed; continuing current authoritative loop.', e);
     }
-  }, 2000);
+  }, 3000);
 }
 
 async function persistAviatorState() {
