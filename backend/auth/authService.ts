@@ -58,8 +58,33 @@ export function getAuthEmail(identifier: string): string {
   return `${cleanMobile}@auth.brix.games`;
 }
 
+// Short-lived request/session cache avoids repeating the same Supabase auth lookup
+// during the login -> app bootstrap -> WebSocket/game-open sequence.
+// The token is still the credential; this cache only removes duplicate network round-trips.
+const AUTH_CACHE_TTL_MS = 15_000;
+const resolvedUserCache = new Map<string, { user: User; expiresAt: number }>();
+
+function cacheResolvedUser(token: string, user: User): void {
+  resolvedUserCache.set(token, { user, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
+}
+
+function getCachedResolvedUser(token: string): User | null {
+  const cached = resolvedUserCache.get(token);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    resolvedUserCache.delete(token);
+    return null;
+  }
+  return cached.user;
+}
+
+function clearResolvedUserCache(token: string): void {
+  resolvedUserCache.delete(token);
+}
+
 export const authService = {
   async logout(token: string): Promise<void> {
+    clearResolvedUserCache(token);
     const admin = getSupabaseAdmin();
     if (admin && token) {
       await admin.auth.admin.signOut(token).catch(() => undefined);
@@ -79,12 +104,16 @@ export const authService = {
 
   async resolveUserFromToken(token: string): Promise<User | null> {
     if (!token) return null;
+    const cached = getCachedResolvedUser(token);
+    if (cached) return cached;
     const admin = getSupabaseAdmin();
     if (!admin) return null;
     try {
       const { data: { user: sbUser }, error } = await admin.auth.getUser(token);
       if (error || !sbUser) return null;
-      return await supabaseRepo.getUserByAuthId(sbUser.id);
+      const user = await supabaseRepo.getUserByAuthId(sbUser.id);
+      if (user) cacheResolvedUser(token, user);
+      return user;
     } catch {
       return null;
     }
@@ -99,6 +128,7 @@ export const authService = {
     if (error || !data.session || !data.user) throw new Error('Invalid mobile number or password.');
     const account = await supabaseRepo.getUserAndWalletByAuthId(data.user.id);
     if (!account) throw new Error('Authenticated account is not linked to a Brix user or wallet.');
+    cacheResolvedUser(data.session.access_token, account.user);
     return { token: data.session.access_token, user: account.user, wallet: account.wallet };
   },
 
@@ -133,6 +163,7 @@ export const authService = {
       const { data: sessionData, error: signInError } = await publicClient.auth.signInWithPassword({ email, password });
       if (signInError || !sessionData.session) throw signInError || new Error('Sign-in failed');
       const wallet = await supabaseRepo.getWallet(user.id);
+      cacheResolvedUser(sessionData.session.access_token, user);
       return { token: sessionData.session.access_token, user, wallet };
     } catch (error) {
       await admin.auth.admin.deleteUser(authData.user.id).catch(() => undefined);
