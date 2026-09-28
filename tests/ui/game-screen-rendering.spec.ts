@@ -21,7 +21,7 @@ const games = [
 test('all user-visible game screens render without browser errors', async ({ page }) => {
   await authenticate(page);
   const consoleErrors: string[] = [];
-  const ignoredResourceErrors = [/favicon\\.ico/i];
+  const ignoredResourceErrors = [/favicon\.ico/i];
   const pageErrors: string[] = [];
   page.on('console', msg => { if (msg.type() === 'error' && !ignoredResourceErrors.some(re => re.test(msg.text()))) consoleErrors.push(msg.text()); });
   page.on('pageerror', err => pageErrors.push(err.message));
