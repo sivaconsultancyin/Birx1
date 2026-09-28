@@ -227,7 +227,7 @@ function startAuthoritativeRealtimeBridge() {
     if (!row?.game_id || !row?.state) return;
     const state = row.state;
     const gameId = row.game_id;
-    const roomId = state.roomId ?? (gameId === 'aviator' ? 'aviator-main' : null);
+    const ROOM_IDS: Record<string, string> = { aviator: 'aviator-main', roulette: 'roulette-main', 'teen-patti': 'teen-patti-main', dice: 'dice-main', 'dragon-tiger': 'dragon-tiger-main', 'andar-bahar': 'andar-bahar-main' };\n    const roomId = state.roomId ?? ROOM_IDS[gameId] ?? `${gameId}-main`;
     broadcastRealtime('game_state', {
       gameId,
       roomId,
