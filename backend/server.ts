@@ -46,6 +46,7 @@ import { authService, requireAuth, requirePlayerForGames, requireRoles } from '.
 import { walletService } from './wallet/walletService.ts';
 import { storageService } from './storage/storageService.ts';
 import { gameRecoveryService } from './recovery/gameRecoveryService.ts';
+import { gameEventBus } from './events/gameEventBus.ts';
 
 
 const app = express();
@@ -168,10 +169,11 @@ async function creditForUser(req: Request, amount: number, description: string, 
 const websocketClients = new Set<{ socket: WebSocket; userId: string }>();
 const websocketServer = new WebSocketServer({ noServer: true });
 
-function broadcastRealtime(event: string, data: any) {
-  const payload = JSON.stringify({ type: event, ...data });
+function sendRealtimeToWebSocket(event: { type: string; data: Record<string, unknown> }) {
+  const payload = JSON.stringify({ type: event.type, ...event.data });
+  const targetUserId = event.data?.userId || event.data?.playerId || null;
+
   for (const client of websocketClients) {
-    const targetUserId = data?.userId || data?.playerId || null;
     if (targetUserId && targetUserId !== client.userId) continue;
     if (client.socket.readyState !== WebSocket.OPEN) {
       websocketClients.delete(client);
@@ -179,6 +181,17 @@ function broadcastRealtime(event: string, data: any) {
     }
     try { client.socket.send(payload); } catch { websocketClients.delete(client); }
   }
+}
+
+// Central backend event flow:
+// game modules -> EventBus -> realtime subscribers -> WebSocket -> clients.
+// Games never need to know how browser delivery is implemented.
+const stopWebSocketEventBridge = gameEventBus.onAny((event) => {
+  sendRealtimeToWebSocket(event);
+});
+
+function broadcastRealtime(event: string, data: Record<string, unknown> = {}) {
+  return gameEventBus.emit(event, data);
 }
 
 websocketServer.on('connection', (socket: WebSocket, user: any) => {
