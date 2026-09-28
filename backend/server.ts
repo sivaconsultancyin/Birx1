@@ -234,10 +234,10 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
 });
 
-// Realtime transport discovery endpoint. The client transport is WebSocket-only;
-// keep this lightweight compatibility probe so legacy UI probes do not become 404s.
+// Legacy realtime probe compatibility: the actual client transport is WebSocket (/ws).
+// Return 204 so any stale EventSource probe terminates cleanly without enabling SSE.
 app.get('/api/realtime', (_req: Request, res: Response) => {
-  res.json({ transport: 'websocket', endpoint: '/ws', sse: false, status: 'available' });
+  res.status(204).end();
 });
 
 app.get('/api/ready', async (_req: Request, res: Response) => {
