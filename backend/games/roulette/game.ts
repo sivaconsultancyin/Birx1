@@ -3,6 +3,8 @@ import type { Request, Response } from 'express';
 import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState, AviatorBet, AviatorState, DiceState, DragonTigerState, DragonTigerBetSide, AndarBaharState, AndarBaharSide, GameHistoryEntry, User, Wallet, Transaction } from '../../types.ts';
 
 /** Server-authoritative roulette module. All shared infrastructure is injected by the thin router. */
+const GAME_ROOM_ID = 'roulette-main';
+
 export function registerRouletteGame(app: any, deps: any) {
   const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
@@ -34,6 +36,7 @@ const ROULETTE_PAYOUT_RULES = {
 };
 
 let rouletteState: RouletteState = {
+  roomId: GAME_ROOM_ID,
   roundId: 'RL-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
   countdown: 15,
