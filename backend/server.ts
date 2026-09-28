@@ -234,7 +234,13 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
 });
 
-// Realtime transport discovery endpoint. The client transport is WebSocket-only;\n// keep this lightweight compatibility probe so legacy UI probes do not become 404s.\napp.get('/api/realtime', (_req: Request, res: Response) => {\n  res.json({ transport: 'websocket', endpoint: '/ws', sse: false, status: 'available' });\n});\n\napp.get('/api/ready', async (_req: Request, res: Response) => {
+// Realtime transport discovery endpoint. The client transport is WebSocket-only;
+// keep this lightweight compatibility probe so legacy UI probes do not become 404s.
+app.get('/api/realtime', (_req: Request, res: Response) => {
+  res.json({ transport: 'websocket', endpoint: '/ws', sse: false, status: 'available' });
+});
+
+app.get('/api/ready', async (_req: Request, res: Response) => {
   try {
     const db = await supabaseRepo.checkConnectivity();
     if (!db.configured) {
