@@ -475,7 +475,10 @@ export function subscribeToRealtimeEvents(onEvent: (payload: RealtimeEventPayloa
       try {
         const parsed = JSON.parse(event.data);
         const name = parsed.type || 'message';
-        onEvent({ event: name as any, data: parsed, timestamp: Date.now() });
+        // Backend realtime payloads are flattened: { type, gameId, ... }.
+        // Normalize them here so every game receives its event body through payload.data.
+        const data = parsed.data && typeof parsed.data === 'object' ? parsed.data : parsed;
+        onEvent({ event: name as any, data, timestamp: Date.now() });
       } catch {
         // Ignore malformed realtime payloads.
       }
