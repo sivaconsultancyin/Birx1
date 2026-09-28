@@ -562,7 +562,7 @@ $$;
 
 
 -- Self-hosted PostgreSQL note:
--- Supabase auth.uid()-based RLS policies are intentionally not included here.
+-- Supabase backend-auth-user-id-based RLS policies are intentionally not included here.
 -- Authentication/authorization is enforced by the Node backend before SQL execution.
 -- The atomic SECURITY DEFINER-style wallet functions above remain database-side
 -- transaction boundaries and should be executed only by the backend DB role.
