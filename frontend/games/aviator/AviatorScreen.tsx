@@ -53,7 +53,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
         setGameState(res.state);
         setCurrentBet(res.state.currentBet ?? null);
       } catch {
-        // SSE can recover the live state.
+        // WebSocket realtime events keep the live state synchronized.
       }
     };
 
