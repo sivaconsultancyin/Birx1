@@ -33,6 +33,7 @@ export default function App() {
   const [walletInitialTab, setWalletInitialTab] = useState<'deposit' | 'withdraw'>('deposit');
   const [notificationsCount, setNotificationsCount] = useState(1);
   const [notificationToast, setNotificationToast] = useState<string | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(() => !localStorage.getItem('brix_token'));
 
   const handleUpdateWallet = (newWallet: Partial<Wallet> | undefined | null) => {
     if (!newWallet) return;
@@ -52,12 +53,14 @@ export default function App() {
         const authData = await authApi.getMe();
         if (authData.user) {
           setUser(authData.user);
-          if (authData.wallet) {
-            handleUpdateWallet(authData.wallet);
-          }
+          if (authData.wallet) handleUpdateWallet(authData.wallet);
+        } else {
+          localStorage.removeItem('brix_token');
         }
       } catch {
-        // Unauthenticated session, show auth after splash
+        localStorage.removeItem('brix_token');
+      } finally {
+        setSessionChecked(true);
       }
     };
     initApp();
@@ -104,12 +107,18 @@ export default function App() {
     return <SplashScreen onFinish={() => setShowSplash(false)} />;
   }
 
-  // 2. If not logged in, show Auth Screen
+  // 2. Do not render the unauthenticated screen while a persisted session
+  // is still being restored. This prevents E2E/runtime races after login.
+  if (!sessionChecked) {
+    return <SplashScreen onFinish={() => undefined} />;
+  }
+
+  // 3. If not logged in, show Auth Screen
   if (!user) {
     return <AuthScreen onSuccess={handleAuthSuccess} />;
   }
 
-  // 3. Strict Role Isolation: OWNER, SUPER_ADMIN, and ADMIN dashboards do NOT display games.
+  // 4. Strict Role Isolation: OWNER, SUPER_ADMIN, and ADMIN dashboards do NOT display games.
   // Games must be visible only to PLAYER users.
   if (user.role && user.role !== 'PLAYER') {
     return (
@@ -124,7 +133,7 @@ export default function App() {
     );
   }
 
-  // 4. Render Active Game if user clicked into one of the 6 games (PLAYER only)
+  // 5. Render Active Game if user clicked into one of the 6 games (PLAYER only)
   if (activeGame) {
     let screenNode: React.ReactNode = null;
     switch (activeGame) {
@@ -203,7 +212,7 @@ export default function App() {
     }
   }
 
-  // 4. Main App Container (Mobile First max-w-md)
+  // 6. Main App Container (Mobile First max-w-md)
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       <div className="w-full max-w-md mx-auto flex-1 flex flex-col relative bg-slate-950 shadow-2xl border-x border-slate-900/80 min-h-screen">
