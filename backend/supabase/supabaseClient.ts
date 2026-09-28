@@ -734,11 +734,18 @@ export const supabaseRepo = {
     return { ...(data.state || {}), version: Number(data.version || data.state?.version || 0) };
   },
 
-  async claimGameLease(gameId: string, ownerId: string, leaseMs = 4000): Promise<boolean> {
+  async claimGameLease(gameId: string, ownerId: string, leaseMs = 10000): Promise<boolean> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
-    const until = new Date(Date.now() + leaseMs).toISOString();
-    const { data, error } = await admin.rpc('claim_game_lease', { p_game_id: gameId, p_owner_id: ownerId, p_lease_until: until });
+
+    // Lease expiry is calculated by PostgreSQL, not the application host clock.
+    // This prevents short leases from expiring immediately when the Node host clock
+    // differs from the database clock or when the request has network latency.
+    const { data, error } = await admin.rpc('claim_game_lease', {
+      p_game_id: gameId,
+      p_owner_id: ownerId,
+      p_lease_ms: Math.max(1000, Math.floor(leaseMs))
+    });
     if (error) throw new Error(error.message);
     return Boolean(data);
   },
