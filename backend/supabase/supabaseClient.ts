@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { getPostgresPool } from '../database/postgres.ts';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   CoinRecharge,
@@ -200,6 +201,11 @@ seedInitialStore();
 // ---------------------------------------------------------------------
 export const supabaseRepo = {
   async checkConnectivity(): Promise<{ configured: boolean; reachable: boolean }> {
+    const postgres = getPostgresPool();
+    if (postgres) {
+      try { await postgres.query('select 1'); return { configured: true, reachable: true }; }
+      catch { return { configured: true, reachable: false }; }
+    }
     const admin = getSupabaseAdmin();
     if (!admin) return { configured: false, reachable: false };
     const { error } = await admin.from('users').select('id').limit(1);
