@@ -21,6 +21,8 @@ const games = [
 test('all user-visible game screens render without browser errors', async ({ page }) => {
   await authenticate(page);
   const consoleErrors: string[] = [];
+  const missingResources: string[] = [];
+  page.on('response', response => { if (response.status() === 404) missingResources.push(`${response.request().method()} ${response.url()}`); });
   const ignoredResourceErrors = [/favicon\.ico/i];
   const pageErrors: string[] = [];
   page.on('console', msg => { if (msg.type() === 'error' && !ignoredResourceErrors.some(re => re.test(msg.text()))) consoleErrors.push(msg.text()); });
@@ -43,5 +45,6 @@ test('all user-visible game screens render without browser errors', async ({ pag
   }
 
   expect(pageErrors, `page errors: ${pageErrors.join(' | ')}`).toEqual([]);
+  expect(missingResources, `404 resources: ${missingResources.join(' | ')}`).toEqual([]);
   expect(consoleErrors, `console errors: ${consoleErrors.join(' | ')}`).toEqual([]);
 });
