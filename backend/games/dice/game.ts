@@ -3,11 +3,14 @@ import type { Request, Response } from 'express';
 import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState, AviatorBet, AviatorState, DiceState, DragonTigerState, DragonTigerBetSide, AndarBaharState, AndarBaharSide, GameHistoryEntry, User, Wallet, Transaction } from '../../types.ts';
 
 /** Server-authoritative dice module. All shared infrastructure is injected by the thin router. */
+const GAME_ROOM_ID = 'dice-main';
+
 export function registerDiceGame(app: any, deps: any) {
   const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
 let diceState: DiceState = {
+  roomId: GAME_ROOM_ID,
   roundId: 'DC-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
   dice1: 4,
@@ -18,8 +21,32 @@ let diceState: DiceState = {
 };
 
 app.get('/api/games/dice/state', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
-  res.json({ state: diceState });
+  res.json({ state: { ...diceState, gameId: 'dice', roomId: GAME_ROOM_ID } });
 });
+
+let diceHydrated = false;
+setInterval(async () => {
+  if (!(await acquireGameLease('dice'))) return;
+  if (!diceHydrated) {
+    const persisted = await safeGetAuthoritativeGameState('dice');
+    if (persisted) diceState = { ...diceState, ...persisted, roomId: GAME_ROOM_ID };
+    diceHydrated = true;
+  }
+  if (diceState.phase === 'betting') {
+    diceState.countdown = Math.max(0, diceState.countdown - 1);
+    if (diceState.countdown === 0) diceState.phase = 'rolling';
+  } else if (diceState.phase === 'rolling') {
+    const d1 = crypto.randomInt(1, 7), d2 = crypto.randomInt(1, 7);
+    diceState.dice1 = d1; diceState.dice2 = d2; diceState.sum = d1 + d2;
+    diceState.recentSums = [d1 + d2, ...diceState.recentSums].slice(0, 10);
+    diceState.phase = 'settled';
+    broadcastRealtime('dice_result', { gameId: 'dice', roomId: GAME_ROOM_ID, roundId: diceState.roundId, dice1: d1, dice2: d2, sum: d1 + d2, recentSums: diceState.recentSums });
+  } else {
+    diceState = { ...diceState, roomId: GAME_ROOM_ID, roundId: 'DC-' + crypto.randomInt(1000, 1000000), phase: 'betting', countdown: 10 };
+    broadcastRealtime('dice_round_started', { gameId: 'dice', roomId: GAME_ROOM_ID, roundId: diceState.roundId, phase: 'betting', countdown: 10 });
+  }
+  await safeSaveAuthoritativeGameState('dice', diceState);
+}, 1000);
 
 app.post('/api/games/dice/roll', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const { betType, amount }: { betType: 'under7' | 'exact7' | 'over7' | 'even' | 'odd' | 'doubles'; amount: number } =
