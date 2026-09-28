@@ -62,7 +62,7 @@ export default function App() {
     initApp();
   }, []);
 
-  // Listen to real-time events via SSE
+  // Listen to real-time events via WebSocket
   useEffect(() => {
     const unsubscribe = subscribeToEvents((event) => {
       if (event.type === 'WALLET_UPDATE' && event.data) {
