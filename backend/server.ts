@@ -47,6 +47,7 @@ import { walletService } from './wallet/walletService.ts';
 import { storageService } from './storage/storageService.ts';
 import { gameRecoveryService } from './recovery/gameRecoveryService.ts';
 import { gameEventBus } from './events/gameEventBus.ts';
+import { postgresHealth } from './database/postgres.ts';
 
 
 const app = express();
@@ -257,13 +258,14 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 app.get('/api/ready', async (_req: Request, res: Response) => {
   try {
+    const postgres = await postgresHealth();
+    if (postgres.configured) {
+      if (!postgres.reachable) return res.status(503).json({ status: 'not_ready', reason: 'postgres_unreachable' });
+      return res.json({ status: 'ready', dependencies: { postgres: 'ok' }, timestamp: Date.now() });
+    }
     const db = await supabaseRepo.checkConnectivity();
-    if (!db.configured) {
-      return res.status(503).json({ status: 'not_ready', reason: 'supabase_not_configured' });
-    }
-    if (!db.reachable) {
-      return res.status(503).json({ status: 'not_ready', reason: 'supabase_unreachable' });
-    }
+    if (!db.configured) return res.status(503).json({ status: 'not_ready', reason: 'database_not_configured' });
+    if (!db.reachable) return res.status(503).json({ status: 'not_ready', reason: 'database_unreachable' });
     return res.json({ status: 'ready', dependencies: { supabase: 'ok' }, timestamp: Date.now() });
   } catch {
     return res.status(503).json({ status: 'not_ready', reason: 'dependency_check_failed' });
