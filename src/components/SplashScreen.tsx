@@ -9,18 +9,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(timer);
-          setTimeout(onFinish, 400);
-          return 100;
-        }
-        return prev + 25;
-      });
-    }, 250);
-
-    return () => clearInterval(timer);
+    // Do not artificially hold the app behind a fake multi-second progress bar.
+    // App/session bootstrap runs in parallel from App.tsx, so the splash only
+    // provides a short visual handoff instead of adding startup latency.
+    setProgress(100);
+    const timer = window.setTimeout(onFinish, 450);
+    return () => window.clearTimeout(timer);
   }, [onFinish]);
 
   return (
