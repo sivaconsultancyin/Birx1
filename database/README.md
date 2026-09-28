@@ -1,7 +1,11 @@
-# Database
+# Birx1 PostgreSQL
 
-Supabase/Postgres schema and migrations live under `supabase/migrations/` and server-side Supabase access lives under `src/server/supabase/`.
+Self-hosted PostgreSQL runs as a separate service from the Node backend.
 
-Database responsibilities: users, wallets, transactions, game history, authoritative game persistence and realtime/persistence support.
+Local setup:
+1. Set POSTGRES_DB, POSTGRES_USER, and POSTGRES_PASSWORD.
+2. Set DATABASE_URL to the PostgreSQL service.
+3. Run docker compose -f docker-compose.postgres.yml up -d.
+4. Verify the backend can reach PostgreSQL.
 
-Secrets/service-role credentials must never be placed in frontend code.
+The existing Supabase repository remains the production data plane until schema, data, authentication dependencies, and RPCs are migrated and verified. Do not point production DATABASE_URL at a blank database.
