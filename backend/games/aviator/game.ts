@@ -28,6 +28,7 @@ let lastHydratedVersion = 0;
 let authoritativeVersion = 0;
 let currentCrashTarget = generateCrashPoint();
 let aviatorTimer: NodeJS.Timeout | null = null;
+let lastPersistedFlightSecond = -1;
 let flightStartedAt = 0;
 let leaseHeartbeat: NodeJS.Timeout | null = null;
 
@@ -108,6 +109,7 @@ async function runAviatorCycle() {
   aviatorState.crashMultiplier = null;
   aviatorState.countdown = 5;
   aviatorState.roundId = 'AV-' + crypto.randomInt(1000, 10000) + '-' + crypto.randomUUID().slice(0, 8);
+  lastPersistedFlightSecond = -1;
   aviatorRoundSequence += 1;
   aviatorRoundStats.set(aviatorState.roundId, { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 });
   await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'betting', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
@@ -206,12 +208,19 @@ async function startAviatorFlight() {
       aviatorState.multiplier = nextMult;
       // WebSocket is the primary high-frequency live transport. Supabase persistence
       // remains available for authoritative resync, but clients do not poll it.
+      const serverTime = Date.now();
       broadcastRealtime('aviator_tick', {
         gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId,
         phase: aviatorState.phase, multiplier: aviatorState.multiplier,
-        countdown: aviatorState.countdown, serverTime: Date.now(), flightStartedAt
+        countdown: aviatorState.countdown, serverTime, flightStartedAt
       });
-      await persistAviatorState();
+      // Do not write the database 10 times/second. The backend remains authoritative;
+      // persist checkpoints once per elapsed second for recovery/resync.
+      const elapsedSecond = Math.floor(elapsedSec);
+      if (elapsedSecond !== lastPersistedFlightSecond) {
+        lastPersistedFlightSecond = elapsedSecond;
+        await persistAviatorState();
+      }
     }
   }, 100);
 }
