@@ -37,7 +37,7 @@ async function collectAviatorEvents(cookie: string, durationMs: number) {
             resolve(events);
           }, durationMs);
         }
-        if (data.gameId === 'aviator' || (data.type === 'game_state' && data.gameId === 'aviator')) {
+        if (data.type === 'connected' || data.gameId === 'aviator' || (data.type === 'game_state' && data.gameId === 'aviator')) {
           events.push(data);
         }
       } catch {}
