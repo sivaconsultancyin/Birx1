@@ -461,43 +461,68 @@ export const gamesApi = {
 // -------------------------------------------------------------
 // WEBSOCKET REALTIME SUBSCRIBER
 // -------------------------------------------------------------
-export function subscribeToRealtimeEvents(onEvent: (payload: RealtimeEventPayload) => void): () => void {
-  let socket: WebSocket | null = null;
-  let closed = false;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+type RealtimeListener = (payload: RealtimeEventPayload) => void;
 
-  const connect = () => {
-    if (closed) return;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+// Share one authenticated WebSocket connection across App + game screens.
+// Previously every screen created its own socket, which caused duplicate
+// connections/reconnects and extra authentication work during game startup.
+let sharedSocket: WebSocket | null = null;
+let sharedReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let sharedClosed = false;
+const realtimeListeners = new Set<RealtimeListener>();
 
-    socket.onmessage = (event) => {
-      try {
-        const parsed = JSON.parse(event.data);
-        const name = parsed.type || 'message';
-        onEvent({ event: name as any, data: parsed, timestamp: Date.now() });
-      } catch {
-        // Ignore malformed realtime payloads.
-      }
-    };
+function connectSharedRealtime(): void {
+  if (sharedClosed || sharedSocket || typeof window === 'undefined') return;
 
-    socket.onclose = () => {
-      if (closed) return;
-      reconnectTimer = setTimeout(connect, 1000);
-    };
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  sharedSocket = socket;
 
-    socket.onerror = () => {
-      socket?.close();
-    };
+  socket.onmessage = (event) => {
+    try {
+      const parsed = JSON.parse(event.data);
+      const payload: RealtimeEventPayload = {
+        event: (parsed.type || 'message') as any,
+        data: parsed,
+        timestamp: Date.now()
+      };
+      realtimeListeners.forEach((listener) => listener(payload));
+    } catch {
+      // Ignore malformed realtime payloads.
+    }
   };
 
-  connect();
+  socket.onclose = () => {
+    if (sharedSocket === socket) sharedSocket = null;
+    if (sharedClosed || realtimeListeners.size === 0) return;
+    if (sharedReconnectTimer) clearTimeout(sharedReconnectTimer);
+    sharedReconnectTimer = setTimeout(() => {
+      sharedReconnectTimer = null;
+      connectSharedRealtime();
+    }, 500);
+  };
+
+  socket.onerror = () => {
+    socket.close();
+  };
+}
+
+export function subscribeToRealtimeEvents(onEvent: RealtimeListener): () => void {
+  sharedClosed = false;
+  realtimeListeners.add(onEvent);
+  connectSharedRealtime();
 
   return () => {
-    closed = true;
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    socket?.close();
-    socket = null;
+    realtimeListeners.delete(onEvent);
+    if (realtimeListeners.size === 0) {
+      sharedClosed = true;
+      if (sharedReconnectTimer) {
+        clearTimeout(sharedReconnectTimer);
+        sharedReconnectTimer = null;
+      }
+      sharedSocket?.close();
+      sharedSocket = null;
+    }
   };
 }
 
