@@ -119,7 +119,7 @@ async function acquireGameLease(gameId: string): Promise<boolean> {
     return true;
   }
   try {
-    const claimed = await supabaseRepo.claimGameLease(gameId, PROCESS_OWNER_ID, 4000);
+    const claimed = await supabaseRepo.claimGameLease(gameId, PROCESS_OWNER_ID, 10000);
     return Boolean(claimed);
   } catch (e) {
     // When Supabase is configured, never fall back to a second local authority:
