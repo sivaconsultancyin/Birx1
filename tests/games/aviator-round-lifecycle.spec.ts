@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
 
 test('Aviator runs continuous server-authoritative rounds in one permanent room', async ({ request }) => {
+  test.setTimeout(75000);
   const first = await request.get('/api/games/aviator/state');
   expect(first.status()).toBe(200);
   const firstJson = await first.json();
-  expect(firstJson.state).toMatchObject({ roundId: expect.any(String), phase: expect.stringMatching(/betting|running|crashed/) });
+  expect(firstJson.state).toMatchObject({ roundId: expect.any(String), roomId: 'aviator-main', phase: expect.stringMatching(/betting|running|crashed/) });
 
   const firstRound = firstJson.state.roundId;
   const firstRoom = 'aviator-main';
@@ -20,6 +21,7 @@ test('Aviator runs continuous server-authoritative rounds in one permanent room'
     const state = (await response.json()).state;
 
     expect(state.roundId).toEqual(expect.any(String));
+    expect(state.roomId).toBe('aviator-main');
     expect(state.multiplier).toEqual(expect.any(Number));
     expect(state.previousMultipliers).toEqual(expect.any(Array));
 
