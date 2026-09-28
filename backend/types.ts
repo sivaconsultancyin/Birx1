@@ -133,6 +133,8 @@ export interface RouletteBet {
 export type RoulettePhase = 'betting' | 'closed' | 'spinning' | 'result' | 'settled';
 
 export interface RouletteState {
+  /** Permanent backend-owned room for every round of this game. */
+  roomId?: string;
   roundId: string;
   phase: RoulettePhase;
   countdown: number;
@@ -250,6 +252,8 @@ export interface TeenPattiSettlementDetail {
 }
 
 export interface TeenPattiState {
+  /** Permanent backend-owned room for every round of this game. */
+  roomId?: string;
   roundId: string;
   phase:
     | 'betting'
@@ -286,6 +290,8 @@ export interface TeenPattiState {
 // AVIATOR TYPES
 // -------------------------------------------------------------
 export interface AviatorState {
+  /** Permanent backend-owned room for every round of this game. */
+  roomId?: string;
   roundId: string;
   phase: 'betting' | 'running' | 'crashed';
   multiplier: number;
@@ -308,6 +314,8 @@ export interface AviatorBet {
 export type DiceBetType = 'under7' | 'exact7' | 'over7' | 'even' | 'odd' | 'doubles';
 
 export interface DiceState {
+  /** Permanent backend-owned room for every round of this game. */
+  roomId?: string;
   roundId: string;
   phase: 'betting' | 'rolling' | 'settled';
   dice1: number | null;
@@ -323,6 +331,8 @@ export interface DiceState {
 export type DragonTigerBetSide = 'dragon' | 'tiger' | 'tie';
 
 export interface DragonTigerState {
+  /** Permanent backend-owned room for every round of this game. */
+  roomId?: string;
   roundId: string;
   phase: 'betting' | 'dealing' | 'settled';
   dragonCard: Card | null;
@@ -343,6 +353,8 @@ export interface AndarBaharDealtCard {
 }
 
 export interface AndarBaharState {
+  /** Permanent backend-owned room for every round of this game. */
+  roomId?: string;
   roundId: string;
   phase: 'betting' | 'shuffle' | 'dealing' | 'settled';
   jokerCard: Card | null;
