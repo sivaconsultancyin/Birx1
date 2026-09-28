@@ -3,6 +3,8 @@ import type { Request, Response } from 'express';
 import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState, AviatorBet, AviatorState, DiceState, DragonTigerState, DragonTigerBetSide, AndarBaharState, AndarBaharSide, GameHistoryEntry, User, Wallet, Transaction } from '../../types.ts';
 
 /** Server-authoritative andar-bahar module. All shared infrastructure is injected by the thin router. */
+const GAME_ROOM_ID = 'andar-bahar-main';
+
 export function registerAndarBaharGame(app: any, deps: any) {
   const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
@@ -13,6 +15,7 @@ let andarBaharTargetJoker: Card | null = { suit: 'spades', rank: '8', value: 8 }
 let andarBaharFinalWinner: AndarBaharSide = 'andar';
 
 let andarBaharState: AndarBaharState = {
+  roomId: GAME_ROOM_ID,
   roundId: 'AB-' + crypto.randomInt(1000, 10000),
   phase: 'betting',
   jokerCard: { suit: 'spades', rank: '8', value: 8 },
