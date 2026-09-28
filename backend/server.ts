@@ -234,12 +234,6 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
 });
 
-// Legacy realtime probe compatibility: the actual client transport is WebSocket (/ws).
-// Return 204 so any stale EventSource probe terminates cleanly without enabling SSE.
-app.get('/api/realtime', (_req: Request, res: Response) => {
-  res.status(204).end();
-});
-
 app.get('/api/ready', async (_req: Request, res: Response) => {
   try {
     const db = await supabaseRepo.checkConnectivity();
