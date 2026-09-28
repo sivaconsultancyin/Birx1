@@ -65,7 +65,18 @@ function startAuthoritativeAndarBaharRound() {
 }
 
 // Background Authoritative Andar Bahar Round Cycle
+// The same Supabase lease used by the other continuous games prevents
+// duplicate round authorities when more than one server instance is running.
+let andarBaharStateHydrated = false;
 setInterval(async () => {
+  if (!(await acquireGameLease('andar-bahar'))) return;
+
+  if (!andarBaharStateHydrated) {
+    const persisted = await safeGetAuthoritativeGameState('andar-bahar');
+    if (persisted) andarBaharState = persisted as AndarBaharState;
+    andarBaharStateHydrated = true;
+  }
+
   if (andarBaharState.phase === 'betting') {
     andarBaharState.countdown -= 1;
     if (andarBaharState.countdown <= 0) {
@@ -158,6 +169,8 @@ setInterval(async () => {
       startAuthoritativeAndarBaharRound();
     }
   }
+
+  await safeSaveAuthoritativeGameState('andar-bahar', andarBaharState);
 }, 1000);
 
 app.get('/api/games/andar-bahar/state', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
