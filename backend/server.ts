@@ -225,10 +225,17 @@ function startAuthoritativeRealtimeBridge() {
   stopAuthoritativeRealtime = supabaseRepo.subscribeToAuthoritativeGameStates((payload: any) => {
     const row = payload?.new;
     if (!row?.game_id || !row?.state) return;
-    const state = row.state;
+    const rawState = row.state;
     const gameId = row.game_id;
     const ROOM_IDS: Record<string, string> = { aviator: 'aviator-main', roulette: 'roulette-main', 'teen-patti': 'teen-patti-main', dice: 'dice-main', 'dragon-tiger': 'dragon-tiger-main', 'andar-bahar': 'andar-bahar-main' };
-    const roomId = state.roomId ?? ROOM_IDS[gameId] ?? `${gameId}-main`;
+    const roomId = rawState.roomId ?? ROOM_IDS[gameId] ?? `${gameId}-main`;
+    // Never expose backend-only secrets/internal collections to browsers.
+    // Aviator's crashTarget is persisted for authoritative recovery but stays server-side.
+    const state = { ...rawState };
+    if (gameId === 'aviator') {
+      delete state.crashTarget;
+      delete state.activeBets;
+    }
     broadcastRealtime('game_state', {
       gameId,
       roomId,
