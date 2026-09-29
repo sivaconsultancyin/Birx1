@@ -4,6 +4,7 @@ export class BackgroundRenderer {
   constructor() {
     this._width = 0;
     this._height = 0;
+    this._stars = Array.from({ length: 90 }, (_, i) => ({ x: (i * 47) % 997 / 997, y: (i * 83) % 997 / 997, size: 0.7 + (i % 3) * 0.55, speed: 0.015 + (i % 5) * 0.006 }));
   }
 
   resize(width, height) {
@@ -76,7 +77,7 @@ export class BackgroundRenderer {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bl.toString(16).padStart(2, '0')}`;
   }
 
-  render(ctx, w, h, multiplier = 1, state = GameState.LOBBY) {
+  render(ctx, w, h, multiplier = 1, state = GameState.LOBBY, timestamp = 0) {
     const colors = this._getGradientColors(multiplier, state);
 
     const grad = ctx.createRadialGradient(w / 2, h, 0, w / 2, h, h * 1.2);
@@ -101,6 +102,20 @@ export class BackgroundRenderer {
       ctx.closePath();
       ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.015)' : 'rgba(255, 255, 255, 0.005)';
       ctx.fill();
+    }
+
+    // Moving star field: the stars travel upward to make the aircraft feel like it is flying through space.
+    if (state === GameState.FLYING || state === GameState.CRASHED) {
+      const t = timestamp / 1000;
+      for (const star of this._stars) {
+        const y = ((star.y + t * star.speed) % 1) * h;
+        const x = star.x * w;
+        const twinkle = 0.35 + 0.25 * Math.sin(t * 3 + star.x * 20);
+        ctx.fillStyle = `rgba(255,255,255,${twinkle})`;
+        ctx.beginPath();
+        ctx.arc(x, h - y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     if (state === GameState.CRASHED) {
