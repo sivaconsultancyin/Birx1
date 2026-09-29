@@ -20,10 +20,42 @@ function hasSelfHostedPostgres(): boolean {
 }
 function hashPassword(password: string, salt = crypto.randomBytes(16).toString('hex')): string {
   const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `scrypt${salt}${hash}`;
+  return 'scrypt$' + salt + '$' + hash;
 }
 function verifyPassword(password: string, encoded: string): boolean {
-  const [scheme, salt, expected] = String(encoded || '').split('
+  const parts = String(encoded || '').split('$');
+  if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
+  const [, salt, expected] = parts;
+  const actual = crypto.scryptSync(password, salt, 64).toString('hex');
+  const a = Buffer.from(actual, 'hex');
+  const b = Buffer.from(expected, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function signLocalToken(userId: string): string {
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const body = Buffer.from(JSON.stringify({ sub: userId, exp })).toString('base64url');
+  const secret = process.env.AUTH_TOKEN_SECRET || process.env.DATABASE_URL || 'brix-local-auth-secret';
+  const sig = crypto.createHmac('sha256', secret).update(body).digest('base64url');
+  return 'local.' + body + '.' + sig;
+}
+function verifyLocalToken(token: string): string | null {
+  if (!token.startsWith('local.')) return null;
+  const [, body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const secret = process.env.AUTH_TOKEN_SECRET || process.env.DATABASE_URL || 'brix-local-auth-secret';
+  const expected = crypto.createHmac('sha256', secret).update(body).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
+    return payload.exp > Math.floor(Date.now() / 1000) ? String(payload.sub) : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface AuthSession {
   token: string;
   user: User;
   wallet: Wallet;
