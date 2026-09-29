@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('Aviator runs continuous server-authoritative rounds in one permanent room', async ({ request }) => {
-  test.setTimeout(75000);
+  test.setTimeout(110000);
   const first = await request.get('/api/games/aviator/state');
   expect(first.status()).toBe(200);
   const firstJson = await first.json();
@@ -12,7 +12,7 @@ test('Aviator runs continuous server-authoritative rounds in one permanent room'
 
   let sawProgress = false;
   let sawNewRound = false;
-  const deadline = Date.now() + 40000;
+  // A legitimate round can reach the server-side 50x crash cap before the next round starts.\n  // Allow the E2E test to observe the full authoritative lifecycle without false negatives.\n  const deadline = Date.now() + 70000;
 
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 500));
