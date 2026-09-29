@@ -1,6 +1,6 @@
 import { getMultiplierAtTime } from './CrashAlgorithm.js';
 
-const TARGET_SCREEN_FRACTION = 0.65;
+const TARGET_SCREEN_FRACTION = 0.52;
 const LERP_SPEED = 3.0;
 
 export class FlightPath {
@@ -61,8 +61,8 @@ export class FlightPath {
     const logVal = Math.log(Math.max(1, multiplier));
     const fraction = logMax > 0 ? Math.min(1, Math.max(0, logVal / logMax)) : 0;
 
-    const laneCenterY = this.paddingTop + this.plotHeight * 0.50;
-    const maxRise = this.plotHeight * 0.28;
+    const laneCenterY = this.paddingTop + this.plotHeight * 0.72;
+    const maxRise = this.plotHeight * 0.50;
     return laneCenterY - fraction * maxRise;
   }
 
