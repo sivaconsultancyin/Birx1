@@ -334,12 +334,23 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async
   const cashMultiplier = aviatorState.multiplier;
   const payout = Math.floor(currentAviatorBet.amount * cashMultiplier);
 
+  const payoutIdempotencyKey = `aviator_payout_${currentAviatorBet.betId}`;
+  try {
+    // Credit first; only finalize/remove the active bet after the wallet mutation succeeds.
+    await creditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator', payoutIdempotencyKey);
+  } catch (e: any) {
+    console.error('[Aviator] Cashout wallet credit failed:', e);
+    return res.status(502).json({
+      error: 'Wallet payout service temporarily unavailable',
+      detail: String(e?.message || 'Wallet credit failed')
+    });
+  }
+
   currentAviatorBet.cashedOut = true;
   currentAviatorBet.cashOutMultiplier = cashMultiplier;
   currentAviatorBet.winAmount = payout;
   aviatorBets.delete(req.user!.id);
 
-  await creditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator', `aviator_payout_${currentAviatorBet.betId}`);
   try {
     await supabaseRepo.settleGameBet(currentAviatorBet.betId, 'won', cashMultiplier, payout);
   } catch (e) {
