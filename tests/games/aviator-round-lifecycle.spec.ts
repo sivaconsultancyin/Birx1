@@ -12,7 +12,9 @@ test('Aviator runs continuous server-authoritative rounds in one permanent room'
 
   let sawProgress = false;
   let sawNewRound = false;
-  // A legitimate round can reach the server-side 50x crash cap before the next round starts.\n  // Allow the E2E test to observe the full authoritative lifecycle without false negatives.\n  const deadline = Date.now() + 70000;
+  // A legitimate round can reach the server-side 50x crash cap before the next round starts.
+  // Allow the E2E test to observe the full authoritative lifecycle without false negatives.
+  const deadline = Date.now() + 70000;
 
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 500));
