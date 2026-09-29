@@ -50,7 +50,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
       try {
         const res = await gamesApi.aviator.getState();
         if (!mounted) return;
-        setGameState(res.state);
+        setGameState({ ...res.state, previousMultipliers: Array.isArray(res.state.previousMultipliers) ? res.state.previousMultipliers : [] });
         setCurrentBet(res.state.currentBet ?? null);
       } catch {
         // WebSocket realtime events keep the live state synchronized.
