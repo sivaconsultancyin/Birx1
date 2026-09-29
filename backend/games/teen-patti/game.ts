@@ -10,12 +10,50 @@ export function registerTeenPattiGame(app: any, deps: any) {
 
 // -------------------------------------------------------------
 let teenPattiState: TeenPattiState = createAuthoritativeTeenPattiRound('Player', undefined, 50);
+const teenPattiPlayers = new Map<string, TeenPattiPlayer>();
+
+function getOrCreateTeenPattiPlayer(userId: string): TeenPattiPlayer {
+  const existing = teenPattiPlayers.get(userId);
+  if (existing) return existing;
+  const template = teenPattiState.players[0];
+  const player: TeenPattiPlayer = {
+    ...(template ?? { id: userId, name: 'Player', avatar: '', cards: [], seen: false, folded: false, currentBet: 0 }),
+    id: userId,
+    isUser: true,
+    currentBet: 0,
+    seen: false,
+    folded: false,
+    cards: template?.cards ? [...template.cards] : []
+  };
+  teenPattiPlayers.set(userId, player);
+  return player;
+}
+
+function hydrateTeenPattiPersistence(persisted: any) {
+  if (!persisted || typeof persisted !== 'object') return;
+  const { activePlayers, ...sharedState } = persisted;
+  if (sharedState.roundId) teenPattiState = sharedState as TeenPattiState;
+  if (activePlayers && typeof activePlayers === 'object') {
+    teenPattiPlayers.clear();
+    for (const [userId, player] of Object.entries(activePlayers)) {
+      if (player && typeof player === 'object') teenPattiPlayers.set(userId, player as TeenPattiPlayer);
+    }
+  }
+}
+
+function serializeTeenPattiPersistence() {
+  return {
+    ...teenPattiState,
+    // User-specific mutable state is persisted separately from the shared room state.
+    activePlayers: Object.fromEntries(teenPattiPlayers.entries())
+  };
+}
 
 // Background Authoritative Teen Patti Round Cycle
 setInterval(async () => {
   if (!(await acquireGameLease('teen-patti'))) return;
   const persistedTeen = await safeGetAuthoritativeGameState('teen-patti');
-  if (persistedTeen) teenPattiState = persistedTeen as TeenPattiState;
+  if (persistedTeen) hydrateTeenPattiPersistence(persistedTeen);
   if (teenPattiState.phase === 'betting') {
     teenPattiState.countdown -= 1;
     if (teenPattiState.countdown <= 0) {
@@ -60,7 +98,7 @@ setInterval(async () => {
     if (teenPattiState.countdown <= 0) {
       teenPattiState.phase = 'settlement';
 
-      const userPlayer = teenPattiState.players.find((p) => p.isUser);
+      const userPlayer = getOrCreateTeenPattiPlayer(req.user!.id);
       let userSettlementDetail = undefined;
       if (userPlayer && teenPattiState.dealer) {
         const settlement = computePlayerSettlement(
@@ -149,13 +187,14 @@ setInterval(async () => {
       });
     }
   }
-  await safeSaveAuthoritativeGameState('teen-patti', teenPattiState);
+  await safeSaveAuthoritativeGameState('teen-patti', serializeTeenPattiPersistence());
 }, 1000);
 
 // --- TEEN PATTI API ENDPOINTS ---
-const handleGetTeenPattiState = (_req: Request, res: Response) => {
+const handleGetTeenPattiState = (req: Request, res: Response) => {
+  const userPlayer = getOrCreateTeenPattiPlayer(req.user!.id);
   res.json({
-    state: sanitizeTeenPattiState(teenPattiState)
+    state: sanitizeTeenPattiState({ ...teenPattiState, players: [userPlayer] })
   });
 };
 
@@ -171,7 +210,7 @@ const handlePostTeenPattiBet = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Betting is closed for this round' });
   }
   const userWallet = await supabaseRepo.getWallet(req.user!.id);
-  const userPlayer = teenPattiState.players.find((p) => p.isUser);
+  const userPlayer = getOrCreateTeenPattiPlayer(req.user!.id);
   if (!userPlayer) return res.status(400).json({ error: 'User player not found' });
 
   // Calculate delta if player already has a bet
