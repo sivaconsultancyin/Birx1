@@ -164,7 +164,7 @@ export const adminApi = {
 
   async createClaim(claimData: {
     type: string;
-    subject: string;
+    title: string;
     description: string;
     amount?: number;
     gameId?: string;
@@ -259,7 +259,7 @@ export const walletApi = {
     });
   },
 
-  async withdraw(amount: number, upiId: string): Promise<{ success: boolean; wallet: Wallet; transaction: Transaction }> {
+  async withdraw(amount: number, upiId: string): Promise<{ success: boolean; wallet: Wallet; request: WithdrawalRequest }> {
     return fetchJson('/wallet/withdraw', {
       method: 'POST',
       body: JSON.stringify({
