@@ -490,7 +490,8 @@ const supabaseRepoImpl = {
       const { data, error } = await admin.rpc('atomic_wallet_credit', {
         p_user_id: userId, p_amount: amount, p_type: type,
         p_description: description, p_game_id: gameId || null,
-        p_idempotency_key: idempotencyKey || null
+        p_idempotency_key: idempotencyKey || null,
+        p_reference_id: `REF-${crypto.randomUUID()}`
       });
       if (error || !data?.success) throw new Error(error?.message || 'Atomic wallet credit failed');
       return data;
