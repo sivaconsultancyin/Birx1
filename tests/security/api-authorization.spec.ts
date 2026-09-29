@@ -49,7 +49,7 @@ test.describe('API authorization boundaries', () => {
     ];
     for (const [method, url] of routes) {
       const response = method === 'GET' ? await request.get(url) : await request.post(url, { data: {} });
-      expect([401, 403]).toContain(response.status(), `${method} ${url} must be registered and protected`);
+      expect([401, 403]).toContain(response.status());
     }
   });
 });
