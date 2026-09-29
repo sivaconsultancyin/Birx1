@@ -139,6 +139,22 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
             ))}
           </div>
           <div className="flex-1 glass rounded-[2.5rem] relative flex items-center justify-center overflow-hidden border border-white/5 bg-gradient-to-br from-black/20 to-transparent">
+            {/* Fixed middle flight lane: the aircraft is never allowed to leave the play area vertically. */}
+            <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-px bg-white/10 pointer-events-none" />
+            <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-px bg-red-500/35 shadow-[0_0_12px_rgba(239,68,68,0.35)] pointer-events-none" />
+            {gameState?.phase === 'running' && (() => {
+              const rawX = ((Number(gameState.multiplier || 1) - 1) / 8) * 100;
+              const planeX = Math.min(88, Math.max(8, rawX));
+              return (
+                <div
+                  className="absolute z-20 pointer-events-none transition-[left] duration-150 ease-linear"
+                  style={{ left: `${planeX}%`, top: '50%', transform: 'translate(-50%, -50%) rotate(-12deg)' }}
+                >
+                  <Plane className="w-12 h-12 text-red-500 fill-red-500 drop-shadow-[0_0_18px_rgba(239,68,68,0.7)]" />
+                  <span className="absolute -left-5 top-1/2 w-5 h-1 -translate-y-1/2 rounded-full bg-amber-400 blur-[2px]" />
+                </div>
+              );
+            })()}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
               <p className="text-[10rem] font-black tabular-nums tracking-tighter drop-shadow-[0_0_50px_rgba(234,67,53,0.4)] text-white">
                 {gameState?.multiplier ? Number(gameState.multiplier).toFixed(2) : '1.00'}<span className="text-5xl ml-2 text-red-500">x</span>
