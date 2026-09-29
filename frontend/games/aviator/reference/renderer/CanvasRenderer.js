@@ -160,9 +160,11 @@ export class CanvasRenderer {
         state.crashMultiplier
       );
 
-      const flyAwayY = basePos.y - flyAwayT * 250;
-      const flyAwayX = basePos.x + flyAwayT * 30;
-      const flyAwayAngle = basePos.angle - flyAwayT * 0.6;
+      // Crash fly-away must also stay inside the same bounded arena.
+      const laneTop = this._flightPath.paddingTop + this._flightPath.plotHeight * 0.18;
+      const flyAwayY = Math.max(laneTop, basePos.y - flyAwayT * this._flightPath.plotHeight * 0.12);
+      const flyAwayX = basePos.x + flyAwayT * Math.min(70, this._flightPath.plotWidth * 0.08);
+      const flyAwayAngle = Math.max(-0.35, basePos.angle - flyAwayT * 0.18);
       const flyAwayAlpha = 1 - flyAwayT * flyAwayT;
 
       ctx.globalAlpha = Math.max(0, flyAwayAlpha);
