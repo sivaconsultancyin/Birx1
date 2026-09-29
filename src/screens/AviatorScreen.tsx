@@ -120,7 +120,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   // normalized between 0% and 85% width & height
   const flightProgress = Math.min(1, Math.max(0, (multiplier - 1.0) / 4.0));
   const planeX = 10 + flightProgress * 75; // 10% to 85%
-  const planeY = 70 - flightProgress * 55; // 70% down to 15%
+  const planeY = 50; // Keep the aircraft centered on the middle flight line
 
   const rulesData = [
     {
@@ -225,7 +225,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
                   </linearGradient>
                 </defs>
                 <path
-                  d={`M 10 240 Q ${planeX * 2} 240, ${planeX * 3.6} ${planeY * 2.5}`}
+                  d={`M 10 128 Q ${planeX * 2} 128, ${planeX * 3.6} 128`}
                   fill="none"
                   stroke="url(#curveGradient)"
                   strokeWidth="4"
