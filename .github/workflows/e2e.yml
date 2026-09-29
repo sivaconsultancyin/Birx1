@@ -9,19 +9,6 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: brix_e2e
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d brix_e2e"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,25 +17,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Apply self-hosted PostgreSQL schema
-        run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/001_brix_core.sql
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/002_self_hosted_postgresql_runtime.sql
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/003_self_hosted_auth.sql
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/brix_e2e
-      - run: npx tsx scripts/seed-e2e-postgres.ts
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/brix_e2e
-          E2E_TEST_MOBILE: ${{ secrets.E2E_TEST_MOBILE }}
-          E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
       - run: npm run test:e2e
         env:
           E2E_SMOKE_ONLY: '0'
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/brix_e2e
           E2E_TEST_MOBILE: ${{ secrets.E2E_TEST_MOBILE }}
           E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
       - uses: actions/upload-artifact@v4
