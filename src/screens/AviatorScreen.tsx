@@ -56,6 +56,45 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
     return () => { isMounted = false; clearInterval(pollInterval); };
   }, []);
 
+  const handlePlaceBet = async () => {
+    if (!gameState || gameState.phase !== 'betting') {
+      setErrorMsg('Betting is only open during the countdown phase');
+      return;
+    }
+    if (wallet.balance < betAmount) {
+      setErrorMsg('Insufficient balance for this bet');
+      return;
+    }
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await gamesApi.aviator.placeBet(betAmount);
+      setCurrentBet(res.bet);
+      onUpdateWallet(res.wallet);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to place bet');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCashOut = async () => {
+    if (!currentBet || currentBet.cashedOut || gameState?.phase !== 'running') return;
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await gamesApi.aviator.cashOut();
+      setCashoutResult({ amount: res.winAmount, multiplier: res.cashMultiplier });
+      onUpdateWallet(res.wallet);
+      setCurrentBet(prev => prev ? { ...prev, cashedOut: true, winAmount: res.winAmount } : null);
+      notifyWinLoss({ type: 'win', amount: res.winAmount });
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Cashout failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
     return (
     <div className="h-screen w-screen flex flex-col bg-[#0f1115] text-[#f3f4f6] overflow-hidden">
       <header className="h-20 glass flex items-center justify-between px-8 border-b border-white/5 z-50">
