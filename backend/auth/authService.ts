@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import { getPostgresPool } from '../database/postgres.ts';
 import { Request, Response, NextFunction } from 'express';
 import { User, UserRole, Wallet } from '../../src/types.ts';
 import { supabaseRepo, getSupabaseAdmin, getSupabasePublic } from '../supabase/supabaseClient.ts';
@@ -11,47 +10,6 @@ declare global {
       user?: User;
       wallet?: Wallet;
     }
-  }
-}
-
-
-function hasSelfHostedPostgres(): boolean {
-  return Boolean(process.env.DATABASE_URL?.trim());
-}
-function hashPassword(password: string, salt = crypto.randomBytes(16).toString('hex')): string {
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return 'scrypt$' + salt + '$' + hash;
-}
-function verifyPassword(password: string, encoded: string): boolean {
-  const parts = String(encoded || '').split('$');
-  if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
-  const [, salt, expected] = parts;
-  const actual = crypto.scryptSync(password, salt, 64).toString('hex');
-  const a = Buffer.from(actual, 'hex');
-  const b = Buffer.from(expected, 'hex');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-function signLocalToken(userId: string): string {
-  const exp = Math.floor(Date.now() / 1000) + 3600;
-  const body = Buffer.from(JSON.stringify({ sub: userId, exp })).toString('base64url');
-  const secret = process.env.AUTH_TOKEN_SECRET || process.env.DATABASE_URL || 'brix-local-auth-secret';
-  const sig = crypto.createHmac('sha256', secret).update(body).digest('base64url');
-  return 'local.' + body + '.' + sig;
-}
-function verifyLocalToken(token: string): string | null {
-  if (!token.startsWith('local.')) return null;
-  const [, body, sig] = token.split('.');
-  if (!body || !sig) return null;
-  const secret = process.env.AUTH_TOKEN_SECRET || process.env.DATABASE_URL || 'brix-local-auth-secret';
-  const expected = crypto.createHmac('sha256', secret).update(body).digest('base64url');
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
-    return payload.exp > Math.floor(Date.now() / 1000) ? String(payload.sub) : null;
-  } catch {
-    return null;
   }
 }
 
@@ -148,13 +106,6 @@ export const authService = {
     if (!token) return null;
     const cached = getCachedResolvedUser(token);
     if (cached) return cached;
-    if (hasSelfHostedPostgres()) {
-      const userId = verifyLocalToken(token);
-      if (!userId) return null;
-      const user = await supabaseRepo.getUserById(userId);
-      if (user) cacheResolvedUser(token, user);
-      return user;
-    }
     const admin = getSupabaseAdmin();
     if (!admin) return null;
     try {
@@ -170,20 +121,6 @@ export const authService = {
 
   async login(identifier: string, password: string): Promise<AuthSession> {
     if (!password || password.length < 8) throw new Error('Password must be at least 8 characters.');
-    if (hasSelfHostedPostgres()) {
-      const pool = getPostgresPool();
-      if (!pool) throw new Error('Authentication database is not configured.');
-      const clean = normalizeMobile(identifier);
-      const { rows } = await pool.query('select u.*, w.balance, w.bonus, w.locked_amount, w.currency, w.is_demo as wallet_is_demo, u.password_hash from users u join wallets w on w.user_id=u.id where regexp_replace(coalesce(u.mobile, \'\'), \'\\D\', \'\', \'g\')=$1 limit 1', [clean]);
-      const row = rows[0];
-      if (!row || !verifyPassword(password, row.password_hash)) throw new Error('Invalid mobile number or password.');
-      const user = await supabaseRepo.getUserById(row.id);
-      if (!user) throw new Error('User account not found.');
-      const wallet = await supabaseRepo.getWallet(user.id);
-      const token = signLocalToken(user.id);
-      cacheResolvedUser(token, user);
-      return { token, user, wallet };
-    }
     const publicClient = getSupabasePublic();
     if (!publicClient) throw new Error('Authentication service is not configured.');
     const email = getAuthEmail(identifier);
@@ -198,24 +135,6 @@ export const authService = {
   async register(mobile: string, username: string, password: string, _role: UserRole = 'PLAYER', parentId?: string): Promise<AuthSession> {
     if (!password || password.length < 8) throw new Error('Password must be at least 8 characters.');
     const cleanMobile = normalizeMobile(mobile);
-    if (hasSelfHostedPostgres()) {
-      const existing = await supabaseRepo.getUserByEmailOrMobile(cleanMobile);
-      if (existing) throw new Error('An account with this mobile number already exists.');
-      const id = `usr_${crypto.randomUUID()}`;
-      const user: User = { id, mobile: formatE164Mobile(cleanMobile), email: getAuthEmail(cleanMobile), username, role: _role, parentId, vipTier: 'Bronze', isDemo: false, createdAt: new Date().toISOString() };
-      const pool = getPostgresPool();
-      if (!pool) throw new Error('Authentication database is not configured.');
-      await pool.query('begin');
-      try {
-        await pool.query('insert into users(id,mobile,email,username,role,parent_id,vip_tier,is_demo,password_hash) values($1,$2,$3,$4,$5,$6,$7,$8,$9)', [id,user.mobile,user.email,user.username,user.role,user.parentId,user.vipTier,user.isDemo,hashPassword(password)]);
-        await pool.query('insert into wallets(user_id,balance,bonus,currency,is_demo) values($1,5000,500,\'INR\',false)', [id]);
-        await pool.query('commit');
-      } catch (e) { await pool.query('rollback'); throw e; }
-      const wallet = await supabaseRepo.getWallet(id);
-      const token = signLocalToken(id);
-      cacheResolvedUser(token, user);
-      return { token, user, wallet };
-    }
     const formattedMobile = formatE164Mobile(mobile);
     const existing = await supabaseRepo.getUserByEmailOrMobile(cleanMobile);
     if (existing) throw new Error('An account with this mobile number already exists.');
