@@ -289,7 +289,15 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
     await debitForUser(req, numAmount, `Aviator Bet #${aviatorState.roundId}`, 'aviator', idempotencyKey);
   } catch (e: any) {
     try { await supabaseRepo.settleGameBet(betId, 'cancelled' as any, 0, 0); } catch {}
-    return res.status(400).json({ error: 'Insufficient wallet balance' });
+    const message = String(e?.message || 'Wallet debit failed');
+    const isInsufficient = /insufficient|not enough|balance/i.test(message);
+    let wallet: Wallet | null = null;
+    try { wallet = await supabaseRepo.getWallet(req.user!.id); } catch {}
+    return res.status(isInsufficient ? 400 : 503).json({
+      error: isInsufficient ? 'Insufficient wallet balance' : 'Wallet service temporarily unavailable',
+      detail: message,
+      wallet
+    });
   }
 
   const currentAviatorBet: AviatorBet = {
