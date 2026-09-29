@@ -607,6 +607,9 @@ if (!skipGameLoops) {
 const startServer = async () => {
   try {
     const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction && !getSupabaseConfigStatus().isConfigured) {
+      throw new Error('Supabase is required in production. Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+    }
     // Browsers request /favicon.ico automatically; return an explicit empty response so this is not a real missing resource.
     app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204).end());
     if (isProduction) {
