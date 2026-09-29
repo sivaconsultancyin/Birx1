@@ -33,10 +33,9 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   const currentBetRef = useRef<AviatorBet | null>(null);
   currentBetRef.current = currentBet;
 
-  // Poll server state every 150ms to strictly display server-authoritative ticks & crash
+  // Poll server state every 180ms to strictly display server-authoritative ticks & crash
   useEffect(() => {
     let isMounted = true;
-
     const pollInterval = setInterval(async () => {
       try {
         const res = await gamesApi.aviator.getState();
@@ -44,22 +43,18 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
         setGameState(res.state);
         if (res.state.phase === 'crashed') {
           if (currentBetRef.current && !currentBetRef.current.cashedOut) {
-            notifyWinLoss({
-              type: 'loss',
-              amount: currentBetRef.current.amount
-            });
+            notifyWinLoss({ type: 'loss', amount: currentBetRef.current.amount });
             setCurrentBet(null);
           }
         } else if (res.state.currentBet) {
           setCurrentBet(res.state.currentBet);
         } else if (res.state.phase === 'betting') {
-          // If server reset round
           setCurrentBet(null);
         }
-      } catch (err: any) {
-        // network tick jitter
-      }
+      } catch {}
     }, 180);
+    return () => { isMounted = false; clearInterval(pollInterval); };
+  }, []);
 
     return (
     <div className="h-screen w-screen flex flex-col bg-[#0f1115] text-[#f3f4f6] overflow-hidden">
