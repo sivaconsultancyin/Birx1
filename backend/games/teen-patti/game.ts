@@ -98,7 +98,7 @@ setInterval(async () => {
     if (teenPattiState.countdown <= 0) {
       teenPattiState.phase = 'settlement';
 
-      const userPlayer = getOrCreateTeenPattiPlayer(req.user!.id);
+      const userPlayer = undefined as TeenPattiPlayer | undefined;
       let userSettlementDetail = undefined;
       if (userPlayer && teenPattiState.dealer) {
         const settlement = computePlayerSettlement(
@@ -248,7 +248,7 @@ app.post('/api/games/teen-patti/bet', requireAuth, requirePlayerForGames, handle
 
 const handlePostTeenPattiNewRound = async (req: Request, res: Response) => {
   const bootAmount = Number(req.body?.bootAmount || 50);
-  const userPlayer = teenPattiState.players.find((p) => p.isUser);
+  const userPlayer = getOrCreateTeenPattiPlayer(req.user!.id);
   if (userPlayer && teenPattiState.phase === 'betting') {
     if (userPlayer.currentBet < bootAmount) {
       const delta = bootAmount - userPlayer.currentBet;
@@ -275,17 +275,16 @@ const handlePostTeenPattiAction = async (req: Request, res: Response) => {
   const { action, betAmount = 0 }: { action: 'see' | 'blind' | 'chaal' | 'fold' | 'show' | 'bet'; betAmount?: number } =
     req.body;
 
-  const userPlayer = teenPattiState.players.find((p) => p.isUser);
-  if (!userPlayer) return res.status(400).json({ error: 'Player not found' });
+  const userPlayer = getOrCreateTeenPattiPlayer(req.user!.id);
 
   if (action === 'see') {
     userPlayer.seen = true;
-    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), userCards: userPlayer.cards });
+    return res.json({ success: true, state: sanitizeTeenPattiState({ ...teenPattiState, players: [userPlayer] }), userCards: userPlayer.cards });
   }
 
   if (action === 'fold') {
     userPlayer.folded = true;
-    return res.json({ success: true, state: sanitizeTeenPattiState(teenPattiState), wallet: await supabaseRepo.getWallet(req.user!.id) });
+    return res.json({ success: true, state: sanitizeTeenPattiState({ ...teenPattiState, players: [userPlayer] }), wallet: await supabaseRepo.getWallet(req.user!.id) });
   }
 
   if (action === 'blind' || action === 'chaal' || action === 'bet') {
