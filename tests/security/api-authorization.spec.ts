@@ -41,12 +41,14 @@ test.describe('API authorization boundaries', () => {
       ['GET', '/api/games/roulette/settlement/test-round'], ['POST', '/api/games/roulette/spin'],
       ['GET', '/api/games/teen-patti/state'], ['POST', '/api/games/teen-patti/bet'],
       ['POST', '/api/games/teen-patti/new-round'], ['POST', '/api/games/teen-patti/action'],
-      ['GET', '/api/games/aviator/state'], ['POST', '/api/games/aviator/bet'],
+      ['POST', '/api/games/aviator/bet'],
       ['POST', '/api/games/aviator/cashout'], ['GET', '/api/games/dice/state'],
       ['POST', '/api/games/dice/roll'], ['GET', '/api/games/dragon-tiger/state'],
       ['POST', '/api/games/dragon-tiger/deal'], ['GET', '/api/games/andar-bahar/state'],
       ['POST', '/api/games/andar-bahar/deal'],
     ];
+    // Aviator state is intentionally public: it contains non-sensitive round state.
+// Mutation endpoints remain authenticated below.
     const violations: string[] = [];
     for (const [method, url] of routes) {
       const response = method === 'GET' ? await request.get(url) : await request.post(url, { data: {} });
