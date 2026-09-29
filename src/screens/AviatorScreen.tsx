@@ -61,305 +61,63 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
       }
     }, 180);
 
-    return () => {
-      isMounted = false;
-      clearInterval(pollInterval);
-    };
-  }, []);
-
-  const handlePlaceBet = async () => {
-    if (!gameState || gameState.phase !== 'betting') {
-      setErrorMsg('Betting is only open during the countdown phase');
-      return;
-    }
-    if (wallet.balance < betAmount) {
-      setErrorMsg('Insufficient balance for this bet');
-      return;
-    }
-
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const res = await gamesApi.aviator.placeBet(betAmount);
-      setCurrentBet(res.bet);
-      onUpdateWallet(res.wallet);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to place bet');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCashout = async () => {
-    if (!currentBet || currentBet.cashedOut || gameState?.phase !== 'running') return;
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const res = await gamesApi.aviator.cashOut();
-      setCashoutResult({ amount: res.winAmount, multiplier: res.cashMultiplier });
-      onUpdateWallet(res.wallet);
-      setCurrentBet((prev) => (prev ? { ...prev, cashedOut: true, winAmount: res.winAmount } : null));
-      // Authoritative Win notification popup
-      notifyWinLoss({
-        type: 'win',
-        amount: res.winAmount
-      });
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Cashout failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const multiplier = gameState?.multiplier || 1.0;
-  const phase = gameState?.phase || 'betting';
-  const isCrashed = phase === 'crashed';
-  const isRunning = phase === 'running';
-
-  // Calculate aircraft flight curve position based on multiplier
-  // normalized between 0% and 85% width & height
-  const flightProgress = Math.min(1, Math.max(0, (multiplier - 1.0) / 4.0));
-  const planeX = 10 + flightProgress * 75; // 10% to 85%
-  const planeY = 50; // Keep the aircraft centered on the middle flight line
-
-  const rulesData = [
-    {
-      heading: 'How Aviator Works',
-      description:
-        'The aircraft takes off with an increasing multiplier starting at 1.00x. The flight curve rises exponentially until the server triggers the crash point.'
-    },
-    {
-      heading: 'Cashing Out',
-      description:
-        'Click CASH OUT before the plane flies away! Your win is your bet multiplied by the server-confirmed multiplier at the exact moment of cashout.'
-    },
-    {
-      heading: 'Provably Fair Server Authority',
-      description:
-        'Every crash point is generated and settled authoritatively on the server. The frontend has no ability to alter payouts or multipliers.'
-    }
-  ];
-
-  return (
-    <div id="screen-aviator" className="min-h-screen bg-slate-950 text-white pb-24 max-w-md mx-auto">
-      <GameHeader
-        title="Aviator 3D"
-        gameId="aviator"
-        balance={wallet.balance}
-        isDemo={wallet.isDemo}
-        roundId={gameState?.roundId}
-        onBack={onBack}
-        onOpenRules={() => setShowRules(true)}
-        onOpenWallet={onOpenWallet}
-      />
-
-      {/* Previous Multipliers History Bar */}
-      <div className="bg-slate-900/90 border-b border-slate-800 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0 flex items-center gap-1">
-          <Clock className="w-3 h-3 text-slate-500" /> History:
-        </span>
-        {gameState?.previousMultipliers.slice(0, 8).map((m, idx) => {
-          const isHigh = m >= 5.0;
-          const isMid = m >= 2.0;
-          return (
-            <span
-              key={idx}
-              style={{ ['--history-index' as any]: idx }}
-              className={`aviator-history-item shrink-0 text-[11px] font-mono font-bold px-2 py-0.5 rounded-full border ${
-                isHigh
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                  : isMid
-                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                  : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-              }`}
-            >
-              {m.toFixed(2)}x
-            </span>
-          );
-        })}
-      </div>
-
-      <ExternalAviatorUI>
-      {/* Flight Canvas Arena */}
-      <div className="relative p-4 bg-slate-950">
-        <div className="aviator-flight-card relative w-full h-64 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col justify-between p-4">
-          {/* Grid Background Lines */}
-          <div className="absolute inset-0 grid grid-cols-6 grid-rows-4 opacity-10 pointer-events-none">
-            {[...Array(24)].map((_, i) => (
-              <div key={i} className="border border-slate-700" />
+    return (
+    <div className="h-screen w-screen flex flex-col bg-[#0f1115] text-[#f3f4f6] overflow-hidden">
+      <header className="h-20 glass flex items-center justify-between px-8 border-b border-white/5 z-50">
+        <div className="flex items-center gap-4">
+          <div className="bg-red-500 p-2.5 rounded-2xl shadow-lg shadow-red-500/20">
+            <Plane className="text-white fill-white" size={28} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black tracking-tighter leading-none">AVIATOR</h1>
+            <p className="text-[10px] font-bold text-red-500/80 uppercase tracking-widest mt-1">Real-time Flight</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-6">
+          <button onClick={() => setShowRules(true)} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-2.5 rounded-xl border border-white/5 transition-all">
+            <CheckCircle className="text-amber-400" size={18} /><span className="font-bold text-xs uppercase tracking-widest">Fairness</span>
+          </button>
+          <div className="flex items-center gap-2 border-l border-white/10 pl-6">
+            <span className="text-lg font-black tabular-nums">${wallet.balance.toFixed(2)}</span>
+          </div>
+        </div>
+      </header>
+      <main className="flex-1 flex gap-4 p-4 overflow-hidden">
+        <aside className="w-80 flex flex-col gap-4 overflow-hidden">
+          <div className="flex-1 glass rounded-3xl p-5 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2"><TrendingUp size={18} className="text-indigo-400" /><h3 className="font-bold uppercase tracking-wider text-xs">Live Bets</h3></div>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+              {gameState?.bets?.map((bet: any, i: number) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-2xl border bg-white/5 border-white/5">
+                  <div><p className="text-xs font-bold text-gray-400">{bet.username ?? 'Player'}</p><p className="text-sm font-black">${Number(bet.amount ?? 0).toFixed(2)}</p></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
+        <section className="flex-1 flex flex-col gap-4 relative">
+          <div className="glass rounded-2xl p-2 flex gap-2 overflow-x-auto no-scrollbar">
+            <Clock size={16} className="text-gray-500 mt-1 ml-2" />
+            {(gameState?.history ?? []).map((h: number, i: number) => (
+              <div key={i} className="px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">{Number(h).toFixed(2)}x</div>
             ))}
           </div>
-
-          {/* Top Info Pill */}
-          <div className="relative z-10 flex items-center justify-between">
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-800">
-              ID: {gameState?.roundId || 'AV-SYNC'}
-            </span>
-
-            {phase === 'betting' && (
-              <span className="text-xs font-bold text-amber-400 bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/40 animate-pulse">
-                NEXT FLIGHT IN {gameState?.countdown || 5}s
-              </span>
-            )}
-            {isRunning && (
-              <span className="text-xs font-bold text-emerald-400 bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/40 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                FLYING AWAY
-              </span>
-            )}
-            {isCrashed && (
-              <span className="text-xs font-black text-rose-400 bg-rose-500/20 px-3 py-1 rounded-full border border-rose-500/40">
-                FLEW AWAY @ {gameState?.crashMultiplier?.toFixed(2)}x
-              </span>
-            )}
-          </div>
-
-          {/* SVG Flight Trail Curve */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-            {isRunning && (
-              <>
-                <defs>
-                  <linearGradient id="curveGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#ef4444" stopOpacity="0.2" />
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.8" />
-                  </linearGradient>
-                </defs>
-                <path
-                  d={`M 10 128 Q ${planeX * 2} 128, ${planeX * 3.6} 128`}
-                  fill="none"
-                  stroke="url(#curveGradient)"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  className="aviator-trail"
-                />
-              </>
-            )}
-          </svg>
-
-          {/* Center Huge Multiplier Display */}
-          <div className="relative z-10 self-center flex flex-col items-center">
-            {isCrashed ? (
-              <div className="text-center animate-shake">
-                <div className="text-4xl font-black text-rose-500 tracking-tight drop-shadow-md">
-                  {gameState?.crashMultiplier?.toFixed(2)}x
-                </div>
-                <div className="text-xs uppercase font-extrabold text-rose-400 tracking-widest mt-1">
-                  CRASHED
-                </div>
-              </div>
-            ) : isRunning ? (
-              <div className="text-center">
-                <div className="aviator-multiplier-live text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 tracking-tight drop-shadow-lg">
-                  {multiplier.toFixed(2)}x
-                </div>
-                <div className="text-[11px] text-amber-400/80 font-bold uppercase tracking-wider mt-0.5">
-                  CURRENT MULTIPLIER
-                </div>
-              </div>
-            ) : (
-              <div className="text-center">
-                <div className="text-3xl font-black text-slate-400">WAITING</div>
-                <div className="text-xs text-slate-500 mt-0.5">Place your bet before departure</div>
-              </div>
-            )}
-          </div>
-
-          {/* Flying Aircraft Element */}
-          {isRunning && (
-            <div
-              className="absolute z-20 transition-all duration-150 pointer-events-none"
-              style={{
-                left: `${planeX}%`,
-                top: `${planeY}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-            >
-              <div className="relative flex items-center justify-center">
-                <Plane className="aviator-plane w-10 h-10 text-rose-500 fill-rose-500 -rotate-12 drop-shadow-xl" />
-                <span className="absolute -left-3 w-4 h-1 bg-amber-400 rounded-full blur-sm" />
-              </div>
+          <div className="flex-1 glass rounded-[2.5rem] relative flex items-center justify-center overflow-hidden border border-white/5 bg-gradient-to-br from-black/20 to-transparent">
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+              <p className="text-[10rem] font-black tabular-nums tracking-tighter drop-shadow-[0_0_50px_rgba(234,67,53,0.4)] text-white">
+                {gameState?.multiplier ? Number(gameState.multiplier).toFixed(2) : '1.00'}<span className="text-5xl ml-2 text-red-500">x</span>
+              </p>
             </div>
-          )}
-
-          {/* Bottom runway strip */}
-          <div className="relative z-10 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-800/80 pt-2">
-            <span>Server Hash Verified</span>
-            <span>RNG Fair</span>
           </div>
-        </div>
-      </div>
-
-      </ExternalAviatorUI>
-      {errorMsg && (
-        <div className="mx-4 mb-2 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-center">
-          {errorMsg}
-        </div>
-      )}
-
-      {/* Betting Box Controls */}
-      <div className="px-4 space-y-3">
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Stake Amount</span>
-            {currentBet && (
-              <span className="text-xs font-bold text-emerald-400">
-                Active Bet: ₹{currentBet.amount}
-              </span>
-            )}
+          <div className="glass rounded-3xl p-4 flex gap-3 items-center">
+            <AmountSelector value={betAmount} onChange={setBetAmount} disabled={loading} />
+            <button disabled={loading || !!currentBet} onClick={handlePlaceBet} className="flex-1 bg-red-500 hover:bg-red-400 rounded-2xl py-4 font-black uppercase tracking-widest">BET</button>
+            <button disabled={loading || !currentBet || gameState?.phase !== 'flying'} onClick={handleCashOut} className="flex-1 bg-emerald-500 hover:bg-emerald-400 rounded-2xl py-4 font-black uppercase tracking-widest">CASH OUT</button>
           </div>
-
-          <AmountSelector
-            currentAmount={betAmount}
-            onAmountChange={setBetAmount}
-            minAmount={10}
-            maxAmount={25000}
-            disabled={loading || (currentBet !== null && !currentBet.cashedOut)}
-          />
-
-          {/* Primary Action Button */}
-          <div className="mt-4">
-            {isRunning && currentBet && !currentBet.cashedOut ? (
-              <button
-                id="btn-aviator-cashout"
-                type="button"
-                disabled={loading}
-                onClick={handleCashout}
-                className="aviator-action-primary w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-500/25 active:scale-95 transition-transform cursor-pointer flex flex-col items-center justify-center leading-tight"
-              >
-                <span>CASH OUT NOW</span>
-                <span className="text-xs font-extrabold text-slate-900">
-                  ₹{(Math.floor((currentBet?.amount ?? 0) * (multiplier ?? 1)) || 0).toLocaleString('en-IN')} ({(multiplier ?? 1).toFixed(2)}x)
-                </span>
-              </button>
-            ) : currentBet && currentBet.cashedOut ? (
-              <div className="w-full py-3.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-center font-bold text-xs">
-                Cashed Out ₹{currentBet.winAmount}! Waiting for next round...
-              </div>
-            ) : (
-              <button
-                id="btn-aviator-place-bet"
-                type="button"
-                disabled={loading || phase !== 'betting'}
-                onClick={handlePlaceBet}
-                className="aviator-action-primary w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>
-                  {phase === 'betting'
-                    ? `PLACE BET (₹${betAmount})`
-                    : 'WAITING FOR NEXT ROUND...'}
-                </span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <RulesModal
-        isOpen={showRules}
-        onClose={() => setShowRules(false)}
-        title="Aviator"
-        rules={rulesData}
-      />
+        </section>
+      </main>
     </div>
   );
 };
