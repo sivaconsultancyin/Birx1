@@ -719,6 +719,7 @@ const supabaseRepoImpl = {
   },
 
   subscribeToAuthoritativeGameStates(onChange: (payload: any) => void): (() => void) | null {
+    if (DATABASE_URL) return null;
     const admin = getSupabaseAdmin();
     if (!admin) return null;
     const channel = admin
