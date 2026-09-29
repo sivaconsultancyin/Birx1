@@ -47,9 +47,13 @@ test.describe('API authorization boundaries', () => {
       ['POST', '/api/games/dragon-tiger/deal'], ['GET', '/api/games/andar-bahar/state'],
       ['POST', '/api/games/andar-bahar/deal'],
     ];
+    const violations: string[] = [];
     for (const [method, url] of routes) {
       const response = method === 'GET' ? await request.get(url) : await request.post(url, { data: {} });
-      expect([401, 403]).toContain(response.status());
+      if (![401, 403].includes(response.status())) {
+        violations.push(`${method} ${url} -> HTTP ${response.status()}`);
+      }
     }
-  });
+    expect(violations, violations.join('; ')).toEqual([]);
+  });;
 });
