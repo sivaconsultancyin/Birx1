@@ -50,7 +50,7 @@ import { gameEventBus } from './events/gameEventBus.ts';
 
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 10000;
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 function rateLimit(limit: number, windowMs: number) {
   return (req: Request, res: Response, next: NextFunction) => {
