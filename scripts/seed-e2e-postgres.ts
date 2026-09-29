@@ -12,6 +12,13 @@ const hash=crypto.scryptSync(password,salt,64).toString('hex');
 const passwordHash=`scrypt$${salt}$${hash}`;
 const email=`${mobile}@auth.brix.games`;
 const id='e2e_'+mobile;
+const games = [
+  ['aviator','Aviator','multiplier'],['roulette','Roulette','casino'],['teen-patti','Teen Patti','cards'],
+  ['dice','Dice','dice'],['dragon-tiger','Dragon Tiger','cards'],['andar-bahar','Andar Bahar','cards']
+];
+for (const [id,name,category] of games) {
+  await pool.query(`insert into games(id,name,category,status) values($1,$2,$3,'active') on conflict(id) do update set status='active'`,[id,name,category]);
+}
 await pool.query(`insert into users(id,mobile,email,username,role,vip_tier,is_demo,password_hash)
 values($1,$2,$3,'E2E Player','PLAYER','Bronze',false,$4)
 on conflict(id) do update set mobile=excluded.mobile,email=excluded.email,role='PLAYER',password_hash=excluded.password_hash`,
