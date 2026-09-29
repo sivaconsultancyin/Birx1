@@ -148,7 +148,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
               return (
                 <div
                   className="absolute z-20 pointer-events-none transition-[left] duration-150 ease-linear"
-                  style={{ left: `${planeX}%`, top: '50%', transform: 'translate(-50%, -50%) rotate(-12deg)' }}
+                  style={{ left: `${planeX}%`, top: '50%', transform: 'translate(-50%, -50%) rotate(-12deg) scale(0.92)' }}
                 >
                   <Plane className="w-12 h-12 text-red-500 fill-red-500 drop-shadow-[0_0_18px_rgba(239,68,68,0.7)]" />
                   <span className="absolute -left-5 top-1/2 w-5 h-1 -translate-y-1/2 rounded-full bg-amber-400 blur-[2px]" />
