@@ -91,13 +91,6 @@ const dbStore: DbStore = {
   settlements: new Map()
 };
 
-/** Runtime database selector: DATABASE_URL makes self-hosted PostgreSQL authoritative. */
-export const supabaseRepo = new Proxy(supabaseRepoImpl as any, {
-  get(target, property, receiver) {
-    if (DATABASE_URL && property in postgresRepo) return (postgresRepo as any)[property];
-    return Reflect.get(target, property, receiver);
-  }
-});
 
 // Seed initial hierarchy
 function seedInitialStore() {
@@ -790,3 +783,11 @@ const supabaseRepoImpl = {
     if(error||!data) throw new Error(error?.message||'Policy update failed'); return data.config;
   }
 };
+
+/** Runtime database selector: DATABASE_URL makes self-hosted PostgreSQL authoritative. */
+export const supabaseRepo = new Proxy(supabaseRepoImpl as any, {
+  get(target, property, receiver) {
+    if (DATABASE_URL && property in postgresRepo) return (postgresRepo as any)[property];
+    return Reflect.get(target, property, receiver);
+  }
+});
