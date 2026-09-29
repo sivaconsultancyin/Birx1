@@ -47,12 +47,10 @@ import { walletService } from './wallet/walletService.ts';
 import { storageService } from './storage/storageService.ts';
 import { gameRecoveryService } from './recovery/gameRecoveryService.ts';
 import { gameEventBus } from './events/gameEventBus.ts';
-import { postgresHealth } from './database/postgres.ts';
 
 
 const app = express();
 const PORT = 3000;
-const hasSelfHostedPostgres = () => Boolean(process.env.DATABASE_URL?.trim());
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 function rateLimit(limit: number, windowMs: number) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -113,7 +111,7 @@ let leaseConfigWarningShown = false;
 async function acquireGameLease(gameId: string): Promise<boolean> {
   // Keep the local game loop alive when the lease RPC is unavailable.
   // A single Node process can safely use its in-memory authoritative state.
-  if (!getSupabaseConfigStatus().isConfigured && !hasSelfHostedPostgres()) {
+  if (!getSupabaseConfigStatus().isConfigured) {
     if (!leaseConfigWarningShown) {
       console.warn('[GameLease] Supabase lease unavailable; using single-process local game loop.');
       leaseConfigWarningShown = true;
@@ -133,25 +131,8 @@ async function acquireGameLease(gameId: string): Promise<boolean> {
 
 async function safeSaveAuthoritativeGameState(gameId: string, state: any): Promise<void> {
   try {
-    if (getSupabaseConfigStatus().isConfigured || hasSelfHostedPostgres()) {
+    if (getSupabaseConfigStatus().isConfigured) {
       await supabaseRepo.saveAuthoritativeGameState(gameId, state);
-      if (hasSelfHostedPostgres()) {
-        const roomIds: Record<string, string> = { aviator: 'aviator-main', roulette: 'roulette-main', 'teen-patti': 'teen-patti-main', dice: 'dice-main', 'dragon-tiger': 'dragon-tiger-main', 'andar-bahar': 'andar-bahar-main' };
-        const roomId = state?.roomId ?? roomIds[gameId] ?? `${gameId}-main`;
-        const publicState = { ...(state || {}) };
-        if (gameId === 'aviator') {
-          delete publicState.crashTarget;
-          delete publicState.activeBets;
-        }
-        broadcastRealtime('game_state', {
-          gameId,
-          roomId,
-          roundId: state?.roundId ?? null,
-          phase: state?.phase ?? null,
-          version: Number(state?.version ?? 0),
-          state: { ...publicState, gameId, roomId }
-        });
-      }
     }
   } catch (e) {
     console.warn(`[GameState:${gameId}] persistence unavailable; keeping local authoritative state.`, e);
@@ -160,7 +141,7 @@ async function safeSaveAuthoritativeGameState(gameId: string, state: any): Promi
 
 async function safeGetAuthoritativeGameState(gameId: string): Promise<any | null> {
   try {
-    if (!getSupabaseConfigStatus().isConfigured && !hasSelfHostedPostgres()) return null;
+    if (!getSupabaseConfigStatus().isConfigured) return null;
     return await supabaseRepo.getAuthoritativeGameState(gameId);
   } catch (e) {
     console.warn(`[GameState:${gameId}] read unavailable; keeping local authoritative state.`, e);
@@ -240,7 +221,7 @@ async function authenticateWebSocketRequest(req: import('node:http').IncomingMes
 // Supabase remains the authoritative persistence/realtime source; WebSocket is the client transport.
 let stopAuthoritativeRealtime: (() => void) | null = null;
 function startAuthoritativeRealtimeBridge() {
-  if (stopAuthoritativeRealtime || hasSelfHostedPostgres() || !getSupabaseConfigStatus().isConfigured) return;
+  if (stopAuthoritativeRealtime || !getSupabaseConfigStatus().isConfigured) return;
   stopAuthoritativeRealtime = supabaseRepo.subscribeToAuthoritativeGameStates((payload: any) => {
     const row = payload?.new;
     if (!row?.game_id || !row?.state) return;
@@ -276,11 +257,6 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 app.get('/api/ready', async (_req: Request, res: Response) => {
   try {
-    const postgres = await postgresHealth();
-    if (postgres.configured) {
-      if (!postgres.reachable) return res.status(503).json({ status: 'not_ready', reason: 'postgres_unreachable' });
-      return res.json({ status: 'ready', dependencies: { postgres: 'ok' }, timestamp: Date.now() });
-    }
     const db = await supabaseRepo.checkConnectivity();
     if (!db.configured) return res.status(503).json({ status: 'not_ready', reason: 'database_not_configured' });
     if (!db.reachable) return res.status(503).json({ status: 'not_ready', reason: 'database_unreachable' });
