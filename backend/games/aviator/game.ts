@@ -187,7 +187,10 @@ async function startAviatorFlight() {
         roomId: AVIATOR_ROOM_ID,
         roundId: aviatorState.roundId,
         multiplier: currentCrashTarget,
-        crashed: true
+        crashed: true,
+        previousMultipliers: [...aviatorState.previousMultipliers],
+        phase: 'crashed',
+        countdown: 0
       });
 
       const roundStats = aviatorRoundStats.get(aviatorState.roundId) || { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 };
