@@ -779,3 +779,5 @@ const supabaseRepoImpl = {
     if(error||!data) throw new Error(error?.message||'Policy update failed'); return data.config;
   }
 };
+
+export const supabaseRepo = supabaseRepoImpl;
