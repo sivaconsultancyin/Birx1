@@ -52,6 +52,7 @@ import { postgresHealth } from './database/postgres.ts';
 
 const app = express();
 const PORT = 3000;
+const hasSelfHostedPostgres = () => Boolean(process.env.DATABASE_URL?.trim());
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 function rateLimit(limit: number, windowMs: number) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -112,7 +113,7 @@ let leaseConfigWarningShown = false;
 async function acquireGameLease(gameId: string): Promise<boolean> {
   // Keep the local game loop alive when the lease RPC is unavailable.
   // A single Node process can safely use its in-memory authoritative state.
-  if (!getSupabaseConfigStatus().isConfigured) {
+  if (!getSupabaseConfigStatus().isConfigured && !hasSelfHostedPostgres()) {
     if (!leaseConfigWarningShown) {
       console.warn('[GameLease] Supabase lease unavailable; using single-process local game loop.');
       leaseConfigWarningShown = true;
@@ -132,7 +133,7 @@ async function acquireGameLease(gameId: string): Promise<boolean> {
 
 async function safeSaveAuthoritativeGameState(gameId: string, state: any): Promise<void> {
   try {
-    if (getSupabaseConfigStatus().isConfigured) {
+    if (getSupabaseConfigStatus().isConfigured || hasSelfHostedPostgres()) {
       await supabaseRepo.saveAuthoritativeGameState(gameId, state);
     }
   } catch (e) {
@@ -142,7 +143,7 @@ async function safeSaveAuthoritativeGameState(gameId: string, state: any): Promi
 
 async function safeGetAuthoritativeGameState(gameId: string): Promise<any | null> {
   try {
-    if (!getSupabaseConfigStatus().isConfigured) return null;
+    if (!getSupabaseConfigStatus().isConfigured && !hasSelfHostedPostgres()) return null;
     return await supabaseRepo.getAuthoritativeGameState(gameId);
   } catch (e) {
     console.warn(`[GameState:${gameId}] read unavailable; keeping local authoritative state.`, e);
@@ -222,7 +223,7 @@ async function authenticateWebSocketRequest(req: import('node:http').IncomingMes
 // Supabase remains the authoritative persistence/realtime source; WebSocket is the client transport.
 let stopAuthoritativeRealtime: (() => void) | null = null;
 function startAuthoritativeRealtimeBridge() {
-  if (stopAuthoritativeRealtime || !getSupabaseConfigStatus().isConfigured) return;
+  if (stopAuthoritativeRealtime || (!getSupabaseConfigStatus().isConfigured && !hasSelfHostedPostgres())) return;
   stopAuthoritativeRealtime = supabaseRepo.subscribeToAuthoritativeGameStates((payload: any) => {
     const row = payload?.new;
     if (!row?.game_id || !row?.state) return;
