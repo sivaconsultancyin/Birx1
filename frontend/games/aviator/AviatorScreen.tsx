@@ -163,14 +163,14 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   const planeX = 7 + progress * 78;
   const planeY = 78 - progress * 58;
 
-  const placeButton = (secondary = false) => (
+  const placeButton = () => (
     <button
       type="button"
-      disabled={secondary || loading || phase !== 'betting'}
-      onClick={secondary ? undefined : handlePlaceBet}
-      className={`aviator-ref-action ${secondary ? 'aviator-ref-action-muted' : 'aviator-ref-action-bet'}`}
+      disabled={loading || phase !== 'betting'}
+      onClick={handlePlaceBet}
+      className="aviator-ref-action aviator-ref-action-bet"
     >
-      {secondary ? 'SECOND SLOT' : phase === 'betting' ? `PLACE BET · ₹${betAmount.toLocaleString('en-IN')}` : 'WAITING FOR NEXT ROUND'}
+      {phase === 'betting' ? `PLACE BET · ₹${betAmount.toLocaleString('en-IN')}` : 'WAITING FOR NEXT ROUND'}
     </button>
   );
 
@@ -268,16 +268,6 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
                   {[50, 100, 500, 1000].map((n) => <button type="button" key={n} onClick={() => setBetAmount(n)}>₹{n}</button>)}
                 </div>
                 {currentBet && !currentBet.cashedOut && isRunning ? cashoutButton : placeButton()}
-              </div>
-            </div>
-
-            <div className="aviator-ref-bet-card">
-              <div className="aviator-ref-tabs"><span>BET</span><span className="active">AUTO</span></div>
-              <div className="aviator-ref-card-body">
-                <div className="aviator-auto-row"><span>AUTO CASHOUT</span><strong>2.00x</strong></div>
-                <div className="aviator-auto-row"><span>AUTO BET</span><b>OFF</b></div>
-                <div className="aviator-ref-secondary-note">Visual slot preserved from the reference UI. Your current server supports one active bet per player.</div>
-                {placeButton(true)}
               </div>
             </div>
           </section>
