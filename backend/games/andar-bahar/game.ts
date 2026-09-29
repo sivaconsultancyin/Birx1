@@ -10,6 +10,16 @@ export function registerAndarBaharGame(app: any, deps: any) {
 
 // -------------------------------------------------------------
 const andarBaharBets = new Map<string, { side: AndarBaharSide; amount: number }>();
+
+function hydrateAndarBaharBets(persisted: any) {
+  if (!persisted || typeof persisted !== 'object') return;
+  andarBaharBets.clear();
+  for (const [userId, bet] of Object.entries(persisted)) {
+    if (bet && typeof bet === 'object' && 'side' in (bet as any) && 'amount' in (bet as any)) {
+      andarBaharBets.set(userId, bet as { side: AndarBaharSide; amount: number });
+    }
+  }
+}
 let andarBaharDealtQueue: { side: AndarBaharSide; card: Card }[] = [];
 let andarBaharTargetJoker: Card | null = { suit: 'spades', rank: '8', value: 8 };
 let andarBaharFinalWinner: AndarBaharSide = 'andar';
@@ -173,7 +183,10 @@ setInterval(async () => {
     }
   }
 
-  await safeSaveAuthoritativeGameState('andar-bahar', andarBaharState);
+  await safeSaveAuthoritativeGameState('andar-bahar', {
+    ...andarBaharState,
+    activeBets: Object.fromEntries(andarBaharBets.entries())
+  });
 }, 1000);
 
 app.get('/api/games/andar-bahar/state', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
