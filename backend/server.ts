@@ -223,7 +223,7 @@ async function authenticateWebSocketRequest(req: import('node:http').IncomingMes
 // Supabase remains the authoritative persistence/realtime source; WebSocket is the client transport.
 let stopAuthoritativeRealtime: (() => void) | null = null;
 function startAuthoritativeRealtimeBridge() {
-  if (stopAuthoritativeRealtime || (!getSupabaseConfigStatus().isConfigured && !hasSelfHostedPostgres())) return;
+  if (stopAuthoritativeRealtime || hasSelfHostedPostgres() || !getSupabaseConfigStatus().isConfigured) return;
   stopAuthoritativeRealtime = supabaseRepo.subscribeToAuthoritativeGameStates((payload: any) => {
     const row = payload?.new;
     if (!row?.game_id || !row?.state) return;
