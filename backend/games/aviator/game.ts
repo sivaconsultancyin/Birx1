@@ -125,6 +125,16 @@ async function runAviatorCycle() {
     if (aviatorState.countdown <= 0) {
       clearInterval(betInterval);
       void startAviatorFlight();
+    } else {
+      broadcastRealtime('aviator_tick', {
+        gameId: 'aviator',
+        roomId: AVIATOR_ROOM_ID,
+        roundId: aviatorState.roundId,
+        phase: aviatorState.phase,
+        multiplier: aviatorState.multiplier,
+        countdown: aviatorState.countdown,
+        serverTime: Date.now()
+      });
     }
     await persistAviatorState();
   }, 1000);
