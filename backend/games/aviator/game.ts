@@ -105,32 +105,6 @@ async function hydrateAviatorState() {
   }
 }
 
-let currentServerSeed = crypto.randomBytes(32).toString('hex');
-let currentServerSeedHash = hashSeed(currentServerSeed);
-let currentClientSeed = 'brix1-public';
-let currentNonce = 0;
-let currentCrashTarget = generateCrashPoint();
-
-function hashSeed(seed: string): string {
-  return crypto.createHash('sha256').update(seed, 'utf8').digest('hex');
-}
-
-function deriveFairRandom(serverSeed: string, clientSeed: string, nonce: number): number {
-  const message = `${clientSeed}:${nonce}`;
-  const digest = crypto.createHmac('sha256', serverSeed).update(message, 'utf8').digest();
-  // Use 52 bits so the value has enough precision for the distribution.
-  const value = digest.readUInt32BE(0) * 0x100000000 + digest.readUInt32BE(4);
-  return value / 0x10000000000000;
-}
-
-function generateCrashPoint(): number {
-  const rand = deriveFairRandom(currentServerSeed, currentClientSeed, currentNonce);
-  currentNonce += 1;
-  if (rand < 0.05) return 1.0 + Number(((deriveFairRandom(currentServerSeed, currentClientSeed, currentNonce) * 0.15)).toFixed(2));
-  const raw = 0.97 / (1 - rand);
-  return Number(Math.max(1.05, Math.min(raw, 50.0)).toFixed(2));
-}
-
 async function runAviatorCycle() {
   if (aviatorTimer) clearInterval(aviatorTimer);
   stopLeaseHeartbeat();
