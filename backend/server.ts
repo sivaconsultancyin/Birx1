@@ -135,6 +135,23 @@ async function safeSaveAuthoritativeGameState(gameId: string, state: any): Promi
   try {
     if (getSupabaseConfigStatus().isConfigured || hasSelfHostedPostgres()) {
       await supabaseRepo.saveAuthoritativeGameState(gameId, state);
+      if (hasSelfHostedPostgres()) {
+        const roomIds: Record<string, string> = { aviator: 'aviator-main', roulette: 'roulette-main', 'teen-patti': 'teen-patti-main', dice: 'dice-main', 'dragon-tiger': 'dragon-tiger-main', 'andar-bahar': 'andar-bahar-main' };
+        const roomId = state?.roomId ?? roomIds[gameId] ?? `${gameId}-main`;
+        const publicState = { ...(state || {}) };
+        if (gameId === 'aviator') {
+          delete publicState.crashTarget;
+          delete publicState.activeBets;
+        }
+        broadcastRealtime('game_state', {
+          gameId,
+          roomId,
+          roundId: state?.roundId ?? null,
+          phase: state?.phase ?? null,
+          version: Number(state?.version ?? 0),
+          state: { ...publicState, gameId, roomId }
+        });
+      }
     }
   } catch (e) {
     console.warn(`[GameState:${gameId}] persistence unavailable; keeping local authoritative state.`, e);
