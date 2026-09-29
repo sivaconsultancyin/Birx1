@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import { postgresRepo } from '../database/postgresRepository.ts';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   CoinRecharge,
@@ -16,7 +15,6 @@ import {
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const DATABASE_URL = process.env.DATABASE_URL || '';
 
 const isConfigured = Boolean(
   SUPABASE_URL &&
@@ -55,7 +53,6 @@ export function getSupabaseConfigStatus(): SupabaseConfigStatus {
     supabaseUrl: SUPABASE_URL ? SUPABASE_URL.replace(/(https?:\/\/[^/]+).*/, '$1') : 'Not Configured (Demo/Local Sandbox Mode)',
     hasAnonKey: Boolean(SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('your-')),
     hasServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_SERVICE_ROLE_KEY.includes('your-')),
-    hasDatabaseUrl: Boolean(DATABASE_URL && !DATABASE_URL.includes('your-')),
     authProvider: isConfigured ? 'supabase_auth' : 'local_authoritative_engine',
     dbEngine: isConfigured ? 'supabase_postgresql' : 'authoritative_simulated_pg',
     storageAvailable: isConfigured
@@ -91,6 +88,13 @@ const dbStore: DbStore = {
   settlements: new Map()
 };
 
+/** Runtime database selector: DATABASE_URL makes self-hosted PostgreSQL authoritative. */
+export const supabaseRepo = new Proxy(supabaseRepoImpl as any, {
+  get(target, property, receiver) {
+    if (DATABASE_URL && property in postgresRepo) return (postgresRepo as any)[property];
+    return Reflect.get(target, property, receiver);
+  }
+});
 
 // Seed initial hierarchy
 function seedInitialStore() {
@@ -712,7 +716,6 @@ const supabaseRepoImpl = {
   },
 
   subscribeToAuthoritativeGameStates(onChange: (payload: any) => void): (() => void) | null {
-    if (DATABASE_URL) return null;
     const admin = getSupabaseAdmin();
     if (!admin) return null;
     const channel = admin
@@ -783,11 +786,3 @@ const supabaseRepoImpl = {
     if(error||!data) throw new Error(error?.message||'Policy update failed'); return data.config;
   }
 };
-
-/** Runtime database selector: DATABASE_URL makes self-hosted PostgreSQL authoritative. */
-export const supabaseRepo = new Proxy(supabaseRepoImpl as any, {
-  get(target, property, receiver) {
-    if (DATABASE_URL && property in postgresRepo) return (postgresRepo as any)[property];
-    return Reflect.get(target, property, receiver);
-  }
-});
