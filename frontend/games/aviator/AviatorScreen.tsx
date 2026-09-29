@@ -89,14 +89,19 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
           ...prev,
           phase: 'crashed',
           multiplier: Number(data.multiplier ?? prev.multiplier),
-          crashMultiplier: Number(data.multiplier ?? prev.crashMultiplier ?? 0)
+          crashMultiplier: Number(data.multiplier ?? prev.crashMultiplier ?? 0),
+          countdown: 0,
+          previousMultipliers: Array.isArray(data.previousMultipliers)
+            ? data.previousMultipliers
+            : [Number(data.multiplier ?? prev.multiplier), ...(prev.previousMultipliers || [])].slice(0, 15)
         } : null);
 
         if (currentBetRef.current && !currentBetRef.current.cashedOut) {
           notifyWinLoss({ type: 'loss', amount: currentBetRef.current.amount });
           setCurrentBet(null);
         }
-        void syncState();
+        // Keep the terminal crash state visible. The next round_started event
+        // performs the authoritative resync for the new betting round.
       }
     });
 
