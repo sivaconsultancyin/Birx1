@@ -54,6 +54,33 @@ let rouletteState: RouletteState = {
 const currentRoundBets: Record<string, RouletteBet[]> = {};
 const roundSettlements: Record<string, any> = {};
 const processedRouletteIdempotency = new Map<string, any>();
+
+function serializeRoulettePersistence() {
+  return {
+    ...rouletteState,
+    currentRoundBets,
+    roundSettlements,
+    processedRouletteIdempotency: Object.fromEntries(processedRouletteIdempotency.entries())
+  };
+}
+
+function hydrateRoulettePersistence(persisted: any) {
+  if (!persisted || typeof persisted !== 'object') return;
+  const { currentRoundBets: persistedBets, roundSettlements: persistedSettlements, processedRouletteIdempotency: persistedIdempotency, ...state } = persisted;
+  if (state.roundId) rouletteState = { ...rouletteState, ...state };
+  if (persistedBets && typeof persistedBets === 'object') {
+    for (const [roundId, bets] of Object.entries(persistedBets)) {
+      if (Array.isArray(bets)) currentRoundBets[roundId] = bets as RouletteBet[];
+    }
+  }
+  if (persistedSettlements && typeof persistedSettlements === 'object') {
+    Object.assign(roundSettlements, persistedSettlements);
+  }
+  if (persistedIdempotency && typeof persistedIdempotency === 'object') {
+    processedRouletteIdempotency.clear();
+    for (const [key, value] of Object.entries(persistedIdempotency)) processedRouletteIdempotency.set(key, value);
+  }
+}
 const rouletteHistoryRecords: {
   roundId: string;
   number: number;
@@ -376,7 +403,7 @@ setInterval(async () => {
       });
     }
   }
-  await safeSaveAuthoritativeGameState('roulette', rouletteState);
+  await safeSaveAuthoritativeGameState('roulette', serializeRoulettePersistence());
 }, 1000);
 
 
