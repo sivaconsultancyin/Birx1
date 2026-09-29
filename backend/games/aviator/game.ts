@@ -26,7 +26,31 @@ const aviatorRoundStats = new Map<string, { totalBets: number; totalBetAmount: n
 let aviatorRoundSequence = Date.now();
 let lastHydratedVersion = 0;
 let authoritativeVersion = 0;
+let currentServerSeed = crypto.randomBytes(32).toString('hex');
+let currentServerSeedHash = hashSeed(currentServerSeed);
+let currentClientSeed = 'brix1-public';
+let currentNonce = 0;
 let currentCrashTarget = generateCrashPoint();
+
+function hashSeed(seed: string): string {
+  return crypto.createHash('sha256').update(seed, 'utf8').digest('hex');
+}
+
+function deriveFairRandom(serverSeed: string, clientSeed: string, nonce: number): number {
+  const message = `${clientSeed}:${nonce}`;
+  const digest = crypto.createHmac('sha256', serverSeed).update(message, 'utf8').digest();
+  // Use 52 bits so the value has enough precision for the distribution.
+  const value = digest.readUInt32BE(0) * 0x100000000 + digest.readUInt32BE(4);
+  return value / 0x10000000000000;
+}
+
+function generateCrashPoint(): number {
+  const rand = deriveFairRandom(currentServerSeed, currentClientSeed, currentNonce);
+  currentNonce += 1;
+  if (rand < 0.05) return 1.0 + Number(((deriveFairRandom(currentServerSeed, currentClientSeed, currentNonce) * 0.15)).toFixed(2));
+  const raw = 0.97 / (1 - rand);
+  return Number(Math.max(1.05, Math.min(raw, 50.0)).toFixed(2));
+}
 let aviatorTimer: NodeJS.Timeout | null = null;
 let lastPersistedFlightSecond = -1;
 let flightStartedAt = 0;
@@ -81,13 +105,30 @@ async function hydrateAviatorState() {
   }
 }
 
+let currentServerSeed = crypto.randomBytes(32).toString('hex');
+let currentServerSeedHash = hashSeed(currentServerSeed);
+let currentClientSeed = 'brix1-public';
+let currentNonce = 0;
+let currentCrashTarget = generateCrashPoint();
+
+function hashSeed(seed: string): string {
+  return crypto.createHash('sha256').update(seed, 'utf8').digest('hex');
+}
+
+function deriveFairRandom(serverSeed: string, clientSeed: string, nonce: number): number {
+  const message = `${clientSeed}:${nonce}`;
+  const digest = crypto.createHmac('sha256', serverSeed).update(message, 'utf8').digest();
+  // Use 52 bits so the value has enough precision for the distribution.
+  const value = digest.readUInt32BE(0) * 0x100000000 + digest.readUInt32BE(4);
+  return value / 0x10000000000000;
+}
+
 function generateCrashPoint(): number {
-  // Classic Provably Fair distribution: 1 / (1 - U) with 3% house edge
-  const rand = crypto.randomInt(1, 1_000_000_000) / 1_000_000_000;
-  if (rand < 0.05) return 1.0 + Number(((crypto.randomInt(0, 1_000_000) / 1_000_000) * 0.15).toFixed(2)); // instant bust 1.00 - 1.15
+  const rand = deriveFairRandom(currentServerSeed, currentClientSeed, currentNonce);
+  currentNonce += 1;
+  if (rand < 0.05) return 1.0 + Number(((deriveFairRandom(currentServerSeed, currentClientSeed, currentNonce) * 0.15)).toFixed(2));
   const raw = 0.97 / (1 - rand);
-  const clamped = Math.min(raw, 50.0);
-  return Number(Math.max(1.05, clamped).toFixed(2));
+  return Number(Math.max(1.05, Math.min(raw, 50.0)).toFixed(2));
 }
 
 async function runAviatorCycle() {
@@ -114,6 +155,10 @@ async function runAviatorCycle() {
   aviatorRoundStats.set(aviatorState.roundId, { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 });
   await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'betting', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
   // Bets are keyed by authenticated user and survive the round reset independently.
+  // Commit the server seed before deriving this round's crash point.
+  currentServerSeed = crypto.randomBytes(32).toString('hex');
+  currentServerSeedHash = hashSeed(currentServerSeed);
+  currentNonce = aviatorRoundSequence;
   currentCrashTarget = generateCrashPoint();
 
   broadcastRealtime('round_started', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
@@ -240,6 +285,18 @@ async function startAviatorFlight() {
 
 // Start initial aviator flight cycle
 runAviatorCycle();
+
+app.get('/api/games/aviator/fairness', async (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    algorithm: 'HMAC-SHA-256',
+    serverSeedHash: currentServerSeedHash,
+    clientSeed: currentClientSeed,
+    nonce: currentNonce,
+    revealedServerSeed: aviatorState.phase === 'crashed' ? currentServerSeed : null,
+    roundId: aviatorState.roundId
+  });
+});
 
 app.get('/api/games/aviator/state', async (req: Request, res: Response) => {
   // Public round state is non-sensitive; betting and cashout endpoints remain authenticated.
