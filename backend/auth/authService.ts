@@ -320,4 +320,3 @@ export function requireRoles(allowedRoles: UserRole[]) {
     next();
   };
 }
-)
