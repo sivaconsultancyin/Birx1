@@ -1,29 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Clock, Plane, ShieldCheck, Volume2, VolumeX, Menu, MessageCircle, Users, TrendingUp } from 'lucide-react';
-import { AviatorBet, AviatorState, Wallet } from '../../../src/types.ts';
-import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
-import { GameHeader } from '../../../src/components/GameHeader.tsx';
-import { RulesModal } from '../../../src/components/RulesModal.tsx';
-import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
-import { AviatorReferenceCanvas } from './AviatorReferenceCanvas';
+import { History, Rocket, Trophy, Users, Wallet, Send, Settings } from 'lucide-react';
+import { AviatorBet, AviatorState, Wallet as WalletType } from '../../../src/types.ts';
+import { gamesApi } from '../../api/client.ts';
+import { RulesModal } from '../../components/RulesModal.tsx';
+import { notifyWinLoss } from '../../components/WinLossNotification.tsx';
 
 interface AviatorScreenProps {
-  wallet: Wallet;
-  onUpdateWallet: (w: Wallet) => void;
+  wallet: WalletType;
+  onUpdateWallet: (w: WalletType) => void;
   onBack: () => void;
   onOpenWallet?: () => void;
 }
-
-const demoPlayers = [
-  ['SkyPilot', '1.42x'],
-  ['AeroFox', '2.18x'],
-  ['Cloud9', '3.06x'],
-  ['NovaJet', '1.17x'],
-  ['BlueWing', '4.21x'],
-  ['Falcon', '1.83x'],
-  ['Orbit', '5.44x'],
-  ['JetStream', '2.71x']
-];
 
 export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   wallet,
@@ -37,77 +24,33 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  const [showChat, setShowChat] = useState(false);
   const currentBetRef = useRef<AviatorBet | null>(null);
   currentBetRef.current = currentBet;
 
   useEffect(() => {
     let mounted = true;
-
-    const syncState = async () => {
+    const poll = setInterval(async () => {
       try {
         const res = await gamesApi.aviator.getState();
         if (!mounted) return;
-        setGameState({ ...res.state, previousMultipliers: Array.isArray(res.state.previousMultipliers) ? res.state.previousMultipliers : [] });
-        setCurrentBet(res.state.currentBet ?? null);
-      } catch {
-        // WebSocket realtime events keep the live state synchronized.
-      }
-    };
-
-    void syncState();
-
-    const unsubscribe = subscribeToRealtimeEvents((payload) => {
-      if (!mounted) return;
-      const data: any = payload.data || {};
-
-      if (payload.event === 'aviator_tick') {
-        setGameState((prev) => prev ? {
-          ...prev,
-          roundId: data.roundId || prev.roundId,
-          phase: data.phase || prev.phase,
-          multiplier: Number(data.multiplier ?? prev.multiplier),
-          countdown: Number(data.countdown ?? prev.countdown)
-        } : null);
-        return;
-      }
-
-      if (payload.event === 'round_started' && data.gameId === 'aviator') {
-        void syncState();
-        return;
-      }
-
-      if (payload.event === 'betting_closed' && data.gameId === 'aviator') {
-        setGameState((prev) => prev ? { ...prev, phase: 'running' } : prev);
-        return;
-      }
-
-      if (payload.event === 'result' && data.gameId === 'aviator') {
-        setGameState((prev) => prev ? {
-          ...prev,
-          phase: 'crashed',
-          multiplier: Number(data.multiplier ?? prev.multiplier),
-          crashMultiplier: Number(data.multiplier ?? prev.crashMultiplier ?? 0),
-          countdown: 0,
-          previousMultipliers: Array.isArray(data.previousMultipliers)
-            ? data.previousMultipliers
-            : [Number(data.multiplier ?? prev.multiplier), ...(prev.previousMultipliers || [])].slice(0, 15)
-        } : null);
-
-        if (currentBetRef.current && !currentBetRef.current.cashedOut) {
-          notifyWinLoss({ type: 'loss', amount: currentBetRef.current.amount });
+        setGameState(res.state);
+        if (res.state.phase === 'crashed') {
+          if (currentBetRef.current && !currentBetRef.current.cashedOut) {
+            notifyWinLoss({ type: 'loss', amount: currentBetRef.current.amount });
+          }
+          setCurrentBet(null);
+        } else if (res.state.currentBet) {
+          setCurrentBet(res.state.currentBet);
+        } else if (res.state.phase === 'betting') {
           setCurrentBet(null);
         }
-        // Keep the terminal crash state visible. The next round_started event
-        // performs the authoritative resync for the new betting round.
+      } catch {
+        // Keep the last authoritative server state during transient network jitter.
       }
-    });
-
+    }, 180);
     return () => {
       mounted = false;
-      unsubscribe();
+      clearInterval(poll);
     };
   }, []);
 
@@ -120,7 +63,6 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
       setErrorMsg('Insufficient balance for this bet');
       return;
     }
-
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -134,19 +76,14 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
     }
   };
 
-  const handleCashout = async () => {
+  const handleCashOut = async () => {
     if (!currentBet || currentBet.cashedOut || gameState?.phase !== 'running') return;
-
     setLoading(true);
     setErrorMsg(null);
     try {
       const res = await gamesApi.aviator.cashOut();
       onUpdateWallet(res.wallet);
-      setCurrentBet((prev) => prev ? {
-        ...prev,
-        cashedOut: true,
-        winAmount: res.winAmount
-      } : null);
+      setCurrentBet(prev => prev ? { ...prev, cashedOut: true, winAmount: res.winAmount, cashOutMultiplier: res.cashMultiplier } : null);
       notifyWinLoss({ type: 'win', amount: res.winAmount });
     } catch (err: any) {
       setErrorMsg(err.message || 'Cashout failed');
@@ -155,171 +92,272 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
     }
   };
 
-  const multiplier = gameState?.multiplier || 1;
+  const multiplier = Number(gameState?.multiplier || 1);
   const phase = gameState?.phase || 'betting';
   const isRunning = phase === 'running';
   const isCrashed = phase === 'crashed';
-  const progress = Math.min(1, Math.max(0, (multiplier - 1) / 8));
-  const planeX = 7 + progress * 78;
-  const planeY = 78 - progress * 58;
-
-  const placeButton = (secondary = false) => (
-    <button
-      type="button"
-      disabled={secondary || loading || phase !== 'betting'}
-      onClick={secondary ? undefined : handlePlaceBet}
-      className={`aviator-ref-action ${secondary ? 'aviator-ref-action-muted' : 'aviator-ref-action-bet'}`}
-    >
-      {secondary ? 'SECOND SLOT' : phase === 'betting' ? `PLACE BET · ₹${betAmount.toLocaleString('en-IN')}` : 'WAITING FOR NEXT ROUND'}
-    </button>
-  );
-
-  const cashoutButton = (
-    <button
-      id="btn-aviator-cashout"
-      type="button"
-      disabled={loading}
-      onClick={handleCashout}
-      className="aviator-ref-action aviator-ref-action-cashout"
-    >
-      <span>CASH OUT</span>
-      <small>₹{Math.floor((currentBet?.amount ?? 0) * multiplier).toLocaleString('en-IN')} · {multiplier.toFixed(2)}x</small>
-    </button>
-  );
+  const history = gameState?.previousMultipliers || [];
 
   return (
-    <div id="screen-aviator" className="aviator-reference-screen min-h-screen text-white">
-      <GameHeader
-        title="Aviator"
-        gameId="aviator"
-        balance={wallet.balance}
-        isDemo={wallet.isDemo}
-        roundId={gameState?.roundId}
-        onBack={onBack}
-        onOpenRules={() => setShowRules(true)}
-        onOpenWallet={onOpenWallet}
-      />
-
-      <div className="aviator-reference-layout">
-        <aside className="aviator-left-panel">
-          <div className="aviator-panel-heading">
-            <span>LIVE PLAYERS</span>
-            <span className="aviator-live-dot" />
+    <div className="aviator-reference min-h-screen w-full bg-[#0f1115] text-[#f3f4f6] overflow-hidden">
+      <header className="h-20 glass flex items-center justify-between px-5 md:px-8 border-b border-white/5 z-50">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="bg-red-500 p-2.5 rounded-2xl shadow-lg shadow-red-500/20 hover:bg-red-400 transition-all" aria-label="Back">
+            <Rocket className="text-white fill-white" size={26} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black tracking-tighter leading-none">AVIATOR</h1>
+            <p className="text-[10px] font-bold text-red-500/80 uppercase tracking-widest mt-1">Real-time Flight</p>
           </div>
-          <div className="aviator-player-summary">
-            <Users size={15} />
-            <strong>{Math.max(1, 248 + (gameState?.roundId?.length || 0))}</strong>
-            <span>players online</span>
-          </div>
-          <div className="aviator-player-list">
-            {demoPlayers.map(([name, mult], index) => (
-              <div className="aviator-player-row" key={name}>
-                <span className="aviator-avatar">{name[0]}</span>
-                <span className="aviator-player-name">{name}</span>
-                <span className={`aviator-player-mult ${index % 3 === 0 ? 'hot' : ''}`}>{mult}</span>
+        </div>
+        <div className="flex items-center gap-2 md:gap-5">
+          <button onClick={() => setShowRules(true)} className="hidden sm:flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-2.5 rounded-xl border border-white/5 transition-all">
+            <Trophy className="text-amber-400" size={18} />
+            <span className="font-bold text-xs uppercase tracking-widest">Fairness</span>
+          </button>
+          <button onClick={onOpenWallet} className="flex items-center gap-2 border-l border-white/10 pl-3 md:pl-5 text-right hover:opacity-80 transition-opacity">
+            <div>
+              <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Wallet</p>
+              <div className="flex items-center gap-1.5">
+                <Wallet className="text-emerald-400" size={16} />
+                <span className="text-base md:text-lg font-black tabular-nums">₹{Number(wallet.balance || 0).toLocaleString('en-IN')}</span>
               </div>
-            ))}
-          </div>
-          <div className="aviator-side-history">
-            <div className="aviator-panel-heading"><span>RECENT ROUNDS</span><TrendingUp size={14} /></div>
-            {(gameState?.previousMultipliers || []).slice(0, 10).map((m, i) => (
-              <span key={`${m}-${i}`} className={m >= 5 ? 'high' : m >= 2 ? 'mid' : 'low'}>{m.toFixed(2)}x</span>
-            ))}
+            </div>
+            <Send size={16} className="rotate-45 text-gray-400" />
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 flex gap-4 p-3 md:p-4 overflow-hidden min-h-[calc(100vh-80px)]">
+        <aside className="hidden lg:flex w-72 flex-col gap-4 overflow-hidden">
+          <div className="flex-1 glass rounded-3xl p-5 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Users size={18} className="text-indigo-400" />
+                <h3 className="font-bold uppercase tracking-wider text-xs">Live Bet</h3>
+              </div>
+              <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded text-[10px] font-bold">
+                {currentBet ? '1 ACTIVE' : 'WAITING'}
+              </span>
+            </div>
+            <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+              {currentBet ? (
+                <div className={`flex items-center justify-between p-3 rounded-2xl border ${currentBet.cashedOut ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 border-white/5'}`}>
+                  <div>
+                    <p className="text-xs font-bold text-gray-400">YOU</p>
+                    <p className="text-sm font-black">₹{currentBet.amount.toLocaleString('en-IN')}</p>
+                  </div>
+                  {currentBet.cashedOut && (
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-emerald-500">{currentBet.cashOutMultiplier?.toFixed(2)}x</p>
+                      <p className="text-sm font-black text-emerald-400">+₹{Number(currentBet.winAmount || 0).toLocaleString('en-IN')}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 text-center py-8">No active bet</div>
+              )}
+            </div>
           </div>
         </aside>
 
-        <main className="aviator-reference-main">
-          <div className="aviator-reference-history">
-            <Clock size={13} />
-            {(gameState?.previousMultipliers || []).slice(0, 12).map((m, i) => (
-              <span key={`${m}-top-${i}`} className={m >= 5 ? 'high' : m >= 2 ? 'mid' : 'low'}>{m.toFixed(2)}x</span>
+        <section className="flex-1 flex flex-col gap-4 relative min-w-0">
+          <div className="glass rounded-2xl p-2 flex gap-2 overflow-x-auto no-scrollbar shrink-0">
+            <History size={16} className="text-gray-500 mt-1 ml-2 shrink-0" />
+            {history.slice(0, 12).map((h, i) => (
+              <div key={`${h}-${i}`} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${h > 2 ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'}`}>
+                {Number(h).toFixed(2)}x
+              </div>
             ))}
           </div>
 
-          <section className="aviator-reference-arena">
-            <AviatorReferenceCanvas
-              phase={phase}
-              multiplier={multiplier}
-              crashMultiplier={gameState?.crashMultiplier}
-              countdown={gameState?.countdown}
-              muted={muted}
-              onToggleMute={() => setMuted((v) => !v)}
-            />
-            <div className="aviator-arena-top">
-              <span className="aviator-round-id">ROUND {gameState?.roundId || 'AV-SYNC'}</span>
-              <span className={`aviator-status ${isRunning ? 'running' : isCrashed ? 'crashed' : 'waiting'}`}>
-                {isRunning ? 'FLYING AWAY' : isCrashed ? `FLEW AWAY · ${(gameState?.crashMultiplier || multiplier).toFixed(2)}x` : `NEXT FLIGHT · ${gameState?.countdown || 5}s`}
-              </span>
+          <div className="flex-1 min-h-[380px] glass rounded-[2.5rem] relative flex items-center justify-center overflow-hidden border border-white/5 bg-gradient-to-br from-black/20 to-transparent">
+            <AviatorCanvas multiplier={multiplier} phase={phase} />
+
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+              {phase === 'betting' && (
+                <div className="text-center">
+                  <div className="w-16 h-16 rounded-full border-4 border-red-500/20 border-t-red-500 animate-spin mb-5 mx-auto" />
+                  <h2 className="text-sm font-bold text-gray-400 mb-2 uppercase tracking-[0.2em]">Next Round In</h2>
+                  <p className="text-6xl md:text-7xl font-black text-white drop-shadow-2xl">{Math.max(0, Number(gameState?.countdown || 0))}s</p>
+                </div>
+              )}
+              {isRunning && (
+                <div className="text-center multiplier-animate">
+                  <p className="text-7xl md:text-[10rem] font-black tabular-nums tracking-tighter drop-shadow-[0_0_50px_rgba(234,67,53,0.4)] text-white">
+                    {multiplier.toFixed(2)}<span className="text-4xl md:text-5xl ml-2 text-red-500">x</span>
+                  </p>
+                </div>
+              )}
+              {isCrashed && (
+                <div className="text-center animate-shake">
+                  <div className="bg-red-500/20 px-10 md:px-16 py-8 md:py-10 rounded-[3rem] backdrop-blur-xl border border-red-500/30">
+                    <h2 className="text-red-500 text-xl md:text-2xl font-black uppercase tracking-widest mb-2">Flew Away!</h2>
+                    <p className="text-6xl md:text-8xl font-black text-white">{Number(gameState?.crashMultiplier || multiplier).toFixed(2)}x</p>
+                  </div>
+                </div>
+              )}
             </div>
-          </section>
+          </div>
 
-          {errorMsg && <div className="aviator-reference-error">{errorMsg}</div>}
+          {errorMsg && <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-center">{errorMsg}</div>}
 
-          <section className="aviator-ref-bet-row">
-            <div className="aviator-ref-bet-card">
-              <div className="aviator-ref-tabs"><span className="active">BET</span><span>AUTO</span></div>
-              <div className="aviator-ref-card-body">
-                <div className="aviator-ref-amount">
-                  <button type="button" onClick={() => setBetAmount((v) => Math.max(10, v - 10))}>−</button>
-                  <strong>₹{betAmount.toLocaleString('en-IN')}</strong>
-                  <button type="button" onClick={() => setBetAmount((v) => Math.min(25000, v + 10))}>+</button>
-                </div>
-                <div className="aviator-ref-quick">
-                  {[50, 100, 500, 1000].map((n) => <button type="button" key={n} onClick={() => setBetAmount(n)}>₹{n}</button>)}
-                </div>
-                {currentBet && !currentBet.cashedOut && isRunning ? cashoutButton : placeButton()}
+          <div className="glass rounded-[2.5rem] p-4 md:p-6 flex flex-col md:flex-row gap-4 md:gap-6 items-stretch md:items-center border border-white/5 shrink-0">
+            <div className="flex-1 space-y-3">
+              <div className="flex justify-between items-center px-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Bet Amount</label>
+                {currentBet && <span className="text-xs font-bold text-emerald-400">Active: ₹{currentBet.amount.toLocaleString('en-IN')}</span>}
+              </div>
+              <div className="flex gap-2">
+                {[10, 50, 100, 500].map(amt => (
+                  <button key={amt} onClick={() => setBetAmount(amt)} disabled={loading || !!(currentBet && !currentBet.cashedOut)} className={`flex-1 py-3 rounded-xl font-bold transition-all ${betAmount === amt ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'} disabled:opacity-50`}>
+                    ₹{amt}
+                  </button>
+                ))}
+              </div>
+              <div className="relative">
+                <input type="number" min={10} value={betAmount} onChange={e => setBetAmount(Math.max(10, Number(e.target.value) || 10))} disabled={loading || !!(currentBet && !currentBet.cashedOut)} className="w-full bg-[#1a1d23] border border-white/10 rounded-2xl py-3 md:py-4 px-6 text-xl font-black outline-none focus:border-red-500/50 transition-all text-center disabled:opacity-50" />
               </div>
             </div>
 
-            <div className="aviator-ref-bet-card">
-              <div className="aviator-ref-tabs"><span>BET</span><span className="active">AUTO</span></div>
-              <div className="aviator-ref-card-body">
-                <div className="aviator-auto-row"><span>AUTO CASHOUT</span><strong>2.00x</strong></div>
-                <div className="aviator-auto-row"><span>AUTO BET</span><b>OFF</b></div>
-                <div className="aviator-ref-secondary-note">Visual slot preserved from the reference UI. Your current server supports one active bet per player.</div>
-                {placeButton(true)}
-              </div>
+            <div className="w-full md:w-1/3 h-28 md:h-32">
+              {isRunning && currentBet && !currentBet.cashedOut ? (
+                <button onClick={handleCashOut} disabled={loading} className="w-full h-full bg-emerald-500 hover:bg-emerald-400 shadow-[0_10px_40px_rgba(16,185,129,0.4)] rounded-3xl flex flex-col items-center justify-center transition-all active:scale-95 disabled:opacity-60">
+                  <span className="text-xs font-black text-emerald-900 mb-1">CASH OUT</span>
+                  <span className="text-2xl md:text-3xl font-black text-white">₹{Math.floor(betAmount * multiplier).toLocaleString('en-IN')}</span>
+                </button>
+              ) : (
+                <button onClick={handlePlaceBet} disabled={loading || phase !== 'betting' || !!(currentBet && !currentBet.cashedOut)} className={`w-full h-full rounded-3xl flex flex-col items-center justify-center transition-all active:scale-95 shadow-xl disabled:opacity-50 ${currentBet ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-red-500 hover:bg-red-400 text-white shadow-[0_10px_40px_rgba(234,67,53,0.4)]'}`}>
+                  <span className="text-xl font-black uppercase tracking-tighter">{currentBet ? 'Waiting' : phase === 'betting' ? 'Place Bet' : 'Waiting'}</span>
+                  {!currentBet && <span className="text-xs font-bold opacity-70">₹{betAmount}</span>}
+                </button>
+              )}
             </div>
-          </section>
-
-          <footer className="aviator-reference-footer">
-            <button type="button" onClick={() => setShowRules(true)}><ShieldCheck size={14} /> Server-authoritative game</button>
-            <span>Round state synced in real time</span>
-          </footer>
-        </main>
-      </div>
-
-      {showMenu && (
-        <div className="aviator-ref-modal-backdrop" onClick={() => setShowMenu(false)}>
-          <div className="aviator-ref-menu" onClick={(e) => e.stopPropagation()}>
-            <div className="aviator-ref-menu-title">GAME MENU</div>
-            <button type="button" onClick={() => { setShowRules(true); setShowMenu(false); }}>How to play</button>
-            <button type="button" onClick={() => setMuted((v) => !v)}>{muted ? 'Enable sound' : 'Mute sound'}</button>
-            <button type="button" onClick={() => setShowMenu(false)}>Close</button>
           </div>
-        </div>
-      )}
-
-      {showChat && (
-        <div className="aviator-ref-modal-backdrop" onClick={() => setShowChat(false)}>
-          <div className="aviator-ref-chat" onClick={(e) => e.stopPropagation()}>
-            <div className="aviator-ref-menu-title">LIVE CHAT</div>
-            <p>Realtime game events are shown in the main arena.</p>
-            <button type="button" onClick={() => setShowChat(false)}>Close</button>
-          </div>
-        </div>
-      )}
+        </section>
+      </main>
 
       <RulesModal
         isOpen={showRules}
         onClose={() => setShowRules(false)}
         title="Aviator"
         rules={[
-          { heading: 'Flight', description: 'The multiplier increases while the server-authoritative flight is running.' },
-          { heading: 'Round Sync', description: 'Round state is synchronized through the existing realtime transport.' },
-          { heading: 'Cash Out', description: 'The existing server endpoint remains authoritative for settlement.' }
+          { heading: 'How Aviator Works', description: 'The aircraft takes off with an increasing multiplier starting at 1.00x. The flight curve is driven by the server-authoritative game state.' },
+          { heading: 'Cashing Out', description: 'Cash out before the server crash event to settle the active round.' },
+          { heading: 'Server Authority', description: 'Round state, crash point and settlement remain authoritative on the backend.' }
         ]}
       />
     </div>
   );
 };
+
+function AviatorCanvas({ multiplier, phase }: { multiplier: number; phase: AviatorState['phase'] }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const multiplierRef = useRef(multiplier);
+  const phaseRef = useRef(phase);
+  multiplierRef.current = multiplier;
+  phaseRef.current = phase;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let width = 0;
+    let height = 0;
+    let points: {x:number;y:number}[] = [];
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      width = Math.max(1, Math.floor(rect.width));
+      height = Math.max(1, Math.floor(rect.height));
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const drawRocket = (x: number, y: number, angle: number) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      const time = Date.now() / 100;
+      const flameW = 20 + Math.sin(time) * 5;
+      const grad = ctx.createRadialGradient(-10, 0, 0, -10, 0, flameW);
+      grad.addColorStop(0, '#f59e0b');
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(-10, 0, flameW, flameW / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ea4335';
+      ctx.beginPath();
+      ctx.ellipse(10, 0, 30, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(15, -2, 8, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#991b1b';
+      ctx.beginPath();
+      ctx.moveTo(0, -8); ctx.lineTo(-10, -25); ctx.lineTo(10, -8); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(0, 8); ctx.lineTo(-10, 25); ctx.lineTo(10, 8); ctx.fill();
+      ctx.restore();
+    };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, width, height);
+      const currentPhase = phaseRef.current;
+      const m = multiplierRef.current;
+
+      if (currentPhase === 'running') {
+        const progress = Math.min(0.9, Math.max(0, (m - 1) / 10));
+        const x = 50 + (width - 150) * progress;
+        const y = (height - 50) - (height - 150) * progress;
+        points.push({x, y});
+        if (points.length > 200) points.shift();
+
+        ctx.beginPath();
+        ctx.strokeStyle = '#ea4335';
+        ctx.lineWidth = 6;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        if (points.length) {
+          ctx.moveTo(points[0].x, points[0].y);
+          for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+
+        ctx.lineTo(x, height);
+        ctx.lineTo(points[0].x, height);
+        const gradient = ctx.createLinearGradient(0, y, 0, height);
+        gradient.addColorStop(0, 'rgba(234,67,53,0.2)');
+        gradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        drawRocket(x, y, -Math.PI / 6);
+      } else {
+        points = [];
+      }
+
+      animationRef.current = requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="w-full h-full absolute inset-0" aria-label="Aviator flight animation" />;
+}
+
+export default AviatorScreen;
