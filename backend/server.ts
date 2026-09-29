@@ -308,6 +308,24 @@ app.post('/api/auth/logout', requireAuth, async (req: Request, res: Response) =>
   res.json({ success: true });
 });
 
+app.post('/api/auth/switch-role', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const requestedRole = String(req.body?.role || '') as UserRole;
+    const actor = req.user!;
+    const allowedRoles: UserRole[] = ['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'];
+    if (!allowedRoles.includes(requestedRole)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+    if (!authService.canManageUser(actor, requestedRole) && requestedRole !== actor.role) {
+      return res.status(403).json({ error: 'Role switch not permitted' });
+    }
+    const switched = await authService.switchRole(actor.id, requestedRole);
+    res.json({ success: true, user: switched.user, wallet: switched.wallet, token: null });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Unable to switch role' });
+  }
+});
+
 // -------------------------------------------------------------
 // ADMIN MANAGEMENT ENDPOINTS (Strict Role-Based Access Control)
 // -------------------------------------------------------------
