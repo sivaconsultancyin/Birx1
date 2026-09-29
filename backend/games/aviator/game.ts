@@ -39,8 +39,12 @@ function hashSeed(seed: string): string {
 function deriveFairRandom(serverSeed: string, clientSeed: string, nonce: number): number {
   const message = `${clientSeed}:${nonce}`;
   const digest = crypto.createHmac('sha256', serverSeed).update(message, 'utf8').digest();
-  // Use 52 bits so the value has enough precision for the distribution.
-  const value = digest.readUInt32BE(0) * 0x100000000 + digest.readUInt32BE(4);
+  // Convert exactly 52 bits from the HMAC digest into U in [0, 1).
+  // The previous implementation used all 64 bits but divided by 2^52,
+  // producing values above 1 and forcing the crash formula to 1.05x.
+  const high32 = digest.readUInt32BE(0);
+  const low20 = digest.readUInt32BE(4) >>> 12;
+  const value = high32 * 0x100000 + low20;
   return value / 0x10000000000000;
 }
 
