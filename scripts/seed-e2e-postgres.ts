@@ -6,6 +6,7 @@ const password=process.env.E2E_TEST_PASSWORD;
 const url=process.env.DATABASE_URL;
 if(!url||!mobile||!password) throw new Error('DATABASE_URL, E2E_TEST_MOBILE and E2E_TEST_PASSWORD are required');
 const pool=new Pool({connectionString:url,ssl:process.env.PGSSL==='true'?{rejectUnauthorized:false}:undefined});
+await pool.query('alter table users add column if not exists password_hash text');
 const salt=crypto.randomBytes(16).toString('hex');
 const hash=crypto.scryptSync(password,salt,64).toString('hex');
 const passwordHash=`scrypt$${salt}$${hash}`;
