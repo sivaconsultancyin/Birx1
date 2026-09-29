@@ -70,19 +70,19 @@ export class CanvasRenderer {
 
     switch (state.currentState) {
       case GameState.LOBBY:
-        this._background.render(ctx, w, h, 0, GameState.LOBBY);
+        this._background.render(ctx, w, h, 0, GameState.LOBBY, timestamp);
         this._renderLobby(ctx, w, h);
         break;
       case GameState.BETTING:
-        this._background.render(ctx, w, h, 0, GameState.BETTING);
+        this._background.render(ctx, w, h, 0, GameState.BETTING, timestamp);
         this._renderBetting(ctx, w, h, state);
         break;
       case GameState.FLYING:
-        this._background.render(ctx, w, h, state.multiplier, GameState.FLYING);
+        this._background.render(ctx, w, h, state.multiplier, GameState.FLYING, timestamp);
         this._renderFlying(ctx, w, h, state, dtMs);
         break;
       case GameState.CRASHED:
-        this._background.render(ctx, w, h, state.crashMultiplier, GameState.CRASHED);
+        this._background.render(ctx, w, h, state.crashMultiplier, GameState.CRASHED, timestamp);
         this._renderCrashed(ctx, w, h, state, dtMs);
         break;
     }
@@ -194,7 +194,7 @@ export class CanvasRenderer {
     const bobOffset = Math.sin(t * 4) * 1.2;
     ctx.translate(0, bobOffset);
 
-    const s = 0.9;
+    const s = 0.62;
     ctx.scale(s, s);
 
     ctx.fillStyle = '#ff1744';
