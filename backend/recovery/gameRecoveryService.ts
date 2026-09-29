@@ -17,11 +17,10 @@ export const gameRecoveryService = {
       for (const round of activeRounds) {
         if (round.phase === 'spinning' || round.phase === 'dealing' || round.phase === 'in_flight') {
           round.phase = 'closed';
-          round.phase = 'closed';
           round.result_data = round.result_data ?? { recovered: true };
           await supabaseRepo.recordGameRound(round.id, round.game_id, 'closed', round.result_data, round.round_number);
           recoveredRoundsCount++;
-          details.push(`Recovered round ${round.id} (${round.gameId}) from stuck phase into closed.`);
+          details.push(`Recovered round ${round.id} (${round.game_id}) from stuck phase into closed.`);
         }
       }
     } catch (err: any) {
