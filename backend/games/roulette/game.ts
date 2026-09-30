@@ -680,7 +680,14 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
     netResult: settlement.netResult,
     settlementStatus: 'settled',
     wallet: await supabaseRepo.getWallet(req.user!.id),
-    recentResults: rouletteState.recentResults
+    recentResults: rouletteState.recentResults,
+    provablyFair: undefined as {
+      serverSeedHash: string;
+      serverSeed: string;
+      clientSeed: string;
+      nonce: string;
+      winningNumber: number;
+    } | undefined
   };
 
   fullSettlementResult.provablyFair = {
