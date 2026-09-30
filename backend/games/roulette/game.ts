@@ -306,7 +306,7 @@ setInterval(async () => {
     rouletteState.countdown -= 1;
     if (rouletteState.countdown <= 0) {
       rouletteState.phase = 'spinning';
-      rouletteState.countdown = 6;
+      rouletteState.countdown = 5;
 
       // Authoritative RNG generation strictly on server before spin starts
       const winningNum = EUROPEAN_WHEEL[crypto.randomInt(EUROPEAN_WHEEL.length)];
@@ -317,7 +317,7 @@ setInterval(async () => {
         roundId: rouletteState.roundId,
         winningNumber: winningNum,
         winningColor: rouletteState.winningColor,
-        countdown: 6
+        countdown: 5
       });
     }
   } else if (rouletteState.phase === 'spinning') {
