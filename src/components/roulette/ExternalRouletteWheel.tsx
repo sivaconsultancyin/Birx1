@@ -7,55 +7,60 @@ type Props = {
 };
 
 const RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
 
-export const ExternalRouletteWheel: React.FC<Props> = ({
-  isSpinning,
-  targetWinningNumber,
-  onSpinComplete,
-}) => {
+export const ExternalRouletteWheel: React.FC<Props> = ({ isSpinning, targetWinningNumber, onSpinComplete }) => {
   const [rotation, setRotation] = useState(0);
-  const data = useMemo(() => Array.from({ length: 37 }, (_, n) => n), []);
+  const [ballRotation, setBallRotation] = useState(0);
+  const data = useMemo(() => ORDER, []);
 
   useEffect(() => {
     if (!isSpinning) return;
-    const target = Math.max(0, targetWinningNumber ?? 0);
+    const idx = Math.max(0, data.indexOf(targetWinningNumber ?? 0));
     const segment = 360 / data.length;
-    const targetAngle = 360 - target * segment;
-    setRotation(prev => prev + 360 * 5 + targetAngle - (prev % 360));
+    setRotation(prev => prev + 360 * 5 - (prev % 360) - idx * segment);
+    setBallRotation(prev => prev - 360 * 7);
     const timer = window.setTimeout(() => onSpinComplete?.(), 4200);
     return () => window.clearTimeout(timer);
-  }, [isSpinning, targetWinningNumber, data.length, onSpinComplete]);
+  }, [isSpinning, targetWinningNumber, data, onSpinComplete]);
 
   return (
-    <div className="relative flex items-center justify-center rounded-full bg-slate-950/80 p-3 shadow-[0_0_50px_rgba(245,158,11,0.18)] border border-amber-500/20">
-      <div
-        className="relative h-[min(78vw,420px)] w-[min(78vw,420px)] rounded-full border-[10px] border-amber-500 shadow-[inset_0_0_0_3px_#fbbf24,0_0_35px_rgba(245,158,11,.2)] transition-transform duration-[4.2s] ease-out"
-        style={{
-          transform: `rotate(${rotation}deg)`,
-          background: `conic-gradient(${data.map((n) => {
-            const color = n === 0 ? '#166534' : RED.has(n) ? '#b91c1c' : '#111827';
-            return `${color} ${n * (100 / 37)}% ${(n + 1) * (100 / 37)}%`;
-          }).join(',')})`,
-        }}
-      >
-        {data.map((n) => {
-          const angle = n * (360 / 37) + (180 / 37);
-          return (
-            <span
-              key={n}
-              className="absolute left-1/2 top-1/2 text-[10px] font-bold text-white sm:text-xs"
-              style={{
-                transform: `rotate(${angle}deg) translateY(-${Math.min(34, 34)}%) rotate(-${angle}deg)`,
-                transformOrigin: '0 0',
-              }}
-            >
-              {n}
-            </span>
-          );
-        })}
-        <div className="absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-amber-400 bg-slate-950 shadow-lg" />
+    <div className="relative flex items-center justify-center rounded-full bg-black p-2 shadow-[0_0_50px_rgba(245,158,11,0.18)] border border-amber-500/20">
+      <div className="relative h-[min(76vw,400px)] w-[min(76vw,400px)]">
+        <div className="absolute inset-0 rounded-full border-[10px] border-amber-500 bg-[#080808] shadow-[inset_0_0_0_3px_#fbbf24,0_0_35px_rgba(245,158,11,.2)]" />
+        <div
+          className="absolute inset-[10%] rounded-full overflow-visible transition-transform duration-[4.2s] ease-out"
+          style={{
+            transform: `rotate(${rotation}deg)`,
+            background: `conic-gradient(${data.map((n,i) => {
+              const color = n === 0 ? '#15803d' : RED.has(n) ? '#b91c1c' : '#111111';
+              return `${color} ${i*(100/37)}% ${(i+1)*(100/37)}%`;
+            }).join(',')})`,
+          }}
+        >
+          {data.map((n, i) => {
+            const angle = i * (360 / 37) + (180 / 37);
+            return (
+              <span key={n} className="absolute left-1/2 top-1/2 text-[10px] font-black text-white sm:text-xs"
+                style={{
+                  transform: `rotate(${angle}deg) translateY(-145px) rotate(-${angle}deg)`,
+                  transformOrigin: 'center',
+                }}>
+                {n}
+              </span>
+            );
+          })}
+        </div>
+        <div className="absolute inset-[24%] rounded-full border-4 border-amber-400 bg-[#171717] shadow-inner" />
+        <div
+          className="absolute inset-[9%] pointer-events-none transition-transform duration-[4.2s] ease-out"
+          style={{ transform: `rotate(${ballRotation}deg)` }}
+        >
+          <div className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 rounded-full bg-white border border-slate-300 shadow-[0_0_10px_rgba(255,255,255,.95)]" />
+        </div>
+        <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-amber-400 bg-slate-950 shadow-lg" />
       </div>
-      <div className="absolute -top-1 left-1/2 z-10 -translate-x-1/2 text-amber-300">▼</div>
+      <div className="absolute -top-1 left-1/2 z-10 -translate-x-1/2 text-amber-300 text-lg">▼</div>
     </div>
   );
 };
