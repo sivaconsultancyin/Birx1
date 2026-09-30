@@ -557,7 +557,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       <div className="flex-shrink-0 px-3 py-1.5 flex items-center justify-between bg-slate-900/90 border-b border-slate-800/80 z-30">
         <Countdown
           seconds={countdown}
-          maxSeconds={isBettingPhase ? 15 : gameState?.phase === 'spinning' ? 6 : 4}
+          maxSeconds={isBettingPhase ? 15 : gameState?.phase === 'spinning' ? 5 : 4}
           label={
             isBettingPhase
               ? 'Betting'
@@ -696,7 +696,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
         {/* LAYER A: Wheel & Ball Stage */}
         <div
-          className={`w-full flex flex-col items-center justify-center transition-all duration-500 ease-out z-10 ${
+          className={`w-full flex flex-col items-center justify-center transition-all duration-700 ease-out z-10 ${
             isBettingPhase
               ? 'h-[36%] min-h-[160px] max-h-[200px] scale-90'
               : 'flex-1 h-full scale-100 py-2'
@@ -761,7 +761,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         {/* Visible in betting phase, slides down/out completely when spinning/closed */}
         <div
           id="roulette-betting-bottom-sheet"
-          className={`absolute inset-x-0 bottom-0 h-[64%] z-20 flex flex-col justify-end transition-transform duration-500 ease-in-out ${
+          className={`absolute inset-x-0 bottom-0 h-[64%] z-20 flex flex-col justify-end transition-transform duration-700 cubic-bezier(0.22,1,0.36,1) ${
             isBettingPhase
               ? 'translate-y-0 opacity-100 pointer-events-auto'
               : 'translate-y-[115%] opacity-0 pointer-events-none'
