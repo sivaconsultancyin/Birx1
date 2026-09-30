@@ -29,7 +29,7 @@ export const ExternalRouletteWheel: React.FC<Props> = ({ isSpinning, targetWinni
       <div className="relative h-[min(76vw,400px)] w-[min(76vw,400px)]">
         <div className="absolute inset-0 rounded-full border-[10px] border-amber-500 bg-[#080808] shadow-[inset_0_0_0_3px_#fbbf24,0_0_35px_rgba(245,158,11,.2)]" />
         <div
-          className="absolute inset-[10%] rounded-full overflow-visible transition-transform duration-[4.2s] ease-out"
+          className="absolute inset-[7%] rounded-full overflow-visible transition-transform duration-[4.2s] ease-out"
           style={{
             transform: `rotate(${rotation}deg)`,
             background: `conic-gradient(${data.map((n,i) => {
@@ -39,24 +39,27 @@ export const ExternalRouletteWheel: React.FC<Props> = ({ isSpinning, targetWinni
           }}
         >
           {data.map((n, i) => {
-            const angle = i * (360 / 37) + (180 / 37);
+            const angle = i * (360 / 37);
+            const rad = angle * Math.PI / 180;
+            const x = 50 + Math.sin(rad) * 42;
+            const y = 50 - Math.cos(rad) * 42;
             return (
-              <span key={n} className="absolute left-1/2 top-1/2 text-[10px] font-black text-white sm:text-xs"
-                style={{
-                  transform: `rotate(${angle}deg) translateY(-145px) rotate(-${angle}deg)`,
-                  transformOrigin: 'center',
-                }}>
+              <span
+                key={n}
+                className="absolute z-20 -translate-x-1/2 -translate-y-1/2 text-[11px] font-black leading-none text-white drop-shadow-[0_1px_3px_rgba(0,0,0,.95)] sm:text-sm"
+                style={{ left: `${x}%`, top: `${y}%` }}
+              >
                 {n}
               </span>
             );
           })}
         </div>
-        <div className="absolute inset-[24%] rounded-full border-4 border-amber-400 bg-[#171717] shadow-inner" />
+        <div className="absolute inset-[25%] z-10 rounded-full border-4 border-amber-400 bg-[#171717] shadow-inner" />
         <div
-          className="absolute inset-[9%] pointer-events-none transition-transform duration-[4.2s] ease-out"
+          className="absolute inset-[6%] z-30 pointer-events-none transition-transform duration-[4.2s] ease-out"
           style={{ transform: `rotate(${ballRotation}deg)` }}
         >
-          <div className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 rounded-full bg-white border border-slate-300 shadow-[0_0_10px_rgba(255,255,255,.95)]" />
+          <div className="absolute left-1/2 top-0 h-5 w-5 -translate-x-1/2 rounded-full bg-white border border-slate-300 shadow-[0_0_10px_rgba(255,255,255,.95)]" />
         </div>
         <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-amber-400 bg-slate-950 shadow-lg" />
       </div>
