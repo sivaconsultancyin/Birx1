@@ -22,6 +22,25 @@ const ROULETTE_LIMITS = {
   maximumExposure: 500000
 };
 
+const DEFAULT_ROULETTE_CLIENT_SEED = 'roulette-client-v1';
+
+function createRouletteFairRound() {
+  const serverSeed = crypto.randomBytes(32).toString('hex');
+  const serverSeedHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
+  return { serverSeed, serverSeedHash, clientSeed: DEFAULT_ROULETTE_CLIENT_SEED, nonce: crypto.randomBytes(16).toString('hex') };
+}
+
+function deriveRouletteOutcome(serverSeed: string, clientSeed: string, nonce: string) {
+  const digest = crypto.createHmac('sha256', serverSeed).update(`${clientSeed}:${nonce}`).digest();
+  return EUROPEAN_WHEEL[digest.readUInt32BE(0) % EUROPEAN_WHEEL.length];
+}
+
+function verifyRouletteFairResult(serverSeed: string, serverSeedHash: string, clientSeed: string, nonce: string, winningNumber: number) {
+  const computedHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
+  const derivedNumber = deriveRouletteOutcome(serverSeed, clientSeed, nonce);
+  return computedHash === serverSeedHash && derivedNumber === winningNumber;
+}
+
 const ROULETTE_PAYOUT_RULES = {
   straight: { ratio: '35:1', multiplier: 36, description: 'Straight Up: Single number 0-36 (35:1 profit, 36x gross)' },
   split: { ratio: '17:1', multiplier: 18, description: 'Split: Two adjacent numbers (17:1 profit, 18x gross)' },
@@ -35,6 +54,8 @@ const ROULETTE_PAYOUT_RULES = {
   low_high: { ratio: '1:1', multiplier: 2, description: 'Low / High: 1-18 or 19-36 (1:1 profit, 2x gross, 0 loses)' }
 };
 
+const initialFairRound = createRouletteFairRound();
+
 let rouletteState: RouletteState = {
   roomId: GAME_ROOM_ID,
   roundId: 'RL-' + crypto.randomInt(1000, 10000),
@@ -44,11 +65,13 @@ let rouletteState: RouletteState = {
   winningColor: 'black',
   winningCategory: '17 BLACK • Odd • Low (1-18) • 2nd Dozen • 2nd Col',
   recentResults: [17, 32, 0, 26, 3, 15, 28, 21, 4, 19],
-  serverSeedHash: 'd3b07384d113edec49eaa6238ad5ff00' + crypto.randomBytes(4).toString('hex'),
+  serverSeedHash: initialFairRound.serverSeedHash,
   minimumBet: ROULETTE_LIMITS.minimumBet,
   maximumBet: ROULETTE_LIMITS.maximumBet,
   maximumExposure: ROULETTE_LIMITS.maximumExposure
 };
+
+let rouletteFairRound = initialFairRound;
 
 // Memory stores for Roulette
 const currentRoundBets: Record<string, RouletteBet[]> = {};
@@ -309,7 +332,7 @@ setInterval(async () => {
       rouletteState.countdown = 5;
 
       // Authoritative RNG generation strictly on server before spin starts
-      const winningNum = EUROPEAN_WHEEL[crypto.randomInt(EUROPEAN_WHEEL.length)];
+      const winningNum = deriveRouletteOutcome(rouletteFairRound.serverSeed, rouletteFairRound.clientSeed, rouletteFairRound.nonce);
       rouletteState.winningNumber = winningNum;
       rouletteState.winningColor = winningNum === 0 ? 'green' : RED_NUMBERS.includes(winningNum) ? 'red' : 'black';
 
@@ -390,7 +413,8 @@ setInterval(async () => {
       rouletteState.roundId = newRoundId;
       rouletteState.phase = 'betting';
       rouletteState.countdown = 15;
-      rouletteState.serverSeedHash = 'd3b07384d113edec49eaa6238ad5ff00' + crypto.randomBytes(4).toString('hex');
+      rouletteFairRound = createRouletteFairRound();
+      rouletteState.serverSeedHash = rouletteFairRound.serverSeedHash;
       currentRoundBets[newRoundId] = [];
 
       broadcastRealtime('roulette_round_started', {
@@ -437,6 +461,14 @@ const handleGetRouletteRound = (_req: Request, res: Response) => {
 };
 app.get('/api/games/roulette/round', requireAuth, requirePlayerForGames, handleGetRouletteRound);
 app.get('/api/games/roulette/state', requireAuth, requirePlayerForGames, handleGetRouletteRound);
+
+app.get('/api/games/roulette/fairness/:roundId', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+  const roundId = req.params.roundId;
+  const settlement = roundSettlements[roundId];
+  if (!settlement?.provablyFair) return res.status(404).json({ error: 'Fairness proof is available after settlement' });
+  const proof = settlement.provablyFair;
+  return res.json({ roundId, ...proof, verified: verifyRouletteFairResult(proof.serverSeed, proof.serverSeedHash, proof.clientSeed, proof.nonce, proof.winningNumber) });
+});
 
 // 3. GET History & Analytics
 const handleGetRouletteHistory = (_req: Request, res: Response) => {
@@ -594,7 +626,7 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
   }
 
   // Authoritative server outcome from European wheel (0-36)
-  const winningNum = EUROPEAN_WHEEL[crypto.randomInt(EUROPEAN_WHEEL.length)];
+  const winningNum = deriveRouletteOutcome(rouletteFairRound.serverSeed, rouletteFairRound.clientSeed, rouletteFairRound.nonce);
   const settlement = computeRouletteSettlement(winningNum, bets);
 
   // Atomic credit if winning
@@ -629,7 +661,8 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
 
   const nextRoundId = 'RL-' + crypto.randomInt(1000, 10000);
   rouletteState.roundId = nextRoundId;
-  rouletteState.serverSeedHash = 'd3b07384d113edec49eaa6238ad5ff00' + crypto.randomBytes(4).toString('hex');
+  rouletteFairRound = createRouletteFairRound();
+      rouletteState.serverSeedHash = rouletteFairRound.serverSeedHash;
 
   const fullSettlementResult = {
     success: true,
@@ -650,6 +683,13 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
     recentResults: rouletteState.recentResults
   };
 
+  fullSettlementResult.provablyFair = {
+    serverSeedHash: rouletteFairRound.serverSeedHash,
+    serverSeed: rouletteFairRound.serverSeed,
+    clientSeed: rouletteFairRound.clientSeed,
+    nonce: rouletteFairRound.nonce,
+    winningNumber: winningNum
+  };
   roundSettlements[currentRoundId] = fullSettlementResult;
 
   if (idempotencyKey) {
