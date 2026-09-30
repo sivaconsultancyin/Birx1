@@ -251,6 +251,29 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     loadState();
     loadStats();
 
+    // Reconcile against the authoritative round endpoint so a missed realtime
+    // event cannot leave betting stuck in an old phase.
+    const reconcileTimer = window.setInterval(async () => {
+      try {
+        const res = await gamesApi.roulette.getRound();
+        const next = res.state;
+        if (!next) return;
+        setGameState((prev) => {
+          if (!prev || prev.roundId !== next.roundId || prev.phase !== next.phase) {
+            setCountdown(res.countdown ?? next.countdown ?? 0);
+            if (next.phase === 'spinning') {
+              setWinningNumber(res.winningNumber ?? next.winningNumber ?? null);
+              setWinningColor(res.winningColor ?? next.winningColor ?? null);
+            }
+            return next;
+          }
+          return prev;
+        });
+      } catch {
+        // Realtime remains the primary transport; polling is only recovery.
+      }
+    }, 2000);
+
     const unsubscribe = subscribeToRealtimeEvents((event) => {
       const payload: any = event.data || {};
       if (!payload || !payload.type) return;
@@ -331,8 +354,11 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       }
     });
 
-    return () => unsubscribe();
-  }, []);;
+    return () => {
+      unsubscribe();
+      window.clearInterval(reconcileTimer);
+    };
+  }, []);
 
   const loadState = async () => {
     try {
