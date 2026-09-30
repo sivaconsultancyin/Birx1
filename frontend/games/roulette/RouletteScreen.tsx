@@ -558,6 +558,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         <Countdown
           seconds={countdown}
           maxSeconds={isBettingPhase ? 15 : gameState?.phase === 'spinning' ? 5 : 4}
+          phase={gameState?.phase === 'betting' ? 'betting' : gameState?.phase === 'spinning' ? 'spinning' : gameState?.phase === 'closed' ? 'closed' : 'result'}
           label={
             isBettingPhase
               ? 'Betting'
