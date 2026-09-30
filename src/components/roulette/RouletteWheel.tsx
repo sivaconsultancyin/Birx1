@@ -70,7 +70,7 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 
   const animationFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
-  const spinDurationMs = 4800; // 4.8s authentic European deceleration curve
+  const spinDurationMs = 5000; // Keep wheel physics synchronized with the 5s spinning phase
   const initialWheelRotRef = useRef<number>(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const lastSoundTickRef = useRef<number>(0);
@@ -188,7 +188,7 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
     // 2. Ball physics trajectory setup:
     // Ball spins counter-clockwise against clockwise wheel rotation.
     // At t_catch (84% of spin), ball drops into winning pocket and begins rotating WITH the wheel.
-    const t_catch = 0.84;
+    const t_catch = 0.82;
     const easeWheel = (p: number) => 1 - Math.pow(1 - p, 3.8);
 
     const wheelRotAtCatch = initialWheelRotRef.current + totalWheelDelta * easeWheel(t_catch);
