@@ -656,7 +656,7 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
     processedRouletteIdempotency.set(idempotencyKey, fullSettlementResult);
   }
 
-  broadcastRealtime('roulette_spin_started', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor });
+  broadcastRealtime('roulette_spin_started', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, countdown: 5 });
   broadcastRealtime('roulette_result', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, category: settlement.winningCategory });
   broadcastRealtime('roulette_settlement', fullSettlementResult);
   broadcastRealtime('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
