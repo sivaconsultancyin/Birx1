@@ -236,6 +236,16 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   const isBettingPhase = gameState?.phase === 'betting';
 
+  // Display countdown ticks locally between authoritative realtime phase events.
+  // The server remains authoritative; this only animates the visible seconds smoothly.
+  useEffect(() => {
+    if (!gameState?.phase) return;
+    const timer = window.setInterval(() => {
+      setCountdown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [gameState?.phase, gameState?.roundId]);
+
   // 1. Initial State & Real-time Synchronization (WebSocket)
   useEffect(() => {
     loadState();
