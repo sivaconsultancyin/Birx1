@@ -37,7 +37,7 @@ export const BettingChip: React.FC<BettingChipProps> = ({
       onClick={onClick}
       className={`relative flex items-center justify-center rounded-full font-black tracking-tight border-2 dashed transition-all duration-150 select-none cursor-pointer shadow-md ${dimensions} ${scheme.border} bg-gradient-to-br ${scheme.bg} ${scheme.text} ${
         isSelected
-          ? `scale-110 shadow-lg ring-4 ring-offset-2 ring-offset-slate-950 ${scheme.ring} z-10 animate-pulse`
+          ? `scale-100 shadow-lg ring-2 ring-offset-1 ring-offset-slate-950 ${scheme.ring} z-10 animate-pulse`
           : 'hover:scale-105 active:scale-95 opacity-90 hover:opacity-100'
       } ${disabled ? 'opacity-40 cursor-not-allowed hover:scale-100' : ''}`}
     >
