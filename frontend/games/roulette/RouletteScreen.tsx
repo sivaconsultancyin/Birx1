@@ -719,7 +719,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           id="roulette-floating-countdown"
           className="absolute top-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
         >
-          <div className="rounded-full border border-white/10 bg-slate-950/20 px-2 py-1 backdrop-blur-[2px] shadow-lg">
+          <div className="rounded-full border border-white/20 bg-white/5 px-2 py-1 backdrop-blur-md shadow-lg">
             <Countdown
               seconds={countdown}
               maxSeconds={isBettingPhase ? 15 : gameState?.phase === 'spinning' ? 5 : 4}
