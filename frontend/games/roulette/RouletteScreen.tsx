@@ -798,7 +798,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         {/* Visible in betting phase, slides down/out completely when spinning/closed */}
         <div
           id="roulette-betting-bottom-sheet"
-          className={`absolute inset-x-0 bottom-0 h-[64%] z-20 flex flex-col justify-end transition-transform duration-700 cubic-bezier(0.22,1,0.36,1) ${
+          className={`absolute inset-0 h-full z-20 flex flex-col justify-end transition-transform duration-700 cubic-bezier(0.22,1,0.36,1) ${
             isBettingPhase
               ? 'translate-y-0 opacity-100 pointer-events-auto'
               : 'translate-y-[115%] opacity-0 pointer-events-none'
