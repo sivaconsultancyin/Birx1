@@ -76,7 +76,7 @@ let rouletteState: RouletteState = {
 let rouletteFairRound = initialFairRound;
 
 // Memory stores for Roulette
-const currentRoundBets: Record<string, RouletteBet[]> = {};
+const currentRoundBets: Record<string, ServerRouletteBet[]> = {};
 const roundSettlements: Record<string, any> = {};
 const processedRouletteIdempotency = new Map<string, any>();
 
