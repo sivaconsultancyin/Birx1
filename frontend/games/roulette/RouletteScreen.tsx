@@ -804,7 +804,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
               : 'translate-y-[115%] opacity-0 pointer-events-none'
           }`}
         >
-          <div className="w-full h-full max-h-full bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 rounded-t-3xl p-2 sm:p-2.5 flex flex-col justify-between overflow-hidden shadow-2xl">
+          <div className="w-full h-full max-h-full bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 rounded-t-3xl p-2 sm:p-2.5 flex flex-col justify-between overflow-visible shadow-2xl">
             {/* Top Bar of Betting Panel */}
             <div className="flex items-center justify-between px-1 pb-1 flex-shrink-0 border-b border-slate-850">
               <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
@@ -828,7 +828,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             </div>
 
             {/* Scrollable Betting Table Grid (fits neatly within available height) */}
-            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar py-1">
+            <div className="flex-1 min-h-0 overflow-visible py-1">
               <RouletteTable
                 bets={allDisplayBets}
                 selectedChip={selectedChip}
