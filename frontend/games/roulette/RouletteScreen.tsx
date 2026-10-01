@@ -812,15 +812,17 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
                 )}
 
                 <div className="flex items-center gap-2 whitespace-nowrap">
+                  <div className="text-xs font-bold text-amber-400">
+                    Total: ₹{totalBetAmount}
+                  </div>
+                </div>
+
                 {confirmedTotal > 0 && (
-                  <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
+                  <span className="absolute -bottom-5 right-1 text-[9px] font-bold text-emerald-400 whitespace-nowrap">
+                    <CheckCircle2 className="inline-block w-3 h-3 mr-0.5" />
                     Locked: ₹{confirmedTotal}
                   </span>
                 )}
-                <div className="text-xs font-bold text-amber-400">
-                  Total: ₹{totalBetAmount}
-                </div>
               </div>
             </div>
 
