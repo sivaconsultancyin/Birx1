@@ -336,8 +336,27 @@ function computeRouletteSettlement(winningNum: number, bets: RouletteBet[]) {
   };
 }
 
+// Restore the single shared roulette room before starting the authoritative clock.
+// A browser refresh must never create/reset a round; the persisted server state is the source of truth.
+let rouletteRoomReady = false;
+const initializeRouletteRoom = async () => {
+  try {
+    const persistedRoulette = await safeGetAuthoritativeGameState('roulette');
+    if (persistedRoulette) {
+      hydrateRoulettePersistence(persistedRoulette);
+    } else {
+      await safeSaveAuthoritativeGameState('roulette', serializeRoulettePersistence());
+    }
+  } catch (error) {
+    console.error('[Roulette] failed to initialize shared room state', error);
+  } finally {
+    rouletteRoomReady = true;
+  }
+};
+
 // Background Authoritative Roulette Round Cycle
 setInterval(async () => {
+  if (!rouletteRoomReady) return;
   if (!(await acquireGameLease('roulette'))) return;
   const persistedRoulette = await safeGetAuthoritativeGameState('roulette');
   if (persistedRoulette) hydrateRoulettePersistence(persistedRoulette);
