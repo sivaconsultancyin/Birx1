@@ -104,8 +104,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
     <div
       id="roulette-betting-table"
       aria-disabled={isLocked}
-      style={{ zoom: 0.9 }}
-      className={`w-full max-w-4xl mx-auto origin-top-center select-none text-white transition-opacity ${isLocked ? 'pointer-events-none opacity-80' : ''}`}
+      className={`w-full select-none text-white transition-opacity ${isLocked ? 'pointer-events-none opacity-80' : ''}`}
     >
       {/* 1. Inside Bet Mode Selector Bar */}
       <div className="mb-2">
@@ -130,7 +129,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                   setInsideMode(m.mode);
                   setSplitFirstNum(null);
                 }}
-                className={`py-2 px-1 rounded-lg text-[11px] font-bold text-center transition-all cursor-pointer ${
+                className={`py-1.5 px-1 rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer ${
                   isActive
                     ? 'bg-amber-500 text-slate-950 shadow-md font-black'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -199,7 +198,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
       {insideMode === 'corner' && (
         <div className="mb-2 p-2 bg-slate-900/80 rounded-xl border border-slate-800">
           <div className="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Select Corner (4 Numbers • 8:1 Payout):</div>
-          <div className="grid grid-cols-4 gap-1 overflow-visible pr-0">
+          <div className="grid grid-cols-4 gap-1 max-h-36 overflow-y-auto pr-1">
             {/* First Four (0, 1, 2, 3) */}
             <button
               type="button"
@@ -322,7 +321,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                   type="button"
                   disabled={isSpinning}
                   onClick={() => handleNumberClick(num)}
-                  className={`relative py-1.5 sm:py-2 sm:min-h-[34px] rounded-md font-black text-sm sm:text-base transition-all active:scale-95 cursor-pointer border shadow-sm flex items-center justify-center ${
+                  className={`relative py-1.5 sm:py-2 rounded-md font-black text-xs sm:text-sm transition-all active:scale-95 cursor-pointer border shadow-sm flex items-center justify-center ${
                     isRed
                       ? 'bg-gradient-to-b from-rose-700 to-rose-900 hover:from-rose-600 hover:to-rose-800 text-white border-rose-600/80'
                       : 'bg-gradient-to-b from-slate-900 to-slate-950 hover:from-slate-800 hover:to-slate-900 text-slate-100 border-slate-700/80'
@@ -351,7 +350,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
         </div>
 
         {/* 3 Columns Bets (2 to 1) */}
-        <div className="grid grid-cols-3 gap-0.5 sm:gap-1 mb-1">
+        <div className="grid grid-cols-3 gap-1 mb-1">
           {(['col1', 'col2', 'col3'] as const).map((colKey, idx) => {
             const bAmt = getBetAmount(colKey);
             return (
@@ -361,7 +360,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                 type="button"
                 disabled={isSpinning}
                 onClick={() => placeBet(colKey, { label: `Column ${idx + 1} (2:1)` })}
-                className={`py-2 rounded-lg text-sm font-black tracking-wide border relative transition-all active:scale-95 cursor-pointer ${
+                className={`py-1.5 rounded-lg text-xs font-black tracking-wide border relative transition-all active:scale-95 cursor-pointer ${
                   bAmt > 0
                     ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-1 ring-amber-400'
                     : 'bg-emerald-900/80 hover:bg-emerald-850 text-emerald-100 border-emerald-700/70'
@@ -379,7 +378,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
         </div>
 
         {/* 3 Dozens Bets (1st 12, 2nd 12, 3rd 12 - 2:1) */}
-        <div className="grid grid-cols-3 gap-0.5 sm:gap-1 mb-1">
+        <div className="grid grid-cols-3 gap-1 mb-1">
           {[
             { key: 'dozen1', label: '1st 12', range: '1-12' },
             { key: 'dozen2', label: '2nd 12', range: '13-24' },
@@ -393,7 +392,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                 type="button"
                 disabled={isSpinning}
                 onClick={() => placeBet(key as RouletteBetType, { label: `${label} (${range})` })}
-                className={`py-2 rounded-lg text-sm font-black border relative transition-all active:scale-95 cursor-pointer ${
+                className={`py-1.5 rounded-lg text-xs font-black border relative transition-all active:scale-95 cursor-pointer ${
                   bAmt > 0
                     ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-1 ring-amber-400'
                     : 'bg-slate-900/90 hover:bg-slate-850 text-slate-200 border-slate-700/80'
