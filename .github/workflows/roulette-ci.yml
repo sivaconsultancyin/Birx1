@@ -38,7 +38,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Roulette E2E
-        run: npx playwright test
+        run: npm run test:e2e
         env:
           E2E_SMOKE_ONLY: '0'
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
