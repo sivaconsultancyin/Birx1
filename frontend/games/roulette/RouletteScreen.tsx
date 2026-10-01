@@ -591,21 +591,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
       {/* Top Info Bar: Timer, Phase, Carousel, Stats Toggle */}
       <div className="flex-shrink-0 px-3 py-1.5 flex items-center justify-between bg-slate-900/90 border-b border-slate-800/80 z-30">
-        <Countdown
-          seconds={countdown}
-          maxSeconds={isBettingPhase ? 15 : gameState?.phase === 'spinning' ? 5 : 4}
-          phase={gameState?.phase === 'betting' ? 'betting' : gameState?.phase === 'spinning' ? 'spinning' : gameState?.phase === 'closed' ? 'closed' : 'result'}
-          label={
-            isBettingPhase
-              ? 'Betting'
-              : gameState?.phase === 'closed'
-              ? 'Closed'
-              : gameState?.phase === 'spinning'
-              ? 'Spinning'
-              : 'Settled'
-          }
-          size="sm"
-        />
+
 
         {/* Recent Numbers Carousel */}
         <div className="flex items-center gap-1 overflow-x-auto text-xs py-0.5 px-1 max-w-[170px] no-scrollbar">
@@ -728,6 +714,30 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
       {/* 4. Main Stage Area: Houses Wheel and Sliding Betting Panel */}
       <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col items-center justify-center bg-gradient-to-b from-slate-900 via-slate-950 to-black">
+        {/* Floating transparent countdown - kept separate from the top header/card */}
+        <div
+          id="roulette-floating-countdown"
+          className="absolute top-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+        >
+          <div className="rounded-full border border-white/10 bg-slate-950/20 px-2 py-1 backdrop-blur-[2px] shadow-lg">
+            <Countdown
+              seconds={countdown}
+              maxSeconds={isBettingPhase ? 15 : gameState?.phase === 'spinning' ? 5 : 4}
+              phase={gameState?.phase === 'betting' ? 'betting' : gameState?.phase === 'spinning' ? 'spinning' : gameState?.phase === 'closed' ? 'closed' : 'result'}
+              label={
+                isBettingPhase
+                  ? 'Betting'
+                  : gameState?.phase === 'closed'
+                  ? 'Closed'
+                  : gameState?.phase === 'spinning'
+                  ? 'Spinning'
+                  : 'Settled'
+              }
+              size="sm"
+            />
+          </div>
+        </div>
+
         {/* Ambient Wheel Spotlight Lighting */}
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.08)_0%,rgba(15,23,42,0.6)_60%,transparent_100%)]" />
 
