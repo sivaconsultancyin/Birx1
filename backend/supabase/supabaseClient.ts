@@ -644,6 +644,14 @@ const supabaseRepoImpl = {
     return data;
   },
 
+  async getRoundBets(roundId: string, gameId: string): Promise<any[]> {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    const { data, error } = await admin.from('bets').select('*').eq('round_id', roundId).eq('game_id', gameId).order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
   async settleGameBet(betId: string, status: 'won' | 'lost', multiplier: number, payout: number) {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
