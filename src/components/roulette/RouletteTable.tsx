@@ -50,10 +50,11 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
     });
   };
 
-  // Number grid: 12 rows of 3 numbers
-  // Row 1: [1, 2, 3]
-  // Row 2: [4, 5, 6] ...
-  const rows = Array.from({ length: 12 }, (_, r) => [r * 3 + 1, r * 3 + 2, r * 3 + 3]);
+  // Number grid: 10 columns, filled left-to-right with 1–36
+  // 10 columns × 4 rows (last row contains 6 numbers)
+  const rows = Array.from({ length: 4 }, (_, r) =>
+    Array.from({ length: 10 }, (_, c) => r * 10 + c + 1).filter((n) => n <= 36)
+  );
 
   // Valid adjacent neighbors for split
   const getAdjacentNeighbors = (num: number): number[] => {
@@ -306,7 +307,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
         </div>
 
         {/* 1-36 Numbers Matrix (12 rows x 3 columns) */}
-        <div className="grid grid-cols-3 gap-0.5 sm:gap-1 mb-1">
+        <div className="grid grid-cols-10 gap-0.5 sm:gap-1 mb-1">
           {rows.map((row) =>
             row.map((num) => {
               const isRed = RED_NUMBERS_SET.has(num);
