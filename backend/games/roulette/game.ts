@@ -354,6 +354,8 @@ const initializeRouletteRoom = async () => {
   }
 };
 
+void initializeRouletteRoom();
+
 // Background Authoritative Roulette Round Cycle
 setInterval(async () => {
   if (!rouletteRoomReady) return;
