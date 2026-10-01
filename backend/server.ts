@@ -236,6 +236,14 @@ function startAuthoritativeRealtimeBridge() {
       delete state.crashTarget;
       delete state.activeBets;
     }
+    if (gameId === 'roulette') {
+      // Roulette persistence contains server-only fairness material and internal
+      // per-player bet/settlement maps. Never broadcast those through WebSocket.
+      delete state.fairRound;
+      delete state.currentRoundBets;
+      delete state.roundSettlements;
+      delete state.processedRouletteIdempotency;
+    }
     broadcastRealtime('game_state', {
       gameId,
       roomId,
