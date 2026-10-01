@@ -259,9 +259,14 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         const next = res.state;
         if (!next) return;
         setGameState((prev) => {
-          if (!prev || prev.roundId !== next.roundId || prev.phase !== next.phase) {
+          const recentChanged =
+            !prev ||
+            prev.recentResults?.length !== next.recentResults?.length ||
+            prev.recentResults?.[0] !== next.recentResults?.[0];
+
+          if (!prev || prev.roundId !== next.roundId || prev.phase !== next.phase || recentChanged) {
             setCountdown(res.countdown ?? next.countdown ?? 0);
-            if (next.phase === 'spinning') {
+            if (next.phase === 'spinning' || next.phase === 'result') {
               setWinningNumber(res.winningNumber ?? next.winningNumber ?? null);
               setWinningColor(res.winningColor ?? next.winningColor ?? null);
             }
@@ -327,7 +332,19 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           break;
         }
         case 'roulette_result':
-          setGameState((prev) => (prev ? { ...prev, phase: 'result', countdown: payload.countdown || 4 } : null));
+          setGameState((prev) => {
+            if (!prev) return prev;
+            const resultNumber = Number(payload.winningNumber);
+            const recentResults = Number.isFinite(resultNumber)
+              ? [resultNumber, ...(prev.recentResults || []).filter((n) => n !== resultNumber)].slice(0, 20)
+              : prev.recentResults;
+            return {
+              ...prev,
+              phase: 'result',
+              countdown: payload.countdown || 4,
+              recentResults
+            };
+          });
           setCountdown(payload.countdown || 4);
           setWinningNumber(payload.winningNumber);
           setWinningColor(payload.winningColor);
