@@ -27,14 +27,14 @@ export const Countdown: React.FC<CountdownProps> = ({
   return (
     <div
       id="countdown-timer"
-      className="inline-flex w-16 h-16 flex-col items-center justify-center gap-0.5 rounded-full border border-white/20 bg-transparent px-1 py-1 backdrop-blur-0 transition-all duration-300"
+      className="inline-flex w-11 h-11 flex-col items-center justify-center gap-0.5 rounded-full border border-white/20 bg-transparent px-1 py-1 backdrop-blur-0 transition-all duration-300"
     >
       <div className="flex flex-col items-center justify-center gap-0">
-        <Timer className={`h-3 w-3 transition-colors duration-300 ${isUrgent ? 'text-white' : 'text-white'}`} />
-        <span className="text-[8px] font-medium text-white/70">{phaseLabel}</span>
+        <Timer className={`h-2.5 w-2.5 transition-colors duration-300 ${isUrgent ? 'text-white' : 'text-white'}`} />
+        <span className="text-[6px] font-medium text-white/70">{phaseLabel}</span>
         <span
           id="countdown-seconds"
-          className={`font-black tabular-nums tracking-wider transition-all duration-300 ${size === 'sm' ? 'text-sm' : 'text-base'} ${isUrgent ? 'text-red-400' : 'text-amber-400'}`}
+          className={`font-black tabular-nums tracking-wider transition-all duration-300 ${size === 'sm' ? 'text-[11px]' : 'text-base'} ${isUrgent ? 'text-red-400' : 'text-amber-400'}`}
         >
           {safeSeconds}s
         </span>
