@@ -622,7 +622,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
         {/* Recent Numbers Carousel */}
         <div className="flex items-center gap-1 overflow-x-auto text-xs py-0.5 px-1 max-w-[170px] no-scrollbar">
-          {gameState?.recentResults.slice(0, 6).map((num, i) => {
+          {gameState?.recentResults.slice(0, 20).map((num, i) => {
             const isR = RED_NUMBERS_SET.has(num);
             const isG = num === 0;
             return (
