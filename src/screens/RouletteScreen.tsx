@@ -787,7 +787,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             </div>
 
             {/* Scrollable Betting Table Grid (fits neatly within available height) */}
-            <div className="flex-1 min-h-0 overflow-hidden py-1 relative z-10">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-1 relative z-10 no-scrollbar">
               <RouletteTable
                 bets={allDisplayBets}
                 selectedChip={selectedChip}
