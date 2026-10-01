@@ -321,7 +321,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                   type="button"
                   disabled={isSpinning}
                   onClick={() => handleNumberClick(num)}
-                  className={`relative py-1.5 sm:py-2 rounded-md font-black text-xs sm:text-sm transition-all active:scale-95 cursor-pointer border shadow-sm flex items-center justify-center ${
+                  className={`relative py-1 sm:py-1.5 rounded-md font-black text-xs sm:text-sm transition-all active:scale-95 cursor-pointer border shadow-sm flex items-center justify-center ${
                     isRed
                       ? 'bg-gradient-to-b from-rose-700 to-rose-900 hover:from-rose-600 hover:to-rose-800 text-white border-rose-600/80'
                       : 'bg-gradient-to-b from-slate-900 to-slate-950 hover:from-slate-800 hover:to-slate-900 text-slate-100 border-slate-700/80'
