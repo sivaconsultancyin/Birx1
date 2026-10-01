@@ -760,10 +760,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
                   <span>Betting Closed — Starting Spin</span>
                 </div>
               ) : gameState?.phase === 'spinning' ? (
-                <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-bold tracking-wide animate-pulse shadow-xl shadow-amber-500/10">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
-                  <span>Wheel Spinning... Landing on pocket</span>
-                </div>
+                <div className="h-0 overflow-hidden" aria-hidden="true" />
               ) : (
                 <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-slate-900/90 border border-slate-700 text-white text-xs font-bold shadow-2xl">
                   <span
