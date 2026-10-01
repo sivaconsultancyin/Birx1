@@ -24,6 +24,8 @@ const ROULETTE_LIMITS = {
 
 const DEFAULT_ROULETTE_CLIENT_SEED = 'roulette-client-v1';
 
+type ServerRouletteBet = RouletteBet & { userId: string; placedAt: string };
+
 function createRouletteFairRound() {
   const serverSeed = crypto.randomBytes(32).toString('hex');
   const serverSeedHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
@@ -81,6 +83,7 @@ const processedRouletteIdempotency = new Map<string, any>();
 function serializeRoulettePersistence() {
   return {
     ...rouletteState,
+    fairRound: rouletteFairRound,
     currentRoundBets,
     roundSettlements,
     processedRouletteIdempotency: Object.fromEntries(processedRouletteIdempotency.entries())
@@ -89,11 +92,29 @@ function serializeRoulettePersistence() {
 
 function hydrateRoulettePersistence(persisted: any) {
   if (!persisted || typeof persisted !== 'object') return;
-  const { currentRoundBets: persistedBets, roundSettlements: persistedSettlements, processedRouletteIdempotency: persistedIdempotency, ...state } = persisted;
+  const {
+    fairRound: persistedFairRound,
+    currentRoundBets: persistedBets,
+    roundSettlements: persistedSettlements,
+    processedRouletteIdempotency: persistedIdempotency,
+    ...state
+  } = persisted;
+
   if (state.roundId) rouletteState = { ...rouletteState, ...state };
+
+  if (
+    persistedFairRound &&
+    typeof persistedFairRound.serverSeed === 'string' &&
+    typeof persistedFairRound.serverSeedHash === 'string' &&
+    typeof persistedFairRound.clientSeed === 'string' &&
+    typeof persistedFairRound.nonce === 'string'
+  ) {
+    rouletteFairRound = persistedFairRound;
+  }
+
   if (persistedBets && typeof persistedBets === 'object') {
     for (const [roundId, bets] of Object.entries(persistedBets)) {
-      if (Array.isArray(bets)) currentRoundBets[roundId] = bets as RouletteBet[];
+      if (Array.isArray(bets)) currentRoundBets[roundId] = bets as ServerRouletteBet[];
     }
   }
   if (persistedSettlements && typeof persistedSettlements === 'object') {
@@ -101,7 +122,9 @@ function hydrateRoulettePersistence(persisted: any) {
   }
   if (persistedIdempotency && typeof persistedIdempotency === 'object') {
     processedRouletteIdempotency.clear();
-    for (const [key, value] of Object.entries(persistedIdempotency)) processedRouletteIdempotency.set(key, value);
+    for (const [key, value] of Object.entries(persistedIdempotency)) {
+      processedRouletteIdempotency.set(key, value);
+    }
   }
 }
 const rouletteHistoryRecords: {
@@ -317,7 +340,7 @@ function computeRouletteSettlement(winningNum: number, bets: RouletteBet[]) {
 setInterval(async () => {
   if (!(await acquireGameLease('roulette'))) return;
   const persistedRoulette = await safeGetAuthoritativeGameState('roulette');
-  if (persistedRoulette) rouletteState = persistedRoulette as RouletteState;
+  if (persistedRoulette) hydrateRoulettePersistence(persistedRoulette);
   if (rouletteState.phase === 'betting') {
     rouletteState.countdown -= 1;
     if (rouletteState.countdown <= 0) {
@@ -332,7 +355,7 @@ setInterval(async () => {
       rouletteState.countdown = 5;
 
       // Authoritative RNG generation strictly on server before spin starts
-      const winningNum = deriveRouletteOutcome(rouletteFairRound.serverSeed, rouletteFairRound.clientSeed, rouletteFairRound.nonce);
+      const winningNum = deriveRouletteOutcome(fairRoundForSpin.serverSeed, fairRoundForSpin.clientSeed, fairRoundForSpin.nonce);
       rouletteState.winningNumber = winningNum;
       rouletteState.winningColor = winningNum === 0 ? 'green' : RED_NUMBERS.includes(winningNum) ? 'red' : 'black';
 
@@ -349,9 +372,41 @@ setInterval(async () => {
       rouletteState.phase = 'result';
       rouletteState.countdown = 4;
 
+      const currentRoundId = rouletteState.roundId;
       const winningNum = rouletteState.winningNumber ?? 0;
-      const bets = currentRoundBets[rouletteState.roundId] || [];
+      const bets = (currentRoundBets[currentRoundId] || []) as ServerRouletteBet[];
       const settlement = computeRouletteSettlement(winningNum, bets);
+      const playerSettlements: Record<string, any> = {};
+
+      // Bets were debited when placed. Credit each player's gross payout exactly once
+      // using a deterministic idempotency key so a restart/recovery cannot double-pay.
+      const userIds = [...new Set(bets.map((bet) => bet.userId).filter(Boolean))];
+      for (const userId of userIds) {
+        const playerBets = bets.filter((bet) => bet.userId === userId);
+        const playerSettlement = computeRouletteSettlement(winningNum, playerBets);
+        playerSettlements[userId] = playerSettlement;
+
+        if (playerSettlement.grossPayout > 0) {
+          try {
+            const payoutKey = `roulette:settlement:${currentRoundId}:${userId}`;
+            const credit = await supabaseRepo.atomicCredit(
+              userId,
+              playerSettlement.grossPayout,
+              'payout',
+              `Roulette Payout #${currentRoundId}`,
+              'roulette',
+              payoutKey
+            );
+            broadcastRealtime('roulette_wallet_updated', {
+              userId,
+              wallet: credit.wallet,
+              roundId: currentRoundId
+            });
+          } catch (error) {
+            console.error(`[RouletteSettlement:${currentRoundId}] payout failed for user ${userId}`, error);
+          }
+        }
+      }
 
       rouletteState.winningCategory = settlement.winningCategory;
       rouletteState.recentResults.unshift(winningNum);
@@ -393,7 +448,8 @@ setInterval(async () => {
         netResult: settlement.netResult,
         settlementStatus: 'settled',
         wallet: undefined,
-        recentResults: rouletteState.recentResults
+        recentResults: rouletteState.recentResults,
+        playerSettlements
       };
 
       broadcastRealtime('roulette_result', {
@@ -547,13 +603,20 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
-  const existingBets = currentRoundBets[rouletteState.roundId] || [];
-  currentRoundBets[rouletteState.roundId] = [...existingBets, ...bets];
+  const userId = req.user!.id;
+  const serverBets: ServerRouletteBet[] = bets.map((bet) => ({
+    ...bet,
+    userId,
+    placedAt: new Date().toISOString()
+  }));
+
+  const existingBets = (currentRoundBets[rouletteState.roundId] || []) as ServerRouletteBet[];
+  currentRoundBets[rouletteState.roundId] = [...existingBets, ...serverBets];
 
   const responsePayload = {
     success: true,
     roundId: rouletteState.roundId,
-    bets: currentRoundBets[rouletteState.roundId],
+    bets: currentRoundBets[rouletteState.roundId].map(({ userId: _userId, placedAt: _placedAt, ...bet }) => bet),
     totalBetPlaced: totalBet,
     wallet: await supabaseRepo.getWallet(req.user!.id),
     countdown: rouletteState.countdown
@@ -621,6 +684,7 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
 
   // Atomic debit
   const currentRoundId = rouletteState.roundId;
+  const fairRoundForSpin = rouletteFairRound;
   try { await debitForUser(req, totalBet, `Roulette Round ${currentRoundId}`, 'roulette', idempotencyKey); } catch (e: any) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
@@ -691,10 +755,10 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
   };
 
   fullSettlementResult.provablyFair = {
-    serverSeedHash: rouletteFairRound.serverSeedHash,
-    serverSeed: rouletteFairRound.serverSeed,
-    clientSeed: rouletteFairRound.clientSeed,
-    nonce: rouletteFairRound.nonce,
+    serverSeedHash: fairRoundForSpin.serverSeedHash,
+    serverSeed: fairRoundForSpin.serverSeed,
+    clientSeed: fairRoundForSpin.clientSeed,
+    nonce: fairRoundForSpin.nonce,
     winningNumber: winningNum
   };
   roundSettlements[currentRoundId] = fullSettlementResult;
