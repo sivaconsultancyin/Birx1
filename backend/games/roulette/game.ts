@@ -355,7 +355,7 @@ setInterval(async () => {
       rouletteState.countdown = 5;
 
       // Authoritative RNG generation strictly on server before spin starts
-      const winningNum = deriveRouletteOutcome(fairRoundForSpin.serverSeed, fairRoundForSpin.clientSeed, fairRoundForSpin.nonce);
+      const winningNum = deriveRouletteOutcome(rouletteFairRound.serverSeed, rouletteFairRound.clientSeed, rouletteFairRound.nonce);
       rouletteState.winningNumber = winningNum;
       rouletteState.winningColor = winningNum === 0 ? 'green' : RED_NUMBERS.includes(winningNum) ? 'red' : 'black';
 
