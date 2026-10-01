@@ -792,24 +792,26 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             <div className="relative flex items-center justify-between px-1 pb-1 flex-shrink-0 border-b border-slate-850">
               <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5 min-w-0">
                 <span>European Table</span>
-                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/70 border border-emerald-800/70 px-1.5 py-0.2 rounded-full">
-                  Single 0
-                </span>
               </div>
 
-              {isBettingPhase && (
-                <div id="roulette-european-countdown" className="absolute left-1/2 -translate-x-1/2 pointer-events-none">
-                  <Countdown
-                    seconds={countdown}
-                    maxSeconds={15}
-                    phase="betting"
-                    label="Betting"
-                    size="sm"
-                  />
-                </div>
-              )}
+              <div className="flex items-center gap-2 ml-auto mr-1">
+                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/70 border border-emerald-800/70 px-1.5 py-0.2 rounded-full whitespace-nowrap">
+                  Single 0
+                </span>
 
-              <div className="flex items-center gap-2">
+                {isBettingPhase && (
+                  <div id="roulette-european-countdown" className="pointer-events-none flex-shrink-0">
+                    <Countdown
+                      seconds={countdown}
+                      maxSeconds={15}
+                      phase="betting"
+                      label="Betting"
+                      size="sm"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 whitespace-nowrap">
                 {confirmedTotal > 0 && (
                   <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" />
