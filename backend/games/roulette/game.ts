@@ -374,7 +374,26 @@ setInterval(async () => {
 
       const currentRoundId = rouletteState.roundId;
       const winningNum = rouletteState.winningNumber ?? 0;
-      const bets = (currentRoundBets[currentRoundId] || []) as ServerRouletteBet[];
+
+      // Supabase is authoritative. Memory is only a fast fallback for local/dev mode.
+      let persistedBets: any[] = [];
+      try {
+        persistedBets = await supabaseRepo.getRoundBets(currentRoundId, 'roulette');
+      } catch (error) {
+        console.error(`[RouletteSettlement:${currentRoundId}] failed to load persisted bets`, error);
+      }
+
+      const bets: ServerRouletteBet[] = persistedBets.length
+        ? persistedBets.map((row: any) => ({
+            type: row.bet_type,
+            value: row.bet_value?.value ?? undefined,
+            numbers: row.bet_value?.numbers ?? undefined,
+            amount: Number(row.amount),
+            userId: row.user_id,
+            placedAt: row.created_at
+          }))
+        : ((currentRoundBets[currentRoundId] || []) as ServerRouletteBet[]);
+
       const settlement = computeRouletteSettlement(winningNum, bets);
       const playerSettlements: Record<string, any> = {};
 
@@ -405,6 +424,43 @@ setInterval(async () => {
           } catch (error) {
             console.error(`[RouletteSettlement:${currentRoundId}] payout failed for user ${userId}`, error);
           }
+        }
+      }
+
+      if (persistedBets.length) {
+        for (const row of persistedBets) {
+          const rowBet = {
+            type: row.bet_type,
+            value: row.bet_value?.value ?? undefined,
+            numbers: row.bet_value?.numbers ?? undefined,
+            amount: Number(row.amount)
+          };
+          const one = computeRouletteSettlement(winningNum, [rowBet]);
+          try {
+            await supabaseRepo.settleGameBet(
+              row.id,
+              one.grossPayout > 0 ? 'won' : 'lost',
+              one.grossPayout > 0 ? Number((one.grossPayout / Number(row.amount)).toFixed(2)) : 0,
+              one.grossPayout
+            );
+          } catch (error) {
+            console.error(`[RouletteSettlement:${currentRoundId}] failed to settle bet ${row.id}`, error);
+          }
+        }
+        try {
+          await supabaseRepo.recordSettlement({
+            id: `roulette:${currentRoundId}`,
+            roundId: currentRoundId,
+            gameId: 'roulette',
+            totalBetsCount: persistedBets.length,
+            totalBetAmount: settlement.totalBet,
+            totalPayoutAmount: settlement.grossPayout,
+            netHouseResult: settlement.totalBet - settlement.grossPayout,
+            outcomeSummary: `Landed on ${winningNum} ${settlement.winningColor.toUpperCase()}`,
+            details: { winningNumber: winningNum, winningColor: settlement.winningColor }
+          });
+        } catch (error) {
+          console.error(`[RouletteSettlement:${currentRoundId}] failed to persist settlement summary`, error);
         }
       }
 
@@ -604,11 +660,44 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
   }
 
   const userId = req.user!.id;
+  const placedAt = new Date().toISOString();
   const serverBets: ServerRouletteBet[] = bets.map((bet) => ({
     ...bet,
     userId,
-    placedAt: new Date().toISOString()
+    placedAt
   }));
+
+  // Persist the authoritative bet before the request completes so a process restart
+  // cannot lose a debit that was already accepted.
+  try {
+    for (const bet of serverBets) {
+      await supabaseRepo.recordGameBet({
+        id: `roulette:${rouletteState.roundId}:${userId}:${crypto.randomUUID()}`,
+        roundId: rouletteState.roundId,
+        userId,
+        gameId: 'roulette',
+        betType: bet.type,
+        betValue: { value: bet.value ?? null, numbers: bet.numbers ?? null },
+        amount: Number(bet.amount),
+        status: 'pending',
+        idempotencyKey: idempotencyKey ? `${idempotencyKey}:${bet.type}:${bet.value ?? bet.numbers?.join(',') ?? 'na'}` : null
+      });
+    }
+  } catch (persistError) {
+    try {
+      await supabaseRepo.atomicCredit(
+        userId,
+        totalBet,
+        'refund',
+        `Roulette bet persistence refund #${rouletteState.roundId}`,
+        'roulette',
+        idempotencyKey ? `roulette:persist-refund:${idempotencyKey}` : `roulette:persist-refund:${rouletteState.roundId}:${userId}:${Date.now()}`
+      );
+    } catch (refundError) {
+      console.error('[RouletteBetPersistence] debit accepted but persistence failed and refund failed', { persistError, refundError, roundId: rouletteState.roundId, userId });
+    }
+    return res.status(503).json({ error: 'Roulette bet could not be persisted. No bet was accepted.' });
+  }
 
   const existingBets = (currentRoundBets[rouletteState.roundId] || []) as ServerRouletteBet[];
   currentRoundBets[rouletteState.roundId] = [...existingBets, ...serverBets];
