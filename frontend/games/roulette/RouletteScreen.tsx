@@ -271,6 +271,13 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
               setWinningNumber(res.winningNumber ?? next.winningNumber ?? null);
               setWinningColor(res.winningColor ?? next.winningColor ?? null);
             }
+            if (next.phase === 'spinning') setIsSpinning(true);
+            else if (next.phase === 'result' || next.phase === 'betting') setIsSpinning(false);
+            return next;
+          }
+          if (prev?.phase === 'closed' && next.phase !== 'closed') {
+            setCountdown(res.countdown ?? next.countdown ?? 0);
+            setIsSpinning(next.phase === 'spinning');
             return next;
           }
           return prev;
@@ -316,8 +323,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           break;
         }
         case 'roulette_betting_closed':
-          setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown || 2 } : null));
-          setCountdown(payload.countdown || 2);
+          setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown ?? 2 } : null));
+          setCountdown(payload.countdown ?? 2);
           setStagedBets([]);
           break;
         case 'roulette_spin_started': {
