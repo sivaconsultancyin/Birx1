@@ -70,7 +70,9 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 
   const animationFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
-  const spinDurationMs = 4800; // 4.8s authentic European deceleration curve
+  const wheelSpinDurationMs = 4800; // Wheel stops first
+  const ballSettleDurationMs = 1200; // Ball continues rolling briefly after the wheel stops
+  const spinDurationMs = wheelSpinDurationMs + ballSettleDurationMs;
   const initialWheelRotRef = useRef<number>(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const lastSoundTickRef = useRef<number>(0);
@@ -212,9 +214,10 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
     const animate = (now: number) => {
       const elapsed = now - startTimeRef.current;
       const progress = Math.min(elapsed / spinDurationMs, 1);
+      const wheelProgress = Math.min(elapsed / wheelSpinDurationMs, 1);
 
       // Heavy brass wheel deceleration curve
-      const wheelProgressEase = easeWheel(progress);
+      const wheelProgressEase = easeWheel(wheelProgress);
       const curWheelRot = initialWheelRotRef.current + totalWheelDelta * wheelProgressEase;
       setWheelRotation(curWheelRot);
 
@@ -253,15 +256,27 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
           const bounce = Math.sin(dropProgress * Math.PI * 5) * (1 - dropProgress) * (rTrack - rPocket) * 0.12;
           curRadius = rTrack - (rTrack - rPocket) * dropEase + bounce;
         }
-      } else {
-        // Stage B: Ball has entered the winning pocket and rotates SEAMLESSLY with the wheel
+      } else if (elapsed < wheelSpinDurationMs) {
+        // Stage B: wheel is still moving; ball follows the winning pocket smoothly.
         curBallAngle = ballAngleAtCatch + (curPocketScreenAngle - pocketAngleAtCatch);
         curRadius = rPocket;
+      } else {
+        // Stage C: wheel has stopped. Let the ball roll independently for a short
+        // finishing pass, then settle precisely into the authoritative winning pocket.
+        const settleProgress = Math.min(
+          (elapsed - wheelSpinDurationMs) / ballSettleDurationMs,
+          1
+        );
+        const settleEase = 1 - Math.pow(1 - settleProgress, 3.2);
+        const extraRoll = (1 - settleEase) * 360;
+        curBallAngle =
+          curPocketScreenAngle - extraRoll;
+        curRadius = rPocket + Math.sin(settleProgress * Math.PI) * 1.5;
       }
 
       // Audio ticks: frequency matches ball speed
-      if (progress < 0.80) {
-        const ballSpeedRatio = 1 - progress / 0.80;
+      if (elapsed < spinDurationMs - 150) {
+        const ballSpeedRatio = Math.max(0.05, 1 - elapsed / (spinDurationMs - 150));
         const tickInterval = 42 + (1 - ballSpeedRatio) * 120;
         if (now - lastSoundTickRef.current > tickInterval) {
           lastSoundTickRef.current = now;
