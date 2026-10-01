@@ -104,7 +104,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
     <div
       id="roulette-betting-table"
       aria-disabled={isLocked}
-      className={`w-full max-w-4xl mx-auto scale-[0.80] origin-center select-none text-white transition-opacity ${isLocked ? 'pointer-events-none opacity-80' : ''}`}
+      className={`w-full max-w-4xl mx-auto scale-[0.90] origin-center select-none text-white transition-opacity ${isLocked ? 'pointer-events-none opacity-80' : ''}`}
     >
       {/* 1. Inside Bet Mode Selector Bar */}
       <div className="mb-2">
@@ -129,7 +129,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                   setInsideMode(m.mode);
                   setSplitFirstNum(null);
                 }}
-                className={`py-1.5 px-1 rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer ${
+                className={`py-2 px-1 rounded-lg text-[11px] font-bold text-center transition-all cursor-pointer ${
                   isActive
                     ? 'bg-amber-500 text-slate-950 shadow-md font-black'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -321,7 +321,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                   type="button"
                   disabled={isSpinning}
                   onClick={() => handleNumberClick(num)}
-                  className={`relative py-1 sm:py-1.5 sm:min-h-[30px] rounded-md font-black text-xs sm:text-sm transition-all active:scale-95 cursor-pointer border shadow-sm flex items-center justify-center ${
+                  className={`relative py-1.5 sm:py-2 sm:min-h-[34px] rounded-md font-black text-sm sm:text-base transition-all active:scale-95 cursor-pointer border shadow-sm flex items-center justify-center ${
                     isRed
                       ? 'bg-gradient-to-b from-rose-700 to-rose-900 hover:from-rose-600 hover:to-rose-800 text-white border-rose-600/80'
                       : 'bg-gradient-to-b from-slate-900 to-slate-950 hover:from-slate-800 hover:to-slate-900 text-slate-100 border-slate-700/80'
@@ -360,7 +360,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                 type="button"
                 disabled={isSpinning}
                 onClick={() => placeBet(colKey, { label: `Column ${idx + 1} (2:1)` })}
-                className={`py-1.5 rounded-lg text-xs font-black tracking-wide border relative transition-all active:scale-95 cursor-pointer ${
+                className={`py-2 rounded-lg text-sm font-black tracking-wide border relative transition-all active:scale-95 cursor-pointer ${
                   bAmt > 0
                     ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-1 ring-amber-400'
                     : 'bg-emerald-900/80 hover:bg-emerald-850 text-emerald-100 border-emerald-700/70'
@@ -392,7 +392,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                 type="button"
                 disabled={isSpinning}
                 onClick={() => placeBet(key as RouletteBetType, { label: `${label} (${range})` })}
-                className={`py-1.5 rounded-lg text-xs font-black border relative transition-all active:scale-95 cursor-pointer ${
+                className={`py-2 rounded-lg text-sm font-black border relative transition-all active:scale-95 cursor-pointer ${
                   bAmt > 0
                     ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-1 ring-amber-400'
                     : 'bg-slate-900/90 hover:bg-slate-850 text-slate-200 border-slate-700/80'
