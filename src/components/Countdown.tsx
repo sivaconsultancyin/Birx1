@@ -27,11 +27,11 @@ export const Countdown: React.FC<CountdownProps> = ({
   return (
     <div
       id="countdown-timer"
-      className="inline-flex min-w-[170px] flex-col gap-1 rounded-xl border border-slate-700/60 bg-slate-950/90 px-3 py-2 backdrop-blur-md transition-all duration-300"
+      className="inline-flex min-w-[170px] flex-col gap-1 rounded-xl border border-white/20 bg-transparent px-3 py-2 backdrop-blur-xl transition-all duration-300"
     >
       <div className="flex items-center gap-2">
-        <Timer className={`h-4 w-4 transition-colors duration-300 ${isUrgent ? 'text-red-400' : 'text-amber-400'}`} />
-        <span className="text-xs font-medium text-slate-400">{phaseLabel}</span>
+        <Timer className={`h-4 w-4 transition-colors duration-300 ${isUrgent ? 'text-white' : 'text-white'}`} />
+        <span className="text-xs font-medium text-white/70">{phaseLabel}</span>
         <span
           id="countdown-seconds"
           className={`ml-auto font-black tabular-nums tracking-wider transition-all duration-300 ${size === 'sm' ? 'text-sm' : 'text-base'} ${isUrgent ? 'text-red-400' : 'text-amber-400'}`}
@@ -39,9 +39,9 @@ export const Countdown: React.FC<CountdownProps> = ({
           {safeSeconds}s
         </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
         <div
-          className={`h-full rounded-full origin-left transition-[width] duration-700 ease-out ${isUrgent ? 'bg-red-500' : 'bg-amber-400'}`}
+          className={`h-full rounded-full origin-left transition-[width] duration-700 ease-out ${isUrgent ? 'bg-white/80' : 'bg-white/50'}`}
           style={{ width: `${percent}%` }}
         />
       </div>
