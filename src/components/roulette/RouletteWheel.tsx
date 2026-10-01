@@ -184,7 +184,7 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
     // on the actual visible pocket containing the authoritative winning number.
     const minFullTurns = 5;
     const targetRotation =
-      initialWheelRotRef.current + minFullTurns * 360 + (winnerIndex * ANGULAR_SPACING);
+      initialWheelRotRef.current + minFullTurns * 360;
     const totalWheelDelta = targetRotation - initialWheelRotRef.current;
 
     // 2. Ball physics trajectory setup:
