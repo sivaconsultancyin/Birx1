@@ -20,7 +20,7 @@ import {
   RouletteHistoryStats,
   Wallet
 } from '../types.ts';
-import { gamesApi, subscribeToRealtimeEvents } from '../api/client.ts';
+import { gamesApi } from '../api/client.ts';
 import { GameHeader } from '../components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../components/BettingChip.tsx';
 import { Countdown } from '../components/Countdown.tsx';
@@ -237,93 +237,202 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   const isBettingPhase = gameState?.phase === 'betting';
 
-  // 1. Initial State & Real-time Synchronization (WebSocket)
+  // 1. Initial State & Real-time Synchronization (SSE + Authoritative Polling)
   useEffect(() => {
     loadState();
     loadStats();
 
-    const unsubscribe = subscribeToRealtimeEvents((event) => {
-      const payload: any = event.data || {};
-      if (!payload || !payload.type) return;
+    // Setup SSE connection to listen for synchronized round events
+    let sse: EventSource | null = null;
+    try {
+      sse = new EventSource('/api/realtime');
 
-      switch (payload.type) {
-        case 'roulette_round_started':
-        case 'roulette_betting_open': {
-          hasSpunRoundRef.current = '';
-          setGameState((prev) => {
-            const currentRound = prev?.roundId;
-            const newRound = payload.roundId;
-            if (currentRound && currentRound !== newRound && confirmedBetsRef.current.length > 0) {
+      const handleServerEvent = (payload: any) => {
+        if (!payload || !payload.type) return;
+
+        switch (payload.type) {
+          case 'roulette_round_started':
+          case 'roulette_betting_open': {
+            // Reset spin guard for the brand new round
+            hasSpunRoundRef.current = '';
+
+            // New round started by authoritative server
+            setGameState((prev) => {
+              const currentRound = prev?.roundId;
+              const newRound = payload.roundId;
+              // If rolling into a new round, save previous bets for Rebet
+              if (currentRound && currentRound !== newRound && confirmedBetsRef.current.length > 0) {
+                setPreviousBets(JSON.parse(JSON.stringify(confirmedBetsRef.current)));
+              }
+              return {
+                ...(prev || {
+                  winningNumber: 0,
+                  winningColor: 'green',
+                  recentResults: [],
+                  serverSeedHash: '',
+                  limits: { minimumBet: 10, maximumBet: 50000, maximumExposure: 500000 }
+                }),
+                roundId: payload.roundId,
+                phase: 'betting',
+                countdown: payload.countdown || 15
+              };
+            });
+
+            setCountdown(payload.countdown || 15);
+            setConfirmedBets([]);
+            setStagedBets([]);
+            setBetHistoryStack([]);
+            setIsSpinning(false);
+            setErrorMsg(null);
+            break;
+          }
+
+          case 'roulette_betting_closed': {
+            setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown || 2 } : null));
+            setCountdown(payload.countdown || 2);
+            // Clear unconfirmed staged chips since betting window has closed
+            setStagedBets([]);
+            break;
+          }
+
+          case 'roulette_spin_started': {
+            // Strictly prevent spinning more than once per round
+            const rId = payload.roundId || currentRoundIdRef.current;
+            if (hasSpunRoundRef.current === rId) {
+              break;
+            }
+            hasSpunRoundRef.current = rId;
+
+            // Server has authoritatively determined the winning pocket before spin starts
+            setGameState((prev) => (prev ? { ...prev, phase: 'spinning', countdown: payload.countdown || 6 } : null));
+            setCountdown(payload.countdown || 6);
+            setWinningNumber(payload.winningNumber);
+            setWinningColor(payload.winningColor);
+            setIsSpinning(true);
+            setStagedBets([]);
+            break;
+          }
+
+          case 'roulette_result': {
+            setGameState((prev) => (prev ? { ...prev, phase: 'result', countdown: payload.countdown || 4 } : null));
+            setCountdown(payload.countdown || 4);
+            setWinningNumber(payload.winningNumber);
+            setWinningColor(payload.winningColor);
+            if (payload.winningCategory) setWinningCategory(payload.winningCategory);
+            // Do NOT re-trigger spin
+            setIsSpinning(false);
+            break;
+          }
+
+          case 'roulette_settlement': {
+            // Trigger settlement evaluation for the player's own confirmed bets
+            // Settlement occurs strictly AFTER the single spin and must not re-spin
+            setIsSpinning(false);
+            const playerBets = confirmedBetsRef.current;
+            if (playerBets.length > 0 && payload.winningNumber !== undefined) {
+              const settlement = calculatePlayerSettlement(payload.winningNumber, playerBets);
+              if (settlement.isWin && settlement.grossPayout > 0) {
+                notifyWinLoss({
+                  type: 'win',
+                  amount: settlement.grossPayout
+                });
+              } else if (settlement.totalBet > 0) {
+                notifyWinLoss({
+                  type: 'loss',
+                  amount: settlement.totalBet
+                });
+              }
+            }
+            loadStats();
+            break;
+          }
+
+          case 'roulette_wallet_updated': {
+            if (payload.wallet) {
+              onUpdateWallet(payload.wallet);
+            }
+            break;
+          }
+        }
+      };
+
+      // Handle standard message
+      sse.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          handleServerEvent(payload);
+        } catch {
+          // SSE JSON parse ignore
+        }
+      };
+
+      // Also listen to named events
+      const eventNames = [
+        'roulette_round_started',
+        'roulette_betting_open',
+        'roulette_betting_closed',
+        'roulette_spin_started',
+        'roulette_result',
+        'roulette_settlement',
+        'roulette_wallet_updated'
+      ];
+      eventNames.forEach((evt) => {
+        sse?.addEventListener(evt, (e: any) => {
+          try {
+            handleServerEvent(JSON.parse(e.data));
+          } catch {
+            // ignore
+          }
+        });
+      });
+    } catch {
+      // SSE fallback
+    }
+
+    // 2. High-reliability polling synchronization with single authoritative room
+    const syncInterval = setInterval(async () => {
+      try {
+        const res = await gamesApi.roulette.getRound();
+        if (res && res.state) {
+          setGameState(res.state);
+          setCountdown(res.countdown);
+
+          // Only trigger spin if server entered spinning AND this client hasn't spun for this round
+          if (
+            res.state.phase === 'spinning' &&
+            hasSpunRoundRef.current !== res.state.roundId &&
+            res.winningNumber !== null
+          ) {
+            hasSpunRoundRef.current = res.state.roundId;
+            setWinningNumber(res.winningNumber);
+            setWinningColor(res.winningColor);
+            setIsSpinning(true);
+            setStagedBets([]);
+          }
+
+          // If server rolled into new round while client was on old round
+          if (res.state.phase === 'betting' && currentRoundIdRef.current && currentRoundIdRef.current !== res.state.roundId) {
+            hasSpunRoundRef.current = '';
+            if (confirmedBetsRef.current.length > 0) {
               setPreviousBets(JSON.parse(JSON.stringify(confirmedBetsRef.current)));
             }
-            return {
-              ...(prev || {
-                winningNumber: 0,
-                winningColor: 'green',
-                recentResults: [],
-                serverSeedHash: '',
-                limits: { minimumBet: 10, maximumBet: 50000, maximumExposure: 500000 }
-              }),
-              roundId: payload.roundId,
-              phase: 'betting',
-              countdown: payload.countdown || 15
-            };
-          });
-          setCountdown(payload.countdown || 15);
-          setConfirmedBets([]);
-          setStagedBets([]);
-          setBetHistoryStack([]);
-          setIsSpinning(false);
-          setErrorMsg(null);
-          break;
-        }
-        case 'roulette_betting_closed':
-          setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown || 2 } : null));
-          setCountdown(payload.countdown || 2);
-          setStagedBets([]);
-          break;
-        case 'roulette_spin_started': {
-          const rId = payload.roundId || currentRoundIdRef.current;
-          if (hasSpunRoundRef.current === rId) break;
-          hasSpunRoundRef.current = rId;
-          setGameState((prev) => (prev ? { ...prev, phase: 'spinning', countdown: payload.countdown || 6 } : null));
-          setCountdown(payload.countdown || 6);
-          setWinningNumber(payload.winningNumber);
-          setWinningColor(payload.winningColor);
-          setIsSpinning(true);
-          setStagedBets([]);
-          break;
-        }
-        case 'roulette_result':
-          setGameState((prev) => (prev ? { ...prev, phase: 'result', countdown: payload.countdown || 4 } : null));
-          setCountdown(payload.countdown || 4);
-          setWinningNumber(payload.winningNumber);
-          setWinningColor(payload.winningColor);
-          if (payload.winningCategory) setWinningCategory(payload.winningCategory);
-          setIsSpinning(false);
-          break;
-        case 'roulette_settlement': {
-          setIsSpinning(false);
-          const playerBets = confirmedBetsRef.current;
-          if (playerBets.length > 0 && payload.winningNumber !== undefined) {
-            const settlement = calculatePlayerSettlement(payload.winningNumber, playerBets);
-            if (settlement.isWin && settlement.grossPayout > 0) {
-              notifyWinLoss({ type: 'win', amount: settlement.grossPayout });
-            } else if (settlement.totalBet > 0) {
-              notifyWinLoss({ type: 'loss', amount: settlement.totalBet });
-            }
+            setConfirmedBets([]);
+            setStagedBets([]);
+            setIsSpinning(false);
           }
-          loadStats();
-          break;
         }
-        case 'roulette_wallet_updated':
-          if (payload.wallet) onUpdateWallet(payload.wallet);
-          break;
+      } catch {
+        // network retry
       }
-    });
+    }, 1200);
 
-    return () => unsubscribe();
-  }, []);;
+    return () => {
+      clearInterval(syncInterval);
+      if (sse) {
+        sse.close();
+      }
+    };
+  }, []);
 
   const loadState = async () => {
     try {
@@ -757,13 +866,13 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         {/* Visible in betting phase, slides down/out completely when spinning/closed */}
         <div
           id="roulette-betting-bottom-sheet"
-          className={`absolute inset-0 h-full z-20 flex flex-col justify-end transition-transform duration-500 ease-in-out ${
+          className={`absolute inset-x-0 bottom-0 h-[64%] z-20 flex flex-col justify-end transition-transform duration-500 ease-in-out ${
             isBettingPhase
               ? 'translate-y-0 opacity-100 pointer-events-auto'
               : 'translate-y-[115%] opacity-0 pointer-events-none'
           }`}
         >
-          <div className="w-full h-full max-h-full bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 rounded-t-3xl p-2 sm:p-2.5 flex flex-col justify-between overflow-visible shadow-2xl">
+          <div className="w-full h-full max-h-full bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 rounded-t-3xl p-2 sm:p-2.5 flex flex-col justify-between overflow-hidden shadow-2xl">
             {/* Top Bar of Betting Panel */}
             <div className="flex items-center justify-between px-1 pb-1 flex-shrink-0 border-b border-slate-850">
               <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
@@ -787,7 +896,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             </div>
 
             {/* Scrollable Betting Table Grid (fits neatly within available height) */}
-            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-1 relative z-10 no-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar py-1">
               <RouletteTable
                 bets={allDisplayBets}
                 selectedChip={selectedChip}
@@ -798,7 +907,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             </div>
 
             {/* Bottom Controls Dock */}
-            <div className="flex-shrink-0 pt-1 border-t border-slate-900 bg-slate-950/98 relative z-30 shadow-[0_-8px_20px_rgba(0,0,0,0.35)]">
+            <div className="flex-shrink-0 pt-1 border-t border-slate-900">
               {/* Chip Denomination Selector */}
               <div className="flex items-center justify-between gap-1 overflow-x-auto py-0.5 px-0.5 no-scrollbar">
                 {CHIP_VALUES.map((val) => (
