@@ -714,30 +714,6 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
       {/* 4. Main Stage Area: Houses Wheel and Sliding Betting Panel */}
       <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col items-center justify-center bg-gradient-to-b from-slate-900 via-slate-950 to-black">
-        {/* Floating transparent countdown - kept separate from the top header/card */}
-        <div
-          id="roulette-floating-countdown"
-          className="absolute top-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
-        >
-          <div className="border border-white/20 bg-transparent px-2 py-1 backdrop-blur-0 shadow-none">
-            <Countdown
-              seconds={countdown}
-              maxSeconds={isBettingPhase ? 15 : gameState?.phase === 'spinning' ? 5 : 4}
-              phase={gameState?.phase === 'betting' ? 'betting' : gameState?.phase === 'spinning' ? 'spinning' : gameState?.phase === 'closed' ? 'closed' : 'result'}
-              label={
-                isBettingPhase
-                  ? 'Betting'
-                  : gameState?.phase === 'closed'
-                  ? 'Closed'
-                  : gameState?.phase === 'spinning'
-                  ? 'Spinning'
-                  : 'Settled'
-              }
-              size="sm"
-            />
-          </div>
-        </div>
-
         {/* Ambient Wheel Spotlight Lighting */}
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.08)_0%,rgba(15,23,42,0.6)_60%,transparent_100%)]" />
 
@@ -813,13 +789,25 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         >
           <div className="w-full h-full max-h-full min-h-0 bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 rounded-t-3xl p-2 sm:p-2.5 flex flex-col overflow-hidden shadow-2xl">
             {/* Top Bar of Betting Panel */}
-            <div className="flex items-center justify-between px-1 pb-1 flex-shrink-0 border-b border-slate-850">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <div className="relative flex items-center justify-between px-1 pb-1 flex-shrink-0 border-b border-slate-850">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5 min-w-0">
                 <span>European Table</span>
                 <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/70 border border-emerald-800/70 px-1.5 py-0.2 rounded-full">
                   Single 0
                 </span>
               </div>
+
+              {isBettingPhase && (
+                <div id="roulette-european-countdown" className="absolute left-1/2 -translate-x-1/2 pointer-events-none">
+                  <Countdown
+                    seconds={countdown}
+                    maxSeconds={15}
+                    phase="betting"
+                    label="Betting"
+                    size="sm"
+                  />
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 {confirmedTotal > 0 && (
