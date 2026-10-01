@@ -787,7 +787,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             </div>
 
             {/* Scrollable Betting Table Grid (fits neatly within available height) */}
-            <div className="flex-1 min-h-0 overflow-visible py-1">
+            <div className="flex-1 min-h-0 overflow-hidden py-1 relative z-10">
               <RouletteTable
                 bets={allDisplayBets}
                 selectedChip={selectedChip}
@@ -798,7 +798,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             </div>
 
             {/* Bottom Controls Dock */}
-            <div className="flex-shrink-0 pt-1 border-t border-slate-900">
+            <div className="flex-shrink-0 pt-1 border-t border-slate-900 bg-slate-950/98 relative z-30 shadow-[0_-8px_20px_rgba(0,0,0,0.35)]">
               {/* Chip Denomination Selector */}
               <div className="flex items-center justify-between gap-1 overflow-x-auto py-0.5 px-0.5 no-scrollbar">
                 {CHIP_VALUES.map((val) => (
