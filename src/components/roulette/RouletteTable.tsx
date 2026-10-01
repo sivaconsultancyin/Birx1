@@ -104,7 +104,8 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
     <div
       id="roulette-betting-table"
       aria-disabled={isLocked}
-      className={`w-full max-w-4xl mx-auto scale-[0.90] origin-center select-none text-white transition-opacity ${isLocked ? 'pointer-events-none opacity-80' : ''}`}
+      style={{ zoom: 0.9 }}
+      className={`w-full max-w-4xl mx-auto origin-top-center select-none text-white transition-opacity ${isLocked ? 'pointer-events-none opacity-80' : ''}`}
     >
       {/* 1. Inside Bet Mode Selector Bar */}
       <div className="mb-2">
