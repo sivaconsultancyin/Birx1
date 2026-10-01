@@ -757,13 +757,13 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         {/* Visible in betting phase, slides down/out completely when spinning/closed */}
         <div
           id="roulette-betting-bottom-sheet"
-          className={`absolute inset-x-0 bottom-0 h-[64%] z-20 flex flex-col justify-end transition-transform duration-500 ease-in-out ${
+          className={`absolute inset-0 h-full z-20 flex flex-col justify-end transition-transform duration-500 ease-in-out ${
             isBettingPhase
               ? 'translate-y-0 opacity-100 pointer-events-auto'
               : 'translate-y-[115%] opacity-0 pointer-events-none'
           }`}
         >
-          <div className="w-full h-full max-h-full bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 rounded-t-3xl p-2 sm:p-2.5 flex flex-col justify-between overflow-hidden shadow-2xl">
+          <div className="w-full h-full max-h-full bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 rounded-t-3xl p-2 sm:p-2.5 flex flex-col justify-between overflow-visible shadow-2xl">
             {/* Top Bar of Betting Panel */}
             <div className="flex items-center justify-between px-1 pb-1 flex-shrink-0 border-b border-slate-850">
               <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
@@ -787,7 +787,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             </div>
 
             {/* Scrollable Betting Table Grid (fits neatly within available height) */}
-            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar py-1">
+            <div className="flex-1 min-h-0 overflow-visible py-1">
               <RouletteTable
                 bets={allDisplayBets}
                 selectedChip={selectedChip}
