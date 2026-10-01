@@ -198,7 +198,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
       {insideMode === 'corner' && (
         <div className="mb-2 p-2 bg-slate-900/80 rounded-xl border border-slate-800">
           <div className="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Select Corner (4 Numbers • 8:1 Payout):</div>
-          <div className="grid grid-cols-4 gap-1 max-h-36 overflow-y-auto pr-1">
+          <div className="grid grid-cols-4 gap-1 overflow-visible pr-0">
             {/* First Four (0, 1, 2, 3) */}
             <button
               type="button"
@@ -321,7 +321,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
                   type="button"
                   disabled={isSpinning}
                   onClick={() => handleNumberClick(num)}
-                  className={`relative py-1.5 sm:py-2 rounded-md font-black text-xs sm:text-sm transition-all active:scale-95 cursor-pointer border shadow-sm flex items-center justify-center ${
+                  className={`relative py-1 sm:py-1.5 sm:min-h-[30px] rounded-md font-black text-xs sm:text-sm transition-all active:scale-95 cursor-pointer border shadow-sm flex items-center justify-center ${
                     isRed
                       ? 'bg-gradient-to-b from-rose-700 to-rose-900 hover:from-rose-600 hover:to-rose-800 text-white border-rose-600/80'
                       : 'bg-gradient-to-b from-slate-900 to-slate-950 hover:from-slate-800 hover:to-slate-900 text-slate-100 border-slate-700/80'
@@ -350,7 +350,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
         </div>
 
         {/* 3 Columns Bets (2 to 1) */}
-        <div className="grid grid-cols-3 gap-1 mb-1">
+        <div className="grid grid-cols-3 gap-0.5 sm:gap-1 mb-1">
           {(['col1', 'col2', 'col3'] as const).map((colKey, idx) => {
             const bAmt = getBetAmount(colKey);
             return (
@@ -378,7 +378,7 @@ export const RouletteTable: React.FC<RouletteTableProps> = ({
         </div>
 
         {/* 3 Dozens Bets (1st 12, 2nd 12, 3rd 12 - 2:1) */}
-        <div className="grid grid-cols-3 gap-1 mb-1">
+        <div className="grid grid-cols-3 gap-0.5 sm:gap-1 mb-1">
           {[
             { key: 'dozen1', label: '1st 12', range: '1-12' },
             { key: 'dozen2', label: '2nd 12', range: '13-24' },
