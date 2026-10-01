@@ -179,12 +179,12 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
     const winnerIndex = getWheelIndex(winnerNumber);
     const pocketUnrotatedAngle = START_ANGLE + winnerIndex * ANGULAR_SPACING;
 
-    // Guaranteed stopping rotation: 5 full turns minimum, winning pocket lands at POINTER_ANGLE (270°)
-    const { targetRotation } = calculateTargetWheelRotation(
-      initialWheelRotRef.current,
-      winnerNumber,
-      5
-    );
+    // Spin the wheel naturally for a deterministic number of full turns.
+    // Do NOT force every winning pocket to the top/pointer; the ball must settle
+    // on the actual visible pocket containing the authoritative winning number.
+    const minFullTurns = 5;
+    const targetRotation =
+      initialWheelRotRef.current + minFullTurns * 360 + (winnerIndex * ANGULAR_SPACING);
     const totalWheelDelta = targetRotation - initialWheelRotRef.current;
 
     // 2. Ball physics trajectory setup:
