@@ -198,7 +198,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 }) => {
   // Authoritative Round State
   const [gameState, setGameState] = useState<RouletteState | null>(null);
-  const [countdown, setCountdown] = useState<number>(15);
+  const [countdown, setCountdown] = useState<number>(0);
+  const [isStateReady, setIsStateReady] = useState(false);
 
   // Betting State:
   // stagedBets: chips placed on the table by user in current betting phase (not yet confirmed with server)
@@ -211,8 +212,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   // Wheel & Result State
   const [isSpinning, setIsSpinning] = useState(false);
-  const [winningNumber, setWinningNumber] = useState<number | null>(17);
-  const [winningColor, setWinningColor] = useState<'red' | 'black' | 'green' | null>('black');
+  const [winningNumber, setWinningNumber] = useState<number | null>(null);
+  const [winningColor, setWinningColor] = useState<'red' | 'black' | 'green' | null>(null);
   const [winningCategory, setWinningCategory] = useState<string | null>(null);
 
   // UI Modals & Stats
@@ -234,7 +235,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   // Guard to ensure ball spins strictly ONCE per round
   const hasSpunRoundRef = useRef<string>('');
 
-  const isBettingPhase = gameState?.phase === 'betting';
+  const isBettingPhase = isStateReady && gameState?.phase === 'betting';
 
   // Display countdown ticks locally between authoritative realtime phase events.
   // The server remains authoritative; this only animates the visible seconds smoothly.
@@ -381,7 +382,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     try {
       const res = await gamesApi.roulette.getRound();
       setGameState(res.state);
-      setCountdown(res.countdown || 15);
+      setCountdown(res.countdown ?? res.state?.countdown ?? 0);
+      setIsStateReady(true);
       if (res.winningNumber !== null) {
         setWinningNumber(res.winningNumber);
         setWinningColor(res.winningColor);
@@ -390,7 +392,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         setWinningCategory(res.winningCategory);
       }
     } catch {
-      // Fallback
+      // Keep the UI waiting for the authoritative room state instead of starting a local round.
+      setIsStateReady(false);
     }
   };
 
