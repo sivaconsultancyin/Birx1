@@ -729,7 +729,7 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
         betType: bet.type,
         betValue: { value: bet.value ?? null, numbers: bet.numbers ?? null },
         amount: Number(bet.amount),
-        status: 'pending',
+        status: 'placed',
         idempotencyKey: idempotencyKey ? `${idempotencyKey}:${bet.type}:${bet.value ?? bet.numbers?.join(',') ?? 'na'}` : null
       });
     }
