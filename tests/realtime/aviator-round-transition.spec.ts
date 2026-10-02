@@ -8,7 +8,7 @@ async function login(request: any) {
   let response = await request.post(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/auth/login', { data: { mobile, password } });
   if (response.status() === 429) {
     await new Promise(resolve => setTimeout(resolve, 1500));
-    response = await request.post('/api/auth/login', { data: { mobile, password } });
+    response = await request.post(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/auth/login`, { data: { mobile, password } });
   }
   expect(response.status()).toBe(200);
   return response.headers()['set-cookie']?.split(';')[0];
