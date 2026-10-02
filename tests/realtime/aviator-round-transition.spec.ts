@@ -5,7 +5,7 @@ async function login(request: any) {
   const mobile = process.env.E2E_TEST_MOBILE;
   const password = process.env.E2E_TEST_PASSWORD;
   test.skip(!mobile || !password, 'E2E credentials are not configured');
-  let response = await request.post('/api/auth/login', { data: { mobile, password } });
+  let response = await request.post(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/auth/login', { data: { mobile, password } });
   if (response.status() === 429) {
     await new Promise(resolve => setTimeout(resolve, 1500));
     response = await request.post('/api/auth/login', { data: { mobile, password } });
@@ -15,7 +15,7 @@ async function login(request: any) {
 }
 
 async function collectAviatorEvents(cookie: string, durationMs: number) {
-  const wsUrl = (process.env.BASE_URL || 'http://127.0.0.1:3000').replace(/^http/, 'ws') + '/ws';
+  const wsUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:10000').replace(/^http/, 'ws') + '/ws';
 
   return await new Promise<any[]>((resolve, reject) => {
     const events: any[] = [];
