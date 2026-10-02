@@ -257,20 +257,30 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
           curRadius = rTrack - (rTrack - rPocket) * dropEase + bounce;
         }
       } else if (elapsed < wheelSpinDurationMs) {
-        // Stage B: wheel is still moving; ball follows the winning pocket smoothly.
-        curBallAngle = ballAngleAtCatch + (curPocketScreenAngle - pocketAngleAtCatch);
+        // Stage B: the wheel is still moving, but the ball must NOT lock onto
+        // the winning pocket yet. Keep it visibly rolling until the wheel stops.
+        const wheelStopProgress = Math.min(
+          (elapsed - t_catch * spinDurationMs) /
+            (wheelSpinDurationMs - t_catch * spinDurationMs),
+          1
+        );
+        const rollEase = 1 - Math.pow(1 - wheelStopProgress, 2.2);
+        const visualRoll = (1 - rollEase) * 220;
+        curBallAngle =
+          ballAngleAtCatch +
+          (curPocketScreenAngle - pocketAngleAtCatch) -
+          visualRoll;
         curRadius = rPocket;
       } else {
-        // Stage C: wheel has stopped. Let the ball roll independently for a short
-        // finishing pass, then settle precisely into the authoritative winning pocket.
+        // Stage C: only after the wheel has stopped does the ball make its
+        // final visible roll and settle on the authoritative winning pocket.
         const settleProgress = Math.min(
           (elapsed - wheelSpinDurationMs) / ballSettleDurationMs,
           1
         );
         const settleEase = 1 - Math.pow(1 - settleProgress, 3.2);
-        const extraRoll = (1 - settleEase) * 360;
-        curBallAngle =
-          curPocketScreenAngle - extraRoll;
+        const extraRoll = (1 - settleEase) * 220;
+        curBallAngle = curPocketScreenAngle - extraRoll;
         curRadius = rPocket + Math.sin(settleProgress * Math.PI) * 1.5;
       }
 
