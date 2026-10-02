@@ -25,7 +25,8 @@ import {
   WithdrawalRequest
 } from '../../src/types.ts';
 
-const BASE_URL = '/api';
+const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'https://brix1-backend.onrender.com';
+const BASE_URL = `${BACKEND_URL.replace(/\\/$/, '')}/api`;
 
 async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('brix_token');
@@ -474,8 +475,8 @@ const realtimeListeners = new Set<RealtimeListener>();
 function connectSharedRealtime(): void {
   if (sharedClosed || sharedSocket || typeof window === 'undefined') return;
 
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://brix1-backend.onrender.com';
+  const socket = new WebSocket(backendUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws');
   sharedSocket = socket;
 
   socket.onmessage = (event) => {
