@@ -266,12 +266,11 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         const state = res.state;
         setGameState(state);
         setCountdown(res.countdown || 15);
-        if (state?.phase !== 'betting') {
-          setConfirmedBets([]);
-          setStagedBets([]);
-          setBetHistoryStack([]);
-          setIsSpinning(state?.phase === 'spinning');
-        }
+        // Keep confirmedBets in memory through closed/spinning/result so the
+        // authoritative result event can calculate the player's outcome.
+        // Rendering is already gated by isBettingPhase, and the next-round
+        // event clears the previous round.
+        setIsSpinning(state?.phase === 'spinning');
       } catch {
         // WebSocket remains the primary realtime transport.
       }
@@ -329,39 +328,44 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           setStagedBets([]);
           break;
         }
-        case 'roulette_result':
+        case 'roulette_result': {
           setGameState((prev) => (prev ? { ...prev, phase: 'result', countdown: payload.countdown || 4 } : null));
           setCountdown(payload.countdown || 4);
           setWinningNumber(payload.winningNumber);
           setWinningColor(payload.winningColor);
           if (payload.winningCategory) setWinningCategory(payload.winningCategory);
-          // Result closes the visual round. Clear local chips immediately;
-          // settlement follows asynchronously and must not leave them locked.
-          setConfirmedBets([]);
-          setStagedBets([]);
-          setBetHistoryStack([]);
-          setIsSpinning(false);
-          break;
-        case 'roulette_settlement': {
-          setIsSpinning(false);
-          const settledRoundId = payload.roundId;
+
+          // Calculate the player's result BEFORE clearing the round bet.
+          // The settlement event is asynchronous and must not be the first
+          // place that reads confirmedBets.
           const playerBets = confirmedBetsRef.current;
           if (playerBets.length > 0 && payload.winningNumber !== undefined) {
             const settlement = calculatePlayerSettlement(payload.winningNumber, playerBets);
-            if (settlement.isWin && settlement.grossPayout > 0) {
-              notifyWinLoss({ type: 'win', amount: settlement.grossPayout });
-            } else if (settlement.totalBet > 0) {
-              notifyWinLoss({ type: 'loss', amount: settlement.totalBet });
-            }
+            notifyWinLoss({
+              type: settlement.isWin && settlement.grossPayout > 0 ? 'win' : 'loss',
+              amount: settlement.isWin && settlement.grossPayout > 0
+                ? settlement.grossPayout
+                : settlement.totalBet
+            });
           }
 
-          // Settlement belongs to the locally confirmed bet. Do not gate the
-          // UI reset on a server round-id format; different event producers may
-          // serialize the id differently.
+          // Hide old chips immediately; keep the data in no UI state until the
+          // next betting-open event, which starts a clean round.
+          setStagedBets([]);
+          setBetHistoryStack([]);
+          setConfirmedBets([]);
+          setIsSpinning(false);
+          loadStats();
+          break;
+        }
+        case 'roulette_settlement': {
+          // Wallet/database settlement is authoritative here. The popup was
+          // already emitted from roulette_result while the player's bets were
+          // still available locally.
+          setIsSpinning(false);
           setConfirmedBets([]);
           setStagedBets([]);
           setBetHistoryStack([]);
-          setIsSpinning(false);
           loadStats();
           break;
         }
@@ -523,23 +527,9 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   // WHEEL ANIMATION & SETTLEMENT CALLBACK
   // -------------------------------------------------------------
   const handleWheelAnimationComplete = () => {
+    // Result notification is emitted exactly once from the authoritative
+    // roulette_result event. Animation completion only ends the wheel motion.
     setIsSpinning(false);
-    // Show win/loss popup if player has confirmed bets in this round
-    if (confirmedBets.length > 0 && winningNumber !== null) {
-      const settlement = calculatePlayerSettlement(winningNumber, confirmedBets);
-      if (settlement.isWin && settlement.grossPayout > 0) {
-        notifyWinLoss({
-          type: 'win',
-          amount: settlement.grossPayout
-        });
-      } else if (settlement.totalBet > 0) {
-        notifyWinLoss({
-          type: 'loss',
-          amount: settlement.totalBet
-        });
-      }
-      loadStats();
-    }
   };
 
   // Developer / QA Diagnostic Test Spin
