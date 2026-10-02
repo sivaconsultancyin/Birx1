@@ -685,7 +685,10 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Betting is currently closed for this round' });
   }
 
-  try { await debitForUser(req, totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette', idempotencyKey); } catch (e: any) {
+  let debitResult: any;
+  try {
+    debitResult = await debitForUser(req, totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette', idempotencyKey);
+  } catch (e: any) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
 
