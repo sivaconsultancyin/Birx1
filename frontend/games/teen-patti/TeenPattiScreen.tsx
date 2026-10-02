@@ -48,7 +48,7 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
     }
   }, []);
 
-  // Initial load with bounded retry. SSE remains the live transport; retry only
+  // Initial load with bounded retry. WebSocket remains the live transport; retry only
   // covers startup/network races so the table never stays on "Connecting..." forever.
   useEffect(() => {
     let cancelled = false;
