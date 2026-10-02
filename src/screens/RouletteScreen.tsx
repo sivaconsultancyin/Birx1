@@ -331,12 +331,14 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         case 'roulette_player_result': {
           // Backend is authoritative: show exactly one outcome popup from the
           // persisted round settlement, independent of local bet state.
-          notifyWinLoss({
-            type: payload.isWin && Number(payload.grossPayout) > 0 ? 'win' : 'loss',
-            amount: payload.isWin && Number(payload.grossPayout) > 0
-              ? Number(payload.grossPayout)
-              : Number(payload.totalBet || 0)
-          });
+          if (payload.userId && payload.userId === user?.id) {
+            notifyWinLoss({
+              type: payload.isWin && Number(payload.grossPayout) > 0 ? 'win' : 'loss',
+              amount: payload.isWin && Number(payload.grossPayout) > 0
+                ? Number(payload.grossPayout)
+                : Number(payload.totalBet || 0)
+            });
+          }
           break;
         }
         case 'roulette_result': {
