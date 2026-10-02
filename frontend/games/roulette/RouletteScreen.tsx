@@ -358,16 +358,21 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           setWinningColor(payload.winningColor);
           if (payload.winningCategory) setWinningCategory(payload.winningCategory);
           setIsSpinning(false);
+          // Never keep the previous round's locked chips visible after result.
+          setStagedBets([]);
           break;
         case 'roulette_player_result': {
-          // Backend WebSocket delivery is already scoped to payload.userId.
-          // Never reconstruct settlement from local bets or show duplicate popups.
+          // Backend is authoritative for the outcome. Show exactly one popup,
+          // then clear the settled round's local chips immediately.
+          const won = Boolean(payload.isWin) && Number(payload.grossPayout) > 0;
           notifyWinLoss({
-            type: payload.isWin && Number(payload.grossPayout) > 0 ? 'win' : 'loss',
-            amount: payload.isWin && Number(payload.grossPayout) > 0
-              ? Number(payload.grossPayout)
-              : Number(payload.totalBet || 0)
+            type: won ? 'win' : 'loss',
+            amount: won ? Number(payload.grossPayout) : Number(payload.totalBet || 0)
           });
+          setConfirmedBets([]);
+          setStagedBets([]);
+          setBetHistoryStack([]);
+          setIsSpinning(false);
           break;
         }
         case 'roulette_settlement': {
@@ -527,7 +532,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   };
 
   // All bets rendered on the table: both confirmed bets locked in server + staged chips
-  const allDisplayBets = [...confirmedBets, ...stagedBets];
+  // Only the active betting round may render chips. Settled/closed/spinning/result\n  // phases must never display the previous round's locked bets.\n  const allDisplayBets = isBettingPhase ? [...confirmedBets, ...stagedBets] : [];
   const stagedTotal = stagedBets.reduce((s, b) => s + b.amount, 0);
   const confirmedTotal = confirmedBets.reduce((s, b) => s + b.amount, 0);
   const totalBetAmount = stagedTotal + confirmedTotal;
