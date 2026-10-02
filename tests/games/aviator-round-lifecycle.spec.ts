@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('Aviator runs continuous server-authoritative rounds in one permanent room', async ({ request }) => {
   test.setTimeout(110000);
-  const first = await request.get('/api/games/aviator/state');
+  const first = await request.get(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/games/aviator/state');
   expect(first.status()).toBe(200);
   const firstJson = await first.json();
   expect(firstJson.state).toMatchObject({ roundId: expect.any(String), roomId: 'aviator-main', phase: expect.stringMatching(/betting|running|crashed/) });
