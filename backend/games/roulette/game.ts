@@ -357,9 +357,15 @@ const initializeRouletteRoom = async () => {
 void initializeRouletteRoom();
 
 // Background Authoritative Roulette Round Cycle
+// Prevent overlapping async ticks. Settlement/persistence can take longer than one
+// second; a second tick must never race the same shared round.
+let rouletteCycleBusy = false;
+
 setInterval(async () => {
-  if (!rouletteRoomReady) return;
-  if (!(await acquireGameLease('roulette'))) return;
+  if (rouletteCycleBusy || !rouletteRoomReady) return;
+  rouletteCycleBusy = true;
+  try {
+    if (!(await acquireGameLease('roulette'))) return;
   const persistedRoulette = await safeGetAuthoritativeGameState('roulette');
   if (persistedRoulette) hydrateRoulettePersistence(persistedRoulette);
   if (rouletteState.phase === 'betting') {
@@ -560,7 +566,10 @@ setInterval(async () => {
       });
     }
   }
-  await safeSaveAuthoritativeGameState('roulette', serializeRoulettePersistence());
+    await safeSaveAuthoritativeGameState('roulette', serializeRoulettePersistence());
+  } finally {
+    rouletteCycleBusy = false;
+  }
 }, 1000);
 
 
