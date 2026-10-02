@@ -68,12 +68,26 @@ function rateLimit(limit: number, windowMs: number) {
 }
 function setAuthCookie(res: Response, token: string) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `brix_access_token=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600${secure}`);
+  res.setHeader('Set-Cookie', `brix_access_token=${encodeURIComponent(token)}; HttpOnly; SameSite=None; Path=/; Max-Age=3600${secure}`);
 }
 function clearAuthCookie(res: Response) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `brix_access_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`);
+  res.setHeader('Set-Cookie', `brix_access_token=; HttpOnly; SameSite=None; Path=/; Max-Age=0${secure}`);
 }
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const allowedOrigin = process.env.FRONTEND_URL || 'https://brix1-frontend.onrender.com';
+  const origin = req.headers.origin;
+  if (origin === allowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
 
 app.use(express.json({ limit: '256kb' }));
 app.disable('x-powered-by');
