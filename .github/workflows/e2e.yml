@@ -20,7 +20,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm install
-      - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
         env:
@@ -30,6 +29,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           E2E_TEST_MOBILE: ${{ secrets.E2E_TEST_MOBILE }}
           E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+          BASE_URL: https://brix1-frontend.onrender.com
+          BACKEND_URL: https://brix1-backend.onrender.com
       - uses: actions/upload-artifact@v4
         if: always()
         with:
