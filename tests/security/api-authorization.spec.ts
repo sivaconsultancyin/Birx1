@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 
+const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:10000';
+const api = (path: string) => `${backendUrl}${path}`;
+
 test.describe('API authorization boundaries', () => {
   test('rejects unauthenticated wallet mutation', async ({ request }) => {
     const response = await request.post(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/wallet/withdraw', {
@@ -9,12 +12,12 @@ test.describe('API authorization boundaries', () => {
   });
 
   test('rejects unauthenticated admin mutation', async ({ request }) => {
-    const response = await request.post('/api/admin/recharges/test/approve');
+    const response = await request.post(api('/api/admin/recharges/test/approve');
     expect([401, 403]).toContain(response.status());
   });
 
   test('rejects unauthenticated game mutation', async ({ request }) => {
-    const response = await request.post('/api/games/aviator/bet', {
+    const response = await request.post(api('/api/games/aviator/bet', {
       data: { amount: 100 },
     });
     expect([401, 403, 404]).toContain(response.status());
