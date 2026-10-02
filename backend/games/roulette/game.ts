@@ -688,6 +688,35 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
     placedAt
   }));
 
+  // Ensure the authoritative round exists in public.game_rounds before inserting
+  // bets. The bets table has a foreign key to game_rounds(round_id).
+  try {
+    await supabaseRepo.recordGameRound(
+      rouletteState.roundId,
+      'roulette',
+      rouletteState.phase,
+      {
+        roomId: rouletteState.roomId,
+        startedAt: placedAt,
+        countdown: rouletteState.countdown
+      }
+    );
+  } catch (roundPersistError) {
+    try {
+      await supabaseRepo.atomicCredit(
+        userId,
+        totalBet,
+        'refund',
+        `Roulette round persistence refund #${rouletteState.roundId}`,
+        'roulette',
+        idempotencyKey ? `roulette:round-refund:${idempotencyKey}` : `roulette:round-refund:${rouletteState.roundId}:${userId}:${Date.now()}`
+      );
+    } catch (refundError) {
+      console.error('[RouletteRoundPersistence] round persistence failed and refund failed', { roundPersistError, refundError, roundId: rouletteState.roundId, userId });
+    }
+    return res.status(503).json({ error: 'Roulette round could not be persisted. No bet was accepted.' });
+  }
+
   // Persist the authoritative bet before the request completes so a process restart
   // cannot lose a debit that was already accepted.
   try {
