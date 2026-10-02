@@ -179,12 +179,14 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
     const winnerIndex = getWheelIndex(winnerNumber);
     const pocketUnrotatedAngle = START_ANGLE + winnerIndex * ANGULAR_SPACING;
 
-    // Spin the wheel naturally for a deterministic number of full turns.
-    // Do NOT force every winning pocket to the top/pointer; the ball must settle
-    // on the actual visible pocket containing the authoritative winning number.
-    const minFullTurns = 5;
-    const targetRotation =
-      initialWheelRotRef.current + minFullTurns * 360;
+    // Deterministic roulette landing: rotate the wheel so the authoritative
+    // winning pocket is exactly under the fixed pointer at 12 o'clock.
+    // This guarantees the rendered ball, pointer and winning number use one target.
+    const { targetRotation } = calculateTargetWheelRotation(
+      initialWheelRotRef.current,
+      winnerNumber,
+      5
+    );
     const totalWheelDelta = targetRotation - initialWheelRotRef.current;
 
     // 2. Ball physics trajectory setup:
@@ -272,15 +274,15 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
           visualRoll;
         curRadius = rPocket;
       } else {
-        // Stage C: only after the wheel has stopped does the ball make its
-        // final visible roll and settle on the authoritative winning pocket.
+        // Stage C: after the wheel stops, let the ball roll briefly and settle
+        // directly at the fixed pointer, where the winning pocket is now aligned.
         const settleProgress = Math.min(
           (elapsed - wheelSpinDurationMs) / ballSettleDurationMs,
           1
         );
         const settleEase = 1 - Math.pow(1 - settleProgress, 3.2);
         const extraRoll = (1 - settleEase) * 220;
-        curBallAngle = curPocketScreenAngle - extraRoll;
+        curBallAngle = POINTER_ANGLE - extraRoll;
         curRadius = rPocket + Math.sin(settleProgress * Math.PI) * 1.5;
       }
 
@@ -302,7 +304,7 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
       } else {
         // Spin finished with 100% precision: ball resting peacefully inside the winning pocket
         setWheelRotation(targetRotation);
-        setDynamicBallAngle(curPocketScreenAngle);
+        setDynamicBallAngle(POINTER_ANGLE);
         setDynamicBallRadius(rPocket);
         isRunningSpinRef.current = false;
         setAnimationPhase('celebrating');
