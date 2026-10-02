@@ -308,7 +308,7 @@ function normalizeMobile(value: unknown): string {
   return digits;
 }
 
-app.post('/api/auth/login', rateLimit(10, 60_000), async (req: Request, res: Response) => {
+app.post('/api/auth/login', rateLimit(60, 60_000), async (req: Request, res: Response) => {
   try {
     const mobile = normalizeMobile(req.body.mobile);
     const password = String(req.body.password || '');
