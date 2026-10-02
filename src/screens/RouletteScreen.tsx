@@ -257,6 +257,26 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     loadState();
     loadStats();
 
+    // Authoritative fallback: if a realtime result event is delayed/lost,
+    // synchronize the round state from the backend and never keep a settled
+    // round's local chips visible.
+    const stateSyncTimer = window.setInterval(async () => {
+      try {
+        const res = await gamesApi.roulette.getRound();
+        const state = res.state;
+        setGameState(state);
+        setCountdown(res.countdown || 15);
+        if (state?.phase !== 'betting') {
+          setConfirmedBets([]);
+          setStagedBets([]);
+          setBetHistoryStack([]);
+          setIsSpinning(state?.phase === 'spinning');
+        }
+      } catch {
+        // WebSocket remains the primary realtime transport.
+      }
+    }, 1000);
+
     const unsubscribe = subscribeToRealtimeEvents((event) => {
       const payload: any = event.data || {};
       if (!payload || !payload.type) return;
@@ -351,7 +371,10 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      window.clearInterval(stateSyncTimer);
+      unsubscribe();
+    };
   }, []);;
 
   const loadState = async () => {
