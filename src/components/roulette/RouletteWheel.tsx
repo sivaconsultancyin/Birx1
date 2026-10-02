@@ -269,21 +269,11 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
         curBallAngle = ballAngleAtCatch - counterRoll;
         curRadius = rTrack;
       } else {
-        // Stage C: the wheel is now stopped. Only this final phase targets
-        // the authoritative winning pocket, with one short visible roll.
-        const settleProgress = Math.min(
-          (elapsed - wheelSpinDurationMs) / ballSettleDurationMs,
-          1
-        );
-        const settleEase = 1 - Math.pow(1 - settleProgress, 3.2);
-        const finalStartAngle = ballAngleAtCatch - desiredDeltaAngle * 0.62;
-        const finalTargetAngle = curPocketScreenAngle;
-        const finalRoll = (1 - settleEase) * 360;
-        curBallAngle =
-          finalStartAngle * (1 - settleEase) +
-          finalTargetAngle * settleEase -
-          finalRoll;
-        curRadius = rTrack + (rPocket - rTrack) * settleEase;
+        // Stage C: wheel has stopped. Lock the ball to the authoritative
+        // winning pocket immediately and keep it there until this animation
+        // closes. There is intentionally NO second roll or second target.
+        curBallAngle = curPocketScreenAngle;
+        curRadius = rPocket;
       }
 
       // Audio ticks: frequency matches ball speed
