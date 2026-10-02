@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Brix Games',
   webDir: 'dist',
   server: {
-    url: 'https://brix1.onrender.com',
+    url: 'https://brix1-frontend.onrender.com',
     cleartext: false
   },
   android: {
