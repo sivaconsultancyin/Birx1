@@ -513,7 +513,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   };
 
   // All bets rendered on the table: both confirmed bets locked in server + staged chips
-  // Settled/closed/spinning rounds must never render the previous round's chips.\n  const allDisplayBets = isBettingPhase ? [...confirmedBets, ...stagedBets] : [];
+  // Settled/closed/spinning rounds must never render the previous round's chips.
+  const allDisplayBets = isBettingPhase ? [...confirmedBets, ...stagedBets] : [];
   const stagedTotal = stagedBets.reduce((s, b) => s + b.amount, 0);
   const confirmedTotal = confirmedBets.reduce((s, b) => s + b.amount, 0);
   const totalBetAmount = stagedTotal + confirmedTotal;
