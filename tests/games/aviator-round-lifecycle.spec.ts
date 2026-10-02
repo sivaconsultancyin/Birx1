@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 
+const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:10000';
+const api = (path: string) => `${backendUrl}${path}`;
+
 test('Aviator runs continuous server-authoritative rounds in one permanent room', async ({ request }) => {
   test.setTimeout(110000);
   const first = await request.get(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/games/aviator/state');
@@ -18,7 +21,7 @@ test('Aviator runs continuous server-authoritative rounds in one permanent room'
 
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 500));
-    const response = await request.get('/api/games/aviator/state');
+    const response = await request.get(api('/api/games/aviator/state'));
     expect(response.status()).toBe(200);
     const state = (await response.json()).state;
 
