@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test.describe('API authorization boundaries', () => {
   test('rejects unauthenticated wallet mutation', async ({ request }) => {
-    const response = await request.post('/api/wallet/withdraw', {
+    const response = await request.post(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/wallet/withdraw', {
       data: { amount: 500, upiId: 'test@upi', idempotencyKey: 'auth-boundary-' + Date.now() },
     });
     expect([401, 403]).toContain(response.status());
@@ -22,7 +22,7 @@ test.describe('API authorization boundaries', () => {
 
   test('rejects unauthenticated WebSocket connection', async () => {
     const WebSocket = (await import('ws')).default;
-    const wsUrl = (process.env.BASE_URL || 'http://127.0.0.1:3000').replace(/^http/, 'ws') + '/ws';
+    const wsUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:10000').replace(/^http/, 'ws') + '/ws';
     const result = await new Promise<string>((resolve) => {
       const ws = new WebSocket(wsUrl);
       const timer = setTimeout(() => { ws.close(); resolve('timeout'); }, 5000);
