@@ -624,8 +624,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         <div className="flex items-center gap-2 overflow-x-auto text-xs py-1 px-2 no-scrollbar rounded-xl border border-white/10 bg-white/5 backdrop-blur-md min-w-0 flex-1">
             <div className="flex items-center gap-1.5 shrink-0 font-semibold text-white/80" title="History">
               <History className="w-4 h-4" />
-              <span>History</span>
-            </div>
+              </div>
             <div className="flex items-center gap-1 shrink-0">
             {gameState?.recentResults.slice(0, 20).map((num, i) => {
             const isR = RED_NUMBERS_SET.has(num);
