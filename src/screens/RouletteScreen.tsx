@@ -315,6 +315,11 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           setWinningNumber(payload.winningNumber);
           setWinningColor(payload.winningColor);
           if (payload.winningCategory) setWinningCategory(payload.winningCategory);
+          // Result closes the visual round. Clear local chips immediately;
+          // settlement follows asynchronously and must not leave them locked.
+          setConfirmedBets([]);
+          setStagedBets([]);
+          setBetHistoryStack([]);
           setIsSpinning(false);
           break;
         case 'roulette_settlement': {
@@ -330,14 +335,13 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             }
           }
 
-          // Settlement closes this round. Do not keep settled chips displayed
-          // as "Locked" while waiting for the next round event.
-          if (!settledRoundId || settledRoundId === currentRoundIdRef.current) {
-            setConfirmedBets([]);
-            setStagedBets([]);
-            setBetHistoryStack([]);
-            setIsSpinning(false);
-          }
+          // Settlement belongs to the locally confirmed bet. Do not gate the
+          // UI reset on a server round-id format; different event producers may
+          // serialize the id differently.
+          setConfirmedBets([]);
+          setStagedBets([]);
+          setBetHistoryStack([]);
+          setIsSpinning(false);
           loadStats();
           break;
         }
