@@ -20,6 +20,8 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: FRONTEND_URL
+        value: https://brix1-frontend.onrender.com
 
   - type: web
     name: brix1-frontend
@@ -32,6 +34,8 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL
+        value: https://brix1-backend.onrender.com
+      - key: VITE_BACKEND_URL
         value: https://brix1-backend.onrender.com
       - key: VITE_WS_URL
         value: wss://brix1-backend.onrender.com/ws
