@@ -25,7 +25,8 @@ import {
   WithdrawalRequest
 } from '../types.ts';
 
-const BASE_URL = '/api';
+const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'https://brix1-backend.onrender.com';
+const BASE_URL = `${BACKEND_URL.replace(/\/$/, '')}/api`;
 
 async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('brix_token');
