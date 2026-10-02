@@ -319,6 +319,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           break;
         case 'roulette_settlement': {
           setIsSpinning(false);
+          const settledRoundId = payload.roundId;
           const playerBets = confirmedBetsRef.current;
           if (playerBets.length > 0 && payload.winningNumber !== undefined) {
             const settlement = calculatePlayerSettlement(payload.winningNumber, playerBets);
@@ -327,6 +328,15 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             } else if (settlement.totalBet > 0) {
               notifyWinLoss({ type: 'loss', amount: settlement.totalBet });
             }
+          }
+
+          // Settlement closes this round. Do not keep settled chips displayed
+          // as "Locked" while waiting for the next round event.
+          if (!settledRoundId || settledRoundId === currentRoundIdRef.current) {
+            setConfirmedBets([]);
+            setStagedBets([]);
+            setBetHistoryStack([]);
+            setIsSpinning(false);
           }
           loadStats();
           break;
