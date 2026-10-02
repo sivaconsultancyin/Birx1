@@ -234,6 +234,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   // Guard to ensure ball spins strictly ONCE per round
   const hasSpunRoundRef = useRef<string>('');
+  // Prevent duplicate popup/fallback settlement handling for the same round.
+  const settledPopupRoundRef = useRef<string>('');
 
   const isBettingPhase = isStateReady && gameState?.phase === 'betting';
 
@@ -358,17 +360,16 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           setWinningColor(payload.winningColor);
           if (payload.winningCategory) setWinningCategory(payload.winningCategory);
           setIsSpinning(false);
-          // Never keep the previous round's locked chips visible after result.
+          // The round is settled now: never carry its chips into the next betting round.
+          setConfirmedBets([]);
           setStagedBets([]);
+          setBetHistoryStack([]);
+          // Recovery path if the targeted WebSocket player-result event was missed.
+          void showAuthoritativePlayerResult(String(payload.roundId || currentRoundIdRef.current));
           break;
         case 'roulette_player_result': {
-          // Backend is authoritative for the outcome. Show exactly one popup,
-          // then clear the settled round's local chips immediately.
-          const won = Boolean(payload.isWin) && Number(payload.grossPayout) > 0;
-          notifyWinLoss({
-            type: won ? 'win' : 'loss',
-            amount: won ? Number(payload.grossPayout) : Number(payload.totalBet || 0)
-          });
+          const roundId = String(payload.roundId || currentRoundIdRef.current);
+          void showAuthoritativePlayerResult(roundId, payload);
           setConfirmedBets([]);
           setStagedBets([]);
           setBetHistoryStack([]);
@@ -419,6 +420,40 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       setStats(hist);
     } catch {
       // Ignore
+    }
+  };
+
+  const showAuthoritativePlayerResult = async (roundId: string, payload?: any) => {
+    if (!roundId || settledPopupRoundRef.current === roundId) return;
+    if (payload && payload.userId) {
+      // The backend WebSocket bridge already targets the authenticated player.
+      settledPopupRoundRef.current = roundId;
+      const won = Boolean(payload.isWin) && Number(payload.grossPayout) > 0;
+      notifyWinLoss({
+        type: won ? 'win' : 'loss',
+        amount: won ? Number(payload.grossPayout) : Number(payload.totalBet || 0),
+        id: `roulette-${roundId}`
+      });
+      return;
+    }
+    try {
+      const res = await fetch(
+        `${(import.meta as any).env?.VITE_BACKEND_URL || 'https://brix1-backend.onrender.com'}/api/games/roulette/my-settlement/${encodeURIComponent(roundId)}`,
+        { credentials: 'include', headers: { Authorization: `Bearer ${localStorage.getItem('brix_token') || ''}` } }
+      );
+      if (!res.ok) return;
+      const body = await res.json();
+      const settlement = body?.settlement;
+      if (!settlement || settledPopupRoundRef.current === roundId) return;
+      settledPopupRoundRef.current = roundId;
+      const won = Boolean(settlement.isWin) && Number(settlement.grossPayout) > 0;
+      notifyWinLoss({
+        type: won ? 'win' : 'loss',
+        amount: won ? Number(settlement.grossPayout) : Number(settlement.totalBet || 0),
+        id: `roulette-${roundId}`
+      });
+    } catch {
+      // WebSocket remains the primary settlement transport.
     }
   };
 
