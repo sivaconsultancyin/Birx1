@@ -46,10 +46,10 @@ export const WinLossNotification: React.FC = () => {
       // Set new notification immediately (replaces any previous one, no stack)
       setCurrent(customEvent.detail);
 
-      // Auto-dismiss within 1 second: display for 700ms, then trigger exit animation (200ms)
+      // Auto-dismiss after 2 seconds
       dismissTimerRef.current = setTimeout(() => {
         setCurrent(null);
-      }, 700);
+      }, 2000);
     };
 
     window.addEventListener(EVENT_NAME, handleNotification);
