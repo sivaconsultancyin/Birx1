@@ -120,12 +120,16 @@ async function acquireGameLease(gameId: string): Promise<boolean> {
   }
   try {
     const claimed = await supabaseRepo.claimGameLease(gameId, PROCESS_OWNER_ID, 10000);
-    return Boolean(claimed);
-  } catch (e) {
-    // When Supabase is configured, never fall back to a second local authority:
-    // doing so could create competing rounds across server instances.
-    console.error(`[GameLease:${gameId}] lease RPC unavailable; refusing authority.`, e);
+    if (claimed) return true;
+
+    // This process may have temporarily lost the lease to another instance.
+    // Do not advance the round while another authoritative owner is active.
     return false;
+  } catch (e) {
+    // A transient Supabase/RPC outage must not freeze a single active game
+    // process. Keep the local authority alive until persistence recovers.
+    console.warn(`[GameLease:${gameId}] lease RPC unavailable; continuing local authority temporarily.`, e);
+    return true;
   }
 }
 
