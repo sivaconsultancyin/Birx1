@@ -513,7 +513,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   };
 
   // All bets rendered on the table: both confirmed bets locked in server + staged chips
-  const allDisplayBets = [...confirmedBets, ...stagedBets];
+  // Settled/closed/spinning rounds must never render the previous round's chips.\n  const allDisplayBets = isBettingPhase ? [...confirmedBets, ...stagedBets] : [];
   const stagedTotal = stagedBets.reduce((s, b) => s + b.amount, 0);
   const confirmedTotal = confirmedBets.reduce((s, b) => s + b.amount, 0);
   const totalBetAmount = stagedTotal + confirmedTotal;
@@ -798,7 +798,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
               )}
 
               {/* Locked Stakes Indicator */}
-              {confirmedTotal > 0 && (
+              {isBettingPhase && confirmedTotal > 0 && (
                 <div className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-3 py-0.5 rounded-full flex items-center gap-1.5">
                   <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                   <span>
@@ -942,7 +942,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
                       </>
                     )}
                   </button>
-                ) : confirmedBets.length > 0 ? (
+                ) : isBettingPhase && confirmedBets.length > 0 ? (
                   <div className="w-full py-2 px-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-inner">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     <span>
