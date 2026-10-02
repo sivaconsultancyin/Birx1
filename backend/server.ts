@@ -76,9 +76,16 @@ function clearAuthCookie(res: Response) {
 }
 
 app.use((req: Request, res: Response, next: NextFunction) => {
-  const allowedOrigin = process.env.FRONTEND_URL || 'https://brix1-frontend.onrender.com';
-  const origin = req.headers.origin;
-  if (origin === allowedOrigin) {
+  const configuredOrigins = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((value) => value.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  const allowedOrigins = new Set([
+    'https://brix1-frontend.onrender.com',
+    ...configuredOrigins,
+  ]);
+  const origin = String(req.headers.origin || '').replace(/\/$/, '');
+  if (origin && allowedOrigins.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
