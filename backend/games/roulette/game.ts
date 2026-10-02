@@ -373,6 +373,13 @@ setInterval(async () => {
     if (rouletteState.countdown <= 0) {
       rouletteState.phase = 'closed';
       rouletteState.countdown = 2;
+      await supabaseRepo.recordGameRound(
+        rouletteState.roundId,
+        'roulette',
+        'closed',
+        { roomId: GAME_ROOM_ID, countdown: rouletteState.countdown, closedAt: new Date().toISOString() },
+        Date.now()
+      );
       broadcastRealtime('roulette_betting_closed', { roundId: rouletteState.roundId });
     }
   } else if (rouletteState.phase === 'closed') {
@@ -386,6 +393,13 @@ setInterval(async () => {
       rouletteState.winningNumber = winningNum;
       rouletteState.winningColor = winningNum === 0 ? 'green' : RED_NUMBERS.includes(winningNum) ? 'red' : 'black';
 
+      await supabaseRepo.recordGameRound(
+        rouletteState.roundId,
+        'roulette',
+        'spinning',
+        { roomId: GAME_ROOM_ID, countdown: 5, winningNumber: winningNum, winningColor: rouletteState.winningColor },
+        Date.now()
+      );
       broadcastRealtime('roulette_spin_started', {
         roundId: rouletteState.roundId,
         winningNumber: winningNum,
@@ -400,6 +414,13 @@ setInterval(async () => {
       rouletteState.countdown = 4;
 
       const currentRoundId = rouletteState.roundId;
+      await supabaseRepo.recordGameRound(
+        currentRoundId,
+        'roulette',
+        'result',
+        { roomId: GAME_ROOM_ID, countdown: 4 },
+        Date.now()
+      );
       const winningNum = rouletteState.winningNumber ?? 0;
 
       // Supabase is authoritative. Memory is only a fast fallback for local/dev mode.
@@ -553,6 +574,13 @@ setInterval(async () => {
         winningColor: settlement.winningColor,
         winningCategory: settlement.winningCategory
       });
+      await supabaseRepo.recordGameRound(
+        currentRoundId,
+        'roulette',
+        'settled',
+        { roomId: GAME_ROOM_ID, winningNumber: winningNum, winningColor: settlement.winningColor, winningCategory: settlement.winningCategory },
+        Date.now()
+      );
       broadcastRealtime('roulette_settlement', roundSettlements[rouletteState.roundId]);
       broadcastRealtime('roulette_wallet_updated', { gameId: 'roulette' });
     }
@@ -565,6 +593,13 @@ setInterval(async () => {
       rouletteState.phase = 'betting';
       rouletteState.countdown = 15;
       rouletteFairRound = createRouletteFairRound();
+      await supabaseRepo.recordGameRound(
+        newRoundId,
+        'roulette',
+        'betting',
+        { roomId: GAME_ROOM_ID, countdown: 15, startedAt: new Date().toISOString() },
+        Date.now()
+      );
       rouletteState.serverSeedHash = rouletteFairRound.serverSeedHash;
       currentRoundBets[newRoundId] = [];
 
