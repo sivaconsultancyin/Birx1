@@ -98,24 +98,38 @@ setInterval(async () => {
     if (teenPattiState.countdown <= 0) {
       teenPattiState.phase = 'settlement';
 
-      const userPlayer = undefined as TeenPattiPlayer | undefined;
-      let userSettlementDetail = undefined;
-      if (userPlayer && teenPattiState.dealer) {
-        const settlement = computePlayerSettlement(
-          userPlayer.currentBet,
-          userPlayer.cards,
-          teenPattiState.dealer.cards,
-          userPlayer.id,
-          true
-        );
-        userSettlementDetail = settlement;
-        teenPattiState.userSettlement = settlement;
+      // Settlement is performed for every active player from the authoritative
+      // server-side player map. Never use request-scoped req.user here because
+      // this is a background round loop.
+      const playerSettlements: Array<{ userId: string; settlement: any }> = [];
+      if (teenPattiState.dealer) {
+        for (const [userId, player] of teenPattiPlayers.entries()) {
+          if (!player || !player.currentBet || player.currentBet <= 0) continue;
 
-        if (settlement.grossPayout > 0) {
-          // Wallet settlement is request-scoped; shared background state cannot safely identify a user.
-        }
+          const settlement = computePlayerSettlement(
+            player.currentBet,
+            player.cards,
+            teenPattiState.dealer.cards,
+            userId,
+            true
+          );
+          playerSettlements.push({ userId, settlement });
 
-        if (settlement.betAmount > 0) {
+          if (settlement.grossPayout > 0) {
+            try {
+              await supabaseRepo.atomicCredit(
+                userId,
+                settlement.grossPayout,
+                'payout',
+                `Teen Patti Payout #${teenPattiState.roundId}`,
+                'teen-patti',
+                `teen-patti:settlement:${teenPattiState.roundId}:${userId}`
+              );
+            } catch (error) {
+              console.error(`[TeenPattiSettlement:${teenPattiState.roundId}] payout failed for user ${userId}`, error);
+            }
+          }
+
           recordHistory({
             gameId: 'teen-patti',
             gameName: 'Teen Patti',
@@ -124,6 +138,17 @@ setInterval(async () => {
             outcome: settlement.summaryText,
             multiplier: settlement.multiplier,
             settlementStatus: 'settled'
+          });
+
+          // Targeted delivery is enforced by the WebSocket bridge using userId.
+          broadcastRealtime('teen_patti_player_result', {
+            userId,
+            roundId: teenPattiState.roundId,
+            betAmount: settlement.betAmount,
+            grossPayout: settlement.grossPayout,
+            netResult: settlement.netResult,
+            outcome: settlement.outcome,
+            multiplier: settlement.multiplier
           });
         }
       }
@@ -164,13 +189,16 @@ setInterval(async () => {
         roundId: teenPattiState.roundId,
         phase: 'result',
         state: sanitized,
-        userSettlement: userSettlementDetail,
         dealer: teenPattiState.dealer
       });
-      if (userSettlementDetail) {
-        broadcastRealtime('teen_patti_settlement', userSettlementDetail);
+
+      // Wallet changes are delivered only to the player whose wallet changed.
+      for (const { userId } of playerSettlements) {
+        const wallet = await supabaseRepo.getWallet(userId).catch(() => null);
+        if (wallet) {
+          broadcastRealtime('wallet_updated', { userId, wallet, roundId: teenPattiState.roundId });
+        }
       }
-      broadcastRealtime('wallet_updated', { userId: userPlayer?.id });
     }
   } else if (teenPattiState.phase === 'result') {
     teenPattiState.countdown -= 1;
