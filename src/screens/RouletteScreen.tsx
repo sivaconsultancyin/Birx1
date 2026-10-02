@@ -336,7 +336,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
               : Number(payload.totalBet || 0)
           });
           break;
-        }      }
+        }
         case 'roulette_result': {
           setGameState((prev) => (prev ? { ...prev, phase: 'result', countdown: payload.countdown || 4 } : null));
           setCountdown(payload.countdown || 4);
@@ -376,7 +376,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       window.clearInterval(stateSyncTimer);
       unsubscribe();
     };
-  }, []);;
+  }, []);
 
   const loadState = async () => {
     try {
