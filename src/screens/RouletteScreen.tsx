@@ -596,6 +596,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
               </span>
             );
           })}
+            </div>
         </div>
 
         {/* Stats Button */}
