@@ -72,7 +72,7 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
     };
   }, [refreshState]);
 
-  // Real-time SSE listener for instant sub-second round events
+  // Real-time WebSocket listener for instant sub-second round events
   useEffect(() => {
     const unsubscribe = subscribeToRealtimeEvents((event) => {
       const evtType = event.event as string;
