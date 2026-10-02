@@ -1,12 +1,14 @@
 services:
   - type: web
-    name: brix1
+    name: brix1-backend
     runtime: node
+    region: singapore
     plan: free
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: npm ci && npm run build:backend
+    startCommand: npm run start:backend
     healthCheckPath: /api/health
-    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
@@ -18,3 +20,18 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+
+  - type: web
+    name: brix1-frontend
+    runtime: static
+    region: singapore
+    plan: free
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: npm ci && npm run build:frontend
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://brix1-backend.onrender.com
+      - key: VITE_WS_URL
+        value: wss://brix1-backend.onrender.com/ws
