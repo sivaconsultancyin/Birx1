@@ -359,17 +359,21 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           if (payload.winningCategory) setWinningCategory(payload.winningCategory);
           setIsSpinning(false);
           break;
+        case 'roulette_player_result': {
+          // Backend WebSocket delivery is already scoped to payload.userId.
+          // Never reconstruct settlement from local bets or show duplicate popups.
+          notifyWinLoss({
+            type: payload.isWin && Number(payload.grossPayout) > 0 ? 'win' : 'loss',
+            amount: payload.isWin && Number(payload.grossPayout) > 0
+              ? Number(payload.grossPayout)
+              : Number(payload.totalBet || 0)
+          });
+          break;
+        }
         case 'roulette_settlement': {
+          // Legacy settlement event: state/history only. Popup comes exclusively
+          // from the targeted roulette_player_result event.
           setIsSpinning(false);
-          const playerBets = confirmedBetsRef.current;
-          if (playerBets.length > 0 && payload.winningNumber !== undefined) {
-            const settlement = calculatePlayerSettlement(payload.winningNumber, playerBets);
-            if (settlement.isWin && settlement.grossPayout > 0) {
-              notifyWinLoss({ type: 'win', amount: settlement.grossPayout });
-            } else if (settlement.totalBet > 0) {
-              notifyWinLoss({ type: 'loss', amount: settlement.totalBet });
-            }
-          }
           loadStats();
           break;
         }
@@ -532,23 +536,9 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   // WHEEL ANIMATION & SETTLEMENT CALLBACK
   // -------------------------------------------------------------
   const handleWheelAnimationComplete = () => {
+    // Animation only ends the visual spin. Settlement notification is emitted
+    // once by the backend's targeted roulette_player_result event.
     setIsSpinning(false);
-    // Show win/loss popup if player has confirmed bets in this round
-    if (confirmedBets.length > 0 && winningNumber !== null) {
-      const settlement = calculatePlayerSettlement(winningNumber, confirmedBets);
-      if (settlement.isWin && settlement.grossPayout > 0) {
-        notifyWinLoss({
-          type: 'win',
-          amount: settlement.grossPayout
-        });
-      } else if (settlement.totalBet > 0) {
-        notifyWinLoss({
-          type: 'loss',
-          amount: settlement.totalBet
-        });
-      }
-      loadStats();
-    }
   };
 
   // Developer / QA Diagnostic Test Spin
