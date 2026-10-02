@@ -5,27 +5,20 @@ const api = (path: string) => `${backendUrl}${path}`;
 
 test.describe('API authorization boundaries', () => {
   test('rejects unauthenticated wallet mutation', async ({ request }) => {
-    const response = await request.post(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/wallet/withdraw', {
-      data: { amount: 500, upiId: 'test@upi', idempotencyKey: 'auth-boundary-' + Date.now() },
-    });
+    const response = await request.post(api('/api/wallet/withdraw'), { data: { amount: 500, upiId: 'test@upi', idempotencyKey: 'auth-boundary-' + Date.now() } });
     expect([401, 403]).toContain(response.status());
   });
-
   test('rejects unauthenticated admin mutation', async ({ request }) => {
-    const response = await request.post(api('/api/admin/recharges/test/approve');
+    const response = await request.post(api('/api/admin/recharges/test/approve'));
     expect([401, 403]).toContain(response.status());
   });
-
   test('rejects unauthenticated game mutation', async ({ request }) => {
-    const response = await request.post(api('/api/games/aviator/bet', {
-      data: { amount: 100 },
-    });
+    const response = await request.post(api('/api/games/aviator/bet'), { data: { amount: 100 } });
     expect([401, 403, 404]).toContain(response.status());
   });
-
   test('rejects unauthenticated WebSocket connection', async () => {
     const WebSocket = (await import('ws')).default;
-    const wsUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:10000').replace(/^http/, 'ws') + '/ws';
+    const wsUrl = backendUrl.replace(/^http/, 'ws') + '/ws';
     const result = await new Promise<string>((resolve) => {
       const ws = new WebSocket(wsUrl);
       const timer = setTimeout(() => { ws.close(); resolve('timeout'); }, 5000);
@@ -35,30 +28,19 @@ test.describe('API authorization boundaries', () => {
     });
     expect(['401', 'error']).toContain(result);
   });
-
   test('all registered game API routes exist and enforce authentication', async ({ request }) => {
     const routes: Array<[string, string]> = [
-      ['GET', '/api/games/roulette/rules'], ['GET', '/api/games/roulette/round'],
-      ['GET', '/api/games/roulette/state'], ['GET', '/api/games/roulette/history'],
-      ['POST', '/api/games/roulette/bets'], ['GET', '/api/games/roulette/bets'],
-      ['GET', '/api/games/roulette/settlement/test-round'], ['POST', '/api/games/roulette/spin'],
-      ['GET', '/api/games/teen-patti/state'], ['POST', '/api/games/teen-patti/bet'],
-      ['POST', '/api/games/teen-patti/new-round'], ['POST', '/api/games/teen-patti/action'],
-      ['POST', '/api/games/aviator/bet'],
-      ['POST', '/api/games/aviator/cashout'], ['GET', '/api/games/dice/state'],
-      ['POST', '/api/games/dice/roll'], ['GET', '/api/games/dragon-tiger/state'],
-      ['POST', '/api/games/dragon-tiger/deal'], ['GET', '/api/games/andar-bahar/state'],
-      ['POST', '/api/games/andar-bahar/deal'],
+      ['GET', '/api/games/roulette/rules'], ['GET', '/api/games/roulette/round'], ['GET', '/api/games/roulette/state'], ['GET', '/api/games/roulette/history'],
+      ['POST', '/api/games/roulette/bets'], ['GET', '/api/games/roulette/bets'], ['GET', '/api/games/roulette/settlement/test-round'], ['POST', '/api/games/roulette/spin'],
+      ['GET', '/api/games/teen-patti/state'], ['POST', '/api/games/teen-patti/bet'], ['POST', '/api/games/teen-patti/new-round'], ['POST', '/api/games/teen-patti/action'],
+      ['POST', '/api/games/aviator/bet'], ['POST', '/api/games/aviator/cashout'], ['GET', '/api/games/dice/state'], ['POST', '/api/games/dice/roll'],
+      ['GET', '/api/games/dragon-tiger/state'], ['POST', '/api/games/dragon-tiger/deal'], ['GET', '/api/games/andar-bahar/state'], ['POST', '/api/games/andar-bahar/deal'],
     ];
-    // Aviator state is intentionally public: it contains non-sensitive round state.
-// Mutation endpoints remain authenticated below.
     const violations: string[] = [];
     for (const [method, url] of routes) {
-      const response = method === 'GET' ? await request.get(url) : await request.post(url, { data: {} });
-      if (![401, 403].includes(response.status())) {
-        violations.push(`${method} ${url} -> HTTP ${response.status()}`);
-      }
+      const response = method === 'GET' ? await request.get(api(url)) : await request.post(api(url), { data: {} });
+      if (![401, 403].includes(response.status())) violations.push(`${method} ${url} -> HTTP ${response.status()}`);
     }
     expect(violations, violations.join('; ')).toEqual([]);
-  });;
+  });
 });
