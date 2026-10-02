@@ -432,6 +432,18 @@ setInterval(async () => {
         const playerSettlement = computeRouletteSettlement(winningNum, playerBets);
         playerSettlements[userId] = playerSettlement;
 
+        // Send the authoritative player outcome from the backend. The frontend
+        // must not have to reconstruct settlement from local bet state.
+        broadcastRealtime('roulette_player_result', {
+          userId,
+          roundId: currentRoundId,
+          winningNumber: winningNum,
+          totalBet: playerSettlement.totalBet,
+          grossPayout: playerSettlement.grossPayout,
+          netResult: playerSettlement.netResult,
+          isWin: playerSettlement.grossPayout > 0,
+        });
+
         if (playerSettlement.grossPayout > 0) {
           try {
             const payoutKey = `roulette:settlement:${currentRoundId}:${userId}`;
