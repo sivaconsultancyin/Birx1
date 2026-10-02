@@ -6,7 +6,7 @@ services:
     plan: free
     branch: main
     autoDeployTrigger: commit
-    buildCommand: npm ci && npm run build:backend
+    buildCommand: npm install && npm run build:backend
     startCommand: npm run start:backend
     healthCheckPath: /api/health
     envVars:
@@ -28,7 +28,7 @@ services:
     plan: free
     branch: main
     autoDeployTrigger: commit
-    buildCommand: npm ci && npm run build:frontend
+    buildCommand: npm install && npm run build:frontend
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL
