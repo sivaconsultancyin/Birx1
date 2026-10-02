@@ -41,12 +41,25 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
     }
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Server error (${response.status})`);
+  const raw = await response.text();
+  let data: any = null;
+  if (raw.trim()) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`Invalid server response (HTTP ${response.status})`);
+    }
   }
 
-  return response.json();
+  if (!response.ok) {
+    throw new Error(data?.error || `Server error (${response.status})`);
+  }
+
+  if (!data || typeof data !== 'object') {
+    throw new Error(`Empty server response (HTTP ${response.status})`);
+  }
+
+  return data as T;
 }
 
 // -------------------------------------------------------------
