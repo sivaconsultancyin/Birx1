@@ -38,22 +38,9 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
       if (res?.state) {
         setGameState(res.state);
 
-        // Check if there's a settled user outcome for a new round
-        if (
-          (res.state.phase === 'result' || res.state.phase === 'settlement') &&
-          res.state.userSettlement &&
-          lastSettledRoundRef.current !== res.state.roundId
-        ) {
-          lastSettledRoundRef.current = res.state.roundId;
-          const s = res.state.userSettlement;
-          if ((s.betAmount ?? 0) > 0) {
-            const isWin = s.outcome === 'player_win';
-            notifyWinLoss({
-              type: isWin ? 'win' : 'loss',
-              amount: isWin ? (s.grossPayout ?? 0) : (s.betAmount ?? 0)
-            });
-          }
-        }
+        // Win/loss notifications come only from the targeted
+        // teen_patti_player_result realtime event. Do not reconstruct them
+        // from shared round state, which belongs to the whole room.
       }
       return Boolean(res?.state);
     } catch {
@@ -105,15 +92,17 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
           onUpdateWallet(data.wallet);
         }
 
-        if (evtType === 'teen_patti_result' || evtType === 'teen_patti_settlement') {
-          const settlement = data?.settlement || data?.userSettlement;
-          if (settlement && data?.roundId && lastSettledRoundRef.current !== data.roundId) {
+        if (evtType === 'teen_patti_player_result') {
+          // Backend WebSocket delivery is already scoped to the target user.
+          // This is the only source for the win/loss popup.
+          if (data?.roundId && lastSettledRoundRef.current !== data.roundId) {
             lastSettledRoundRef.current = data.roundId;
-            if ((settlement.betAmount ?? 0) > 0) {
-              const isWin = settlement.outcome === 'player_win';
+            const betAmount = Number(data.betAmount || 0);
+            const grossPayout = Number(data.grossPayout || 0);
+            if (betAmount > 0) {
               notifyWinLoss({
-                type: isWin ? 'win' : 'loss',
-                amount: isWin ? (settlement.grossPayout ?? 0) : (settlement.betAmount ?? 0)
+                type: grossPayout > 0 ? 'win' : 'loss',
+                amount: grossPayout > 0 ? grossPayout : betAmount
               });
             }
           }
