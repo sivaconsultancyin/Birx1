@@ -348,20 +348,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           setWinningColor(payload.winningColor);
           if (payload.winningCategory) setWinningCategory(payload.winningCategory);
 
-          // Calculate the player's result BEFORE clearing the round bet.
-          // The settlement event is asynchronous and must not be the first
-          // place that reads confirmedBets.
-          const playerBets = confirmedBetsRef.current;
-          if (playerBets.length > 0 && payload.winningNumber !== undefined) {
-            const settlement = calculatePlayerSettlement(payload.winningNumber, playerBets);
-            notifyWinLoss({
-              type: settlement.isWin && settlement.grossPayout > 0 ? 'win' : 'loss',
-              amount: settlement.isWin && settlement.grossPayout > 0
-                ? settlement.grossPayout
-                : settlement.totalBet
-            });
-          }
-
+          // Player outcome is emitted by the backend as roulette_player_result.
+          // Do not reconstruct or duplicate the popup from local client state.
           // Hide old chips immediately; keep the data in no UI state until the
           // next betting-open event, which starts a clean round.
           setStagedBets([]);
