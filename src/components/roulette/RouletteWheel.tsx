@@ -257,31 +257,33 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
           curRadius = rTrack - (rTrack - rPocket) * dropEase + bounce;
         }
       } else if (elapsed < wheelSpinDurationMs) {
-        // Stage B: the wheel is still moving, but the ball must NOT lock onto
-        // the winning pocket yet. Keep it visibly rolling until the wheel stops.
-        const wheelStopProgress = Math.min(
-          (elapsed - t_catch * spinDurationMs) /
-            (wheelSpinDurationMs - t_catch * spinDurationMs),
+        // Stage B: keep the ball rolling independently. It must never align
+        // with the authoritative winning pocket before the wheel has stopped.
+        const rollProgress = Math.min(
+          (elapsed - t_catch * wheelSpinDurationMs) /
+            (wheelSpinDurationMs - t_catch * wheelSpinDurationMs),
           1
         );
-        const rollEase = 1 - Math.pow(1 - wheelStopProgress, 2.2);
-        const visualRoll = (1 - rollEase) * 220;
-        curBallAngle =
-          ballAngleAtCatch +
-          (curPocketScreenAngle - pocketAngleAtCatch) -
-          visualRoll;
-        curRadius = rPocket;
+        const rollEase = 1 - Math.pow(1 - rollProgress, 1.8);
+        const counterRoll = desiredDeltaAngle * 0.62 * rollEase;
+        curBallAngle = ballAngleAtCatch - counterRoll;
+        curRadius = rTrack;
       } else {
-        // Stage C: only after the wheel has stopped does the ball make its
-        // final visible roll and settle on the authoritative winning pocket.
+        // Stage C: the wheel is now stopped. Only this final phase targets
+        // the authoritative winning pocket, with one short visible roll.
         const settleProgress = Math.min(
           (elapsed - wheelSpinDurationMs) / ballSettleDurationMs,
           1
         );
         const settleEase = 1 - Math.pow(1 - settleProgress, 3.2);
-        const extraRoll = (1 - settleEase) * 220;
-        curBallAngle = curPocketScreenAngle - extraRoll;
-        curRadius = rPocket + Math.sin(settleProgress * Math.PI) * 1.5;
+        const finalStartAngle = ballAngleAtCatch - desiredDeltaAngle * 0.62;
+        const finalTargetAngle = curPocketScreenAngle;
+        const finalRoll = (1 - settleEase) * 360;
+        curBallAngle =
+          finalStartAngle * (1 - settleEase) +
+          finalTargetAngle * settleEase -
+          finalRoll;
+        curRadius = rTrack + (rPocket - rTrack) * settleEase;
       }
 
       // Audio ticks: frequency matches ball speed
