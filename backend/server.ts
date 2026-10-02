@@ -642,20 +642,8 @@ const startServer = async () => {
     }
     // Browsers request /favicon.ico automatically; return an explicit empty response so this is not a real missing resource.
     app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204).end());
-    if (isProduction) {
-      const distPath = path.resolve(process.cwd(), 'dist');
-      app.use(express.static(distPath));
-      app.get('*', (req: Request, res: Response, next: NextFunction) => {
-        if (req.path.startsWith('/api/')) return next();
-        res.sendFile(path.join(distPath, 'index.html'));
-      });
-    } else {
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: 'spa'
-      });
-      app.use(vite.middlewares);
-    }
+    // Frontend is deployed separately. The backend serves API + WebSocket only.
+    // Do not mount Vite or serve dist/index.html from the production backend.
 
     const httpServer = createHttpServer(app);
     httpServer.on('upgrade', async (req, socket, head) => {
