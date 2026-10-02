@@ -237,6 +237,21 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   const isBettingPhase = gameState?.phase === 'betting';
 
+  // A confirmed bet belongs to exactly one authoritative round. If the backend
+  // advances the round before the realtime "betting_open" event reaches this
+  // client, never carry the previous round's locked chips into the new round.
+  useEffect(() => {
+    const roundId = gameState?.roundId;
+    if (!roundId) return;
+    setConfirmedBets((prev) => {
+      if (prev.length === 0) return prev;
+      return [];
+    });
+    setStagedBets([]);
+    setBetHistoryStack([]);
+    setIsSpinning(false);
+  }, [gameState?.roundId]);
+
   // 1. Initial State & Real-time Synchronization (WebSocket)
   useEffect(() => {
     loadState();
