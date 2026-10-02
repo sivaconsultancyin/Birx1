@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 async function authenticate(page: any) {
+  const browserErrors: string[] = [];
+  page.on('console', msg => { if (msg.type() === 'error') browserErrors.push(msg.text()); });
+  page.on('pageerror', err => browserErrors.push(err.message));
   const mobile = process.env.E2E_TEST_MOBILE;
   const password = process.env.E2E_TEST_PASSWORD;
   test.skip(!mobile || !password, 'E2E test credentials are not configured in CI');
@@ -15,7 +18,11 @@ async function authenticate(page: any) {
   if (!loginResponse.ok()) {
     throw new Error(`Login failed: HTTP ${loginResponse.status()} ${await loginResponse.text()}`);
   }
-  await expect(page.locator('#auth-screen')).toBeHidden({ timeout: 20000 });
+  try {
+    await expect(page.locator('#auth-screen')).toBeHidden({ timeout: 20000 });
+  } catch (error) {
+    throw new Error(`Login returned HTTP ${loginResponse.status()} but app stayed unauthenticated. Browser errors: ${browserErrors.join(' | ')}. Original: ${error}`);
+  }
   await expect(page.locator('#bottom-navigation')).toBeVisible({ timeout: 20000 });
 }
 
