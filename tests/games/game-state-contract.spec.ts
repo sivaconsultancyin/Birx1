@@ -15,7 +15,7 @@ test.describe('protected game-state boundary', () => {
   });
 
   test('wallet balance rejects unauthenticated access', async ({ request }) => {
-    const response = await request.get(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/wallet/balance');
+    const response = await request.get(`${process.env.BACKEND_URL || 'http://127.0.0.1:10000'}/api/wallet/balance`);
     expect(response.status()).toBe(401);
     const body = await response.json();
     expect(body).toHaveProperty('error');
