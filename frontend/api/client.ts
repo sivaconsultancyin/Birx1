@@ -26,7 +26,7 @@ import {
 } from '../../src/types.ts';
 
 const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'https://brix1-backend.onrender.com';
-const BASE_URL = `${BACKEND_URL.replace(/\\/$/, '')}/api`;
+const BASE_URL = `${BACKEND_URL.replace(/\/$/, '')}/api`;
 
 async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('brix_token');
@@ -476,7 +476,7 @@ function connectSharedRealtime(): void {
   if (sharedClosed || sharedSocket || typeof window === 'undefined') return;
 
   const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://brix1-backend.onrender.com';
-  const socket = new WebSocket(backendUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws');
+  const socket = new WebSocket(backendUrl.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws');
   sharedSocket = socket;
 
   socket.onmessage = (event) => {
