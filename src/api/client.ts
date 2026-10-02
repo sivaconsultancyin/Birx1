@@ -469,8 +469,9 @@ export function subscribeToRealtimeEvents(onEvent: (payload: RealtimeEventPayloa
 
   const connect = () => {
     if (closed) return;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://brix1-backend.onrender.com';
+    const wsUrl = backendUrl.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws';
+    socket = new WebSocket(wsUrl);
 
     socket.onmessage = (event) => {
       try {
