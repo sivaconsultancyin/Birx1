@@ -154,7 +154,7 @@ setInterval(async () => {
       }
 
       // Determine top winner for recent history
-      let bestPlayer = userPlayer;
+      let bestPlayer = teenPattiState.players[0];
       let bestScore = -1;
       teenPattiState.players.forEach((p) => {
         const ev = evaluateTeenPattiHand(p.cards);
