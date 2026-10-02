@@ -9,9 +9,13 @@ async function authenticate(page: any) {
   await expect(page.locator('#auth-screen')).toBeVisible({ timeout: 15000 });
   await page.locator('#input-mobile-number').fill(mobile!);
   await page.locator('#input-password').fill(password!);
-  await page.locator('#btn-auth-submit').click();
+  const loginResponse = await Promise.all([
+    page.waitForResponse(response => /\/api\/auth\/login$/.test(new URL(response.url()).pathname), { timeout: 20000 }),
+    page.locator('#btn-auth-submit').click(),
+  ]).then(([response]) => response);
+  if (!loginResponse.ok()) throw new Error(`Login failed: HTTP ${loginResponse.status()} ${await loginResponse.text()}`);
+  await expect(page.locator('#auth-screen')).toBeHidden({ timeout: 20000 });
   await expect(page.locator('#bottom-navigation')).toBeVisible({ timeout: 20000 });
-  await expect(page.locator('#auth-screen')).toBeHidden({ timeout: 10000 });
 }
 const games = [
   ['roulette', /roulette/i], ['teen-patti', /teen.?patti/i], ['aviator', /aviator/i],
