@@ -851,6 +851,32 @@ const handleGetRouletteSettlement = (req: Request, res: Response) => {
 };
 app.get('/api/games/roulette/settlement/:roundId', requireAuth, requirePlayerForGames, handleGetRouletteSettlement);
 
+// 7. GET the authenticated player's settlement only.
+// This is a recovery path when a WebSocket player-result event is missed.
+const handleGetMyRouletteSettlement = (req: Request, res: Response) => {
+  const roundId = req.params.roundId;
+  const settlement = roundSettlements[roundId];
+  const userId = req.user!.id;
+  const playerSettlement = settlement?.playerSettlements?.[userId];
+  if (!playerSettlement) {
+    return res.status(404).json({ error: 'Player settlement not found for this round' });
+  }
+  return res.json({
+    settlement: {
+      roundId,
+      winningNumber: settlement.winningNumber,
+      winningColor: settlement.winningColor,
+      winningCategory: settlement.winningCategory,
+      totalBet: playerSettlement.totalBet,
+      grossPayout: playerSettlement.grossPayout,
+      netResult: playerSettlement.netResult,
+      isWin: playerSettlement.grossPayout > 0,
+      settlementStatus: settlement.settlementStatus
+    }
+  });
+};
+app.get('/api/games/roulette/my-settlement/:roundId', requireAuth, requirePlayerForGames, handleGetMyRouletteSettlement);
+
 // 7. POST Spin (Instant spin & authoritative settlement flow)
 const handlePostRouletteSpin = async (req: Request, res: Response) => {
   const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
