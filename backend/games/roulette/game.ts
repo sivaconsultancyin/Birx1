@@ -30,6 +30,9 @@ let rouletteState: RouletteState = {
 
 let rouletteFairRound = initialFairRound;
 
+// Tracks whether the authoritative Roulette room has been initialized.
+let rouletteRoomReady = false;
+
 // Memory stores for Roulette
 const currentRoundBets: Record<string, ServerRouletteBet[]> = {};
 const roundSettlements: Record<string, any> = {};
