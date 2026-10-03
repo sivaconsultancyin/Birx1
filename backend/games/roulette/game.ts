@@ -5,6 +5,7 @@ import { GAME_ROOM_ID, EUROPEAN_WHEEL, RED_NUMBERS, BLACK_NUMBERS, ROULETTE_LIMI
 import { createRouletteFairRound, deriveRouletteOutcome, verifyRouletteFairResult } from './fairness.ts';
 import { computeRouletteSettlement } from './settlement.ts';
 import { debitRouletteBet, creditRoulettePayout, refundRouletteBet, rouletteBetIdempotencyKey } from './wallet.ts';
+import { validateRouletteBets, attachRouletteUser } from './bets.ts';
 
 /** Server-authoritative roulette module. All shared infrastructure is injected by the thin router. */
 
@@ -484,25 +485,11 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
     return res.json(processedRouletteIdempotency.get(idempotencyKey));
   }
 
-  if (!bets || !Array.isArray(bets) || bets.length === 0) {
-    return res.status(400).json({ error: 'At least one bet is required' });
-  }
-
-  // Validate bets against server limits
   let totalBet = 0;
-  for (const b of bets) {
-    const amt = Number(b.amount || 0);
-    if (isNaN(amt) || amt < ROULETTE_LIMITS.minimumBet) {
-      return res.status(400).json({ error: `Minimum bet is ₹${ROULETTE_LIMITS.minimumBet}` });
-    }
-    if (amt > ROULETTE_LIMITS.maximumBet) {
-      return res.status(400).json({ error: `Maximum bet per spot is ₹${ROULETTE_LIMITS.maximumBet}` });
-    }
-    totalBet += amt;
-  }
-
-  if (totalBet > ROULETTE_LIMITS.maximumExposure) {
-    return res.status(400).json({ error: `Maximum total exposure is ₹${ROULETTE_LIMITS.maximumExposure}` });
+  try {
+    totalBet = validateRouletteBets(bets);
+  } catch (error) {
+    return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid roulette bets' });
   }
 
   if (rouletteState.phase !== 'betting') {
