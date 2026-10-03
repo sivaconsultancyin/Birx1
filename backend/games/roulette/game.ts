@@ -650,24 +650,11 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
     return res.json(processedRouletteIdempotency.get(idempotencyKey));
   }
 
-  if (!bets || !Array.isArray(bets) || bets.length === 0) {
-    return res.status(400).json({ error: 'At least one bet is required' });
-  }
-
   let totalBet = 0;
-  for (const b of bets) {
-    const amt = Number(b.amount || 0);
-    if (isNaN(amt) || amt < ROULETTE_LIMITS.minimumBet) {
-      return res.status(400).json({ error: `Minimum bet is ₹${ROULETTE_LIMITS.minimumBet}` });
-    }
-    if (amt > ROULETTE_LIMITS.maximumBet) {
-      return res.status(400).json({ error: `Maximum bet per spot is ₹${ROULETTE_LIMITS.maximumBet}` });
-    }
-    totalBet += amt;
-  }
-
-  if (totalBet > ROULETTE_LIMITS.maximumExposure) {
-    return res.status(400).json({ error: `Maximum total exposure is ₹${ROULETTE_LIMITS.maximumExposure}` });
+  try {
+    totalBet = validateRouletteBets(bets);
+  } catch (error) {
+    return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid roulette bets' });
   }
 
   // Atomic debit
