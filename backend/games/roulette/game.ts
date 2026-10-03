@@ -1,12 +1,12 @@
 import crypto from 'node:crypto';
 import type { Request, Response } from 'express';
-import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState, AviatorBet, AviatorState, DiceState, DragonTigerState, DragonTigerBetSide, AndarBaharState, AndarBaharSide, GameHistoryEntry, User, Wallet, Transaction } from '../../types.ts';
+import type { RouletteBet, RouletteState, Wallet } from '../../types.ts';
 
 /** Server-authoritative roulette module. All shared infrastructure is injected by the thin router. */
 const GAME_ROOM_ID = 'roulette-main';
 
 export function registerRouletteGame(app: any, deps: any) {
-  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
+  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser } = deps;
 
 // -------------------------------------------------------------
 // Exact European Roulette wheel sequence (37 pockets, single 0)
