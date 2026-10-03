@@ -25,8 +25,8 @@ import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
 import { Countdown } from '../../../src/components/Countdown.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
-import { RouletteWheel, RED_NUMBERS_SET } from '../../../src/components/roulette/RouletteWheel.tsx';
-import { RouletteTable } from '../../../src/components/roulette/RouletteTable.tsx';
+import { RouletteWheel, RED_NUMBERS_SET } from './RouletteWheel.tsx';
+import { RouletteTable } from './RouletteTable.tsx';
 
 interface RouletteScreenProps {
   wallet: Wallet;
