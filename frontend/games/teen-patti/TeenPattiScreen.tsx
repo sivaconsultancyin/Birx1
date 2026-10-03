@@ -7,7 +7,6 @@ import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts'
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { TeenPattiTable } from '../../../src/components/teenpatti/TeenPattiTable.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
-import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
 
 interface TeenPattiScreenProps {
   wallet: Wallet;
@@ -100,10 +99,7 @@ export const TeenPattiScreen: React.FC<TeenPattiScreenProps> = ({
             const betAmount = Number(data.betAmount || 0);
             const grossPayout = Number(data.grossPayout || 0);
             if (betAmount > 0) {
-              notifyWinLoss({
-                type: grossPayout > 0 ? 'win' : 'loss',
-                amount: grossPayout > 0 ? grossPayout : betAmount
-              });
+
             }
           }
         }
