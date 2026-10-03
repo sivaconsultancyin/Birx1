@@ -234,6 +234,9 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   // Guard to ensure ball spins strictly ONCE per round
   const hasSpunRoundRef = useRef<string>('');
+  // Server-authoritative absolute phase deadline. Rendering the countdown from
+  // this timestamp prevents client polling/interval drift.
+  const countdownEndsAtRef = useRef<number | null>(null);
 
   const isBettingPhase = gameState?.phase === 'betting';
 
@@ -260,12 +263,20 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     // Authoritative fallback: if a realtime result event is delayed/lost,
     // synchronize the round state from the backend and never keep a settled
     // round's local chips visible.
+    const countdownRenderTimer = window.setInterval(() => {
+      const endsAt = countdownEndsAtRef.current;
+      if (!endsAt) return;
+      const remaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      setCountdown((prev) => (prev === remaining ? prev : remaining));
+    }, 100);
+
     const stateSyncTimer = window.setInterval(async () => {
       try {
         const res = await gamesApi.roulette.getRound();
         const state = res.state;
         setGameState(state);
         setCountdown(res.countdown || 15);
+        countdownEndsAtRef.current = Number(res.endsAt || 0) || null;
         // Keep confirmedBets in memory through closed/spinning/result so the
         // authoritative result event can calculate the player's outcome.
         // Rendering is already gated by isBettingPhase, and the next-round
@@ -303,6 +314,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
               countdown: payload.countdown || 15
             };
           });
+          countdownEndsAtRef.current = Number(payload.endsAt || 0) || null;
           setCountdown(payload.countdown || 15);
           setConfirmedBets([]);
           setStagedBets([]);
@@ -313,6 +325,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         }
         case 'roulette_betting_closed':
           setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown || 2 } : null));
+          countdownEndsAtRef.current = Number(payload.endsAt || 0) || null;
           setCountdown(payload.countdown || 2);
           setStagedBets([]);
           break;
@@ -321,7 +334,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           if (hasSpunRoundRef.current === rId) break;
           hasSpunRoundRef.current = rId;
           setGameState((prev) => (prev ? { ...prev, phase: 'spinning', countdown: payload.countdown || 6 } : null));
-          setCountdown(payload.countdown || 6);
+          countdownEndsAtRef.current = Number(payload.endsAt || 0) || null;
+          setCountdown(payload.countdown || 5);
           setWinningNumber(payload.winningNumber);
           setWinningColor(payload.winningColor);
           setIsSpinning(true);
@@ -339,6 +353,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         }
         case 'roulette_result': {
           setGameState((prev) => (prev ? { ...prev, phase: 'result', countdown: payload.countdown || 4 } : null));
+          countdownEndsAtRef.current = Number(payload.endsAt || 0) || null;
           setCountdown(payload.countdown || 4);
           setWinningNumber(payload.winningNumber);
           setWinningColor(payload.winningColor);
@@ -374,6 +389,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
     return () => {
       window.clearInterval(stateSyncTimer);
+      window.clearInterval(countdownRenderTimer);
       unsubscribe();
     };
   }, []);
