@@ -8,7 +8,6 @@ import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts'
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
 import { Countdown } from '../../../src/components/Countdown.tsx';
-import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
 
 interface DragonTigerScreenProps {
@@ -134,10 +133,7 @@ export const DragonTigerScreen: React.FC<DragonTigerScreenProps> = ({
         }
         // Authoritative Win/Loss notification popup
         const isWin = (res.winAmount ?? 0) > 0;
-        notifyWinLoss({
-          type: isWin ? 'win' : 'loss',
-          amount: isWin ? res.winAmount : totalBet
-        });
+
       }, 1600);
     } catch (err: any) {
       setIsDealing(false);
