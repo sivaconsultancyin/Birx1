@@ -675,9 +675,7 @@ const startServer = async () => {
       try {
         const user = await authenticateWebSocketRequest(req);
         if (!user) {
-          socket.write('HTTP/1.1 401 Unauthorized\\r\
-\\r\
-');
+          socket.write('HTTP/1.1 401 Unauthorized\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n');
           socket.destroy();
           return;
         }
