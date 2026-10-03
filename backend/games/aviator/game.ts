@@ -168,6 +168,10 @@ async function startAviatorFlight() {
   flightStartedAt = Date.now();
   aviatorState.multiplier = 1.0;
 
+  // Publish the running state immediately so authoritative API readers cannot
+  // skip directly from betting to crashed/next-round on very short crash points.
+  await persistAviatorState();
+
   await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'in_flight', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
 
   broadcastRealtime('betting_closed', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
