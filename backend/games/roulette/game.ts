@@ -1,9 +1,11 @@
 import crypto from 'node:crypto';
 import type { Request, Response } from 'express';
 import type { RouletteBet, RouletteState, Wallet } from '../../types.ts';
+import { GAME_ROOM_ID, EUROPEAN_WHEEL, RED_NUMBERS, BLACK_NUMBERS, ROULETTE_LIMITS, DEFAULT_ROULETTE_CLIENT_SEED, ROULETTE_PAYOUT_RULES, type ServerRouletteBet } from './constants.ts';
+import { createRouletteFairRound, deriveRouletteOutcome, verifyRouletteFairResult } from './fairness.ts';
+import { computeRouletteSettlement } from './settlement.ts';
 
 /** Server-authoritative roulette module. All shared infrastructure is injected by the thin router. */
-const GAME_ROOM_ID = 'roulette-main';
 
 export function registerRouletteGame(app: any, deps: any) {
   const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser } = deps;
@@ -25,36 +27,6 @@ const ROULETTE_LIMITS = {
 const DEFAULT_ROULETTE_CLIENT_SEED = 'roulette-client-v1';
 
 type ServerRouletteBet = RouletteBet & { userId: string; placedAt: string };
-
-function createRouletteFairRound() {
-  const serverSeed = crypto.randomBytes(32).toString('hex');
-  const serverSeedHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
-  return { serverSeed, serverSeedHash, clientSeed: DEFAULT_ROULETTE_CLIENT_SEED, nonce: crypto.randomBytes(16).toString('hex') };
-}
-
-function deriveRouletteOutcome(serverSeed: string, clientSeed: string, nonce: string) {
-  const digest = crypto.createHmac('sha256', serverSeed).update(`${clientSeed}:${nonce}`).digest();
-  return EUROPEAN_WHEEL[digest.readUInt32BE(0) % EUROPEAN_WHEEL.length];
-}
-
-function verifyRouletteFairResult(serverSeed: string, serverSeedHash: string, clientSeed: string, nonce: string, winningNumber: number) {
-  const computedHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
-  const derivedNumber = deriveRouletteOutcome(serverSeed, clientSeed, nonce);
-  return computedHash === serverSeedHash && derivedNumber === winningNumber;
-}
-
-const ROULETTE_PAYOUT_RULES = {
-  straight: { ratio: '35:1', multiplier: 36, description: 'Straight Up: Single number 0-36 (35:1 profit, 36x gross)' },
-  split: { ratio: '17:1', multiplier: 18, description: 'Split: Two adjacent numbers (17:1 profit, 18x gross)' },
-  street: { ratio: '11:1', multiplier: 12, description: 'Street: Three numbers in a row (11:1 profit, 12x gross)' },
-  corner: { ratio: '8:1', multiplier: 9, description: 'Corner: Four adjacent numbers (8:1 profit, 9x gross)' },
-  sixline: { ratio: '5:1', multiplier: 6, description: 'Six Line: Six numbers across two rows (5:1 profit, 6x gross)' },
-  dozen: { ratio: '2:1', multiplier: 3, description: 'Dozen: 1-12, 13-24, or 25-36 (2:1 profit, 3x gross)' },
-  column: { ratio: '2:1', multiplier: 3, description: 'Column: 1st, 2nd, or 3rd column of 12 (2:1 profit, 3x gross)' },
-  red_black: { ratio: '1:1', multiplier: 2, description: 'Red / Black: Even money (1:1 profit, 2x gross, 0 loses)' },
-  even_odd: { ratio: '1:1', multiplier: 2, description: 'Even / Odd: Even money (1:1 profit, 2x gross, 0 loses)' },
-  low_high: { ratio: '1:1', multiplier: 2, description: 'Low / High: 1-18 or 19-36 (1:1 profit, 2x gross, 0 loses)' }
-};
 
 const initialFairRound = createRouletteFairRound();
 
