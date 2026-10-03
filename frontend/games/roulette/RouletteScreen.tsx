@@ -279,7 +279,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
                 ? Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000))
                 : (res.countdown ?? next.countdown ?? 0)
             );
-            if (next.phase === 'spinning' || next.phase === 'result')
+            if (next.phase === 'spinning' || next.phase === 'result') {
               setWinningNumber(res.winningNumber ?? next.winningNumber ?? null);
               setWinningColor(res.winningColor ?? next.winningColor ?? null);
             }
