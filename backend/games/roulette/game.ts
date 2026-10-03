@@ -6,6 +6,7 @@ import { createRouletteFairRound, deriveRouletteOutcome, verifyRouletteFairResul
 import { computeRouletteSettlement } from './settlement.ts';
 import { debitRouletteBet, creditRoulettePayout, refundRouletteBet, rouletteBetIdempotencyKey } from './wallet.ts';
 import { validateRouletteBets, attachRouletteUser } from './bets.ts';
+import { ROULETTE_SOCKET_EVENTS, emitRouletteEvent } from './socket.ts';
 
 /** Server-authoritative roulette module. All shared infrastructure is injected by the thin router. */
 
@@ -153,7 +154,7 @@ setInterval(async () => {
 
       // Start the wheel immediately at the authoritative deadline. DB persistence
       // runs in the background and must not add visible latency.
-      broadcastRealtime('roulette_spin_started', {
+      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.spinStarted, {
         roundId: rouletteState.roundId,
         winningNumber: winningNum,
         winningColor: rouletteState.winningColor,
@@ -178,7 +179,7 @@ setInterval(async () => {
       const currentRoundId = rouletteState.roundId;
       const winningNum = rouletteState.winningNumber ?? 0;
       // Result phase is also visible immediately; settlement/persistence follows.
-      broadcastRealtime('roulette_result', {
+      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.result, {
         roundId: currentRoundId,
         winningNumber: winningNum,
         winningColor: rouletteState.winningColor,
@@ -226,7 +227,7 @@ setInterval(async () => {
 
         // Send the authoritative player outcome from the backend. The frontend
         // must not have to reconstruct settlement from local bet state.
-        broadcastRealtime('roulette_player_result', {
+        emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.playerResult, {
           userId,
           roundId: currentRoundId,
           winningNumber: winningNum,
@@ -247,7 +248,7 @@ setInterval(async () => {
               'roulette',
               payoutKey
             );
-            broadcastRealtime('roulette_wallet_updated', {
+            emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, {
               userId,
               wallet: credit.wallet,
               roundId: currentRoundId
@@ -339,7 +340,7 @@ setInterval(async () => {
         playerSettlements
       };
 
-      broadcastRealtime('roulette_result', {
+      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.result, {
         roundId: rouletteState.roundId,
         winningNumber: winningNum,
         winningColor: settlement.winningColor,
@@ -352,8 +353,8 @@ setInterval(async () => {
         { roomId: GAME_ROOM_ID, winningNumber: winningNum, winningColor: settlement.winningColor, winningCategory: settlement.winningCategory },
         Date.now()
       );
-      broadcastRealtime('roulette_settlement', roundSettlements[rouletteState.roundId]);
-      broadcastRealtime('roulette_wallet_updated', { gameId: 'roulette' });
+      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.settlement, roundSettlements[rouletteState.roundId]);
+      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, { gameId: 'roulette' });
     }
   } else if (rouletteState.phase === 'result') {
     // Keep result timing on the same absolute server clock used by every
@@ -378,12 +379,12 @@ setInterval(async () => {
       rouletteState.serverSeedHash = rouletteFairRound.serverSeedHash;
       currentRoundBets[newRoundId] = [];
 
-      broadcastRealtime('roulette_round_started', {
+      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.roundStarted, {
         roundId: newRoundId,
         countdown: 15,
         endsAt: roulettePhaseEndsAt
       });
-      broadcastRealtime('roulette_betting_open', {
+      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.bettingOpen, {
         roundId: newRoundId,
         countdown: 15,
         endsAt: roulettePhaseEndsAt
@@ -588,7 +589,7 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
     processedRouletteIdempotency.set(idempotencyKey, responsePayload);
   }
 
-  broadcastRealtime('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
+  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, { wallet: await supabaseRepo.getWallet(req.user!.id) });
   return res.json(responsePayload);
 };
 app.post('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handlePostRouletteBets);
@@ -742,10 +743,10 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
     processedRouletteIdempotency.set(idempotencyKey, fullSettlementResult);
   }
 
-  broadcastRealtime('roulette_spin_started', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, countdown: 5 });
-  broadcastRealtime('roulette_result', { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, category: settlement.winningCategory });
-  broadcastRealtime('roulette_settlement', fullSettlementResult);
-  broadcastRealtime('roulette_wallet_updated', { wallet: await supabaseRepo.getWallet(req.user!.id) });
+  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.spinStarted, { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, countdown: 5 });
+  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.result, { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, category: settlement.winningCategory });
+  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.settlement, fullSettlementResult);
+  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, { wallet: await supabaseRepo.getWallet(req.user!.id) });
 
   return res.json(fullSettlementResult);
 };
