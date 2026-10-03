@@ -276,7 +276,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         const state = res.state;
         setGameState(state);
         setCountdown(res.countdown || 15);
-        countdownEndsAtRef.current = Number(res.endsAt || 0) || null;
+        countdownEndsAtRef.current = Number((res as typeof res & { endsAt?: number }).endsAt || 0) || null;
         // Keep confirmedBets in memory through closed/spinning/result so the
         // authoritative result event can calculate the player's outcome.
         // Rendering is already gated by isBettingPhase, and the next-round
