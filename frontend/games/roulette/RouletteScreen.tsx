@@ -333,9 +333,12 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           });
           phaseEndsAtRef.current = Number(payload.endsAt) || Date.now() + Number(payload.countdown || 15) * 1000;
           setCountdown(Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000)));
+          confirmedBetsRef.current = [];
           setConfirmedBets([]);
           setStagedBets([]);
+          setPreviousBets([]);
           setBetHistoryStack([]);
+          setSelectedChip(CHIP_VALUES[0] ?? 100);
           setIsSpinning(false);
           setErrorMsg(null);
           break;
@@ -381,10 +384,14 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           setWinningColor(payload.winningColor);
           if (payload.winningCategory) setWinningCategory(payload.winningCategory);
           setIsSpinning(false);
-          // The round is settled now: never carry its chips into the next betting round.
+          // The round is settled now: never carry its chips or selection history
+          // into the next round. Clear synchronously with the result event.
+          confirmedBetsRef.current = [];
           setConfirmedBets([]);
           setStagedBets([]);
+          setPreviousBets([]);
           setBetHistoryStack([]);
+          setSelectedChip(CHIP_VALUES[0] ?? 100);
           // Recovery path if the targeted WebSocket player-result event was missed.
           void showAuthoritativePlayerResult(String(payload.roundId || currentRoundIdRef.current));
           break;
