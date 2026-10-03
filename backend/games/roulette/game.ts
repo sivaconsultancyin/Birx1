@@ -590,13 +590,17 @@ setInterval(async () => {
       broadcastRealtime('roulette_wallet_updated', { gameId: 'roulette' });
     }
   } else if (rouletteState.phase === 'result') {
-    rouletteState.countdown -= 1;
+    // Keep result timing on the same absolute server clock used by every
+    // other phase. The cycle runs every 100ms, so decrementing by 1 here
+    // would otherwise end a 4-second result phase in roughly 400ms.
+    rouletteState.countdown = Math.max(0, Math.ceil((roulettePhaseEndsAt - Date.now()) / 1000));
     if (rouletteState.countdown <= 0) {
       // Transition to new round
       const newRoundId = 'RL-' + crypto.randomInt(1000, 10000);
       rouletteState.roundId = newRoundId;
       rouletteState.phase = 'betting';
       rouletteState.countdown = 15;
+      roulettePhaseEndsAt = Date.now() + 15000;
       rouletteFairRound = createRouletteFairRound();
       await supabaseRepo.recordGameRound(
         newRoundId,
@@ -610,11 +614,13 @@ setInterval(async () => {
 
       broadcastRealtime('roulette_round_started', {
         roundId: newRoundId,
-        countdown: 15
+        countdown: 15,
+        endsAt: roulettePhaseEndsAt
       });
       broadcastRealtime('roulette_betting_open', {
         roundId: newRoundId,
-        countdown: 15
+        countdown: 15,
+        endsAt: roulettePhaseEndsAt
       });
     }
   }
