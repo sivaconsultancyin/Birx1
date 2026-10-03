@@ -376,18 +376,20 @@ setInterval(async () => {
       rouletteState.phase = 'closed';
       rouletteState.countdown = 2;
       roulettePhaseEndsAt = Date.now() + 2000;
-      await supabaseRepo.recordGameRound(
-        rouletteState.roundId,
-        'roulette',
-        'closed',
-        { roomId: GAME_ROOM_ID, countdown: rouletteState.countdown, closedAt: new Date().toISOString() },
-        Date.now()
-      );
+      // Broadcast the phase transition immediately. Persistence must never
+      // delay the player-visible lock/countdown transition.
       broadcastRealtime('roulette_betting_closed', {
         roundId: rouletteState.roundId,
         countdown: 2,
         endsAt: roulettePhaseEndsAt
       });
+      void supabaseRepo.recordGameRound(
+        rouletteState.roundId,
+        'roulette',
+        'closed',
+        { roomId: GAME_ROOM_ID, countdown: rouletteState.countdown, closedAt: new Date().toISOString() },
+        Date.now()
+      ).catch((error: unknown) => console.error('[Roulette] failed to persist closed phase', error));
     }
   } else if (rouletteState.phase === 'closed') {
     rouletteState.countdown = Math.max(0, Math.ceil((roulettePhaseEndsAt - Date.now()) / 1000));
@@ -401,13 +403,8 @@ setInterval(async () => {
       rouletteState.winningNumber = winningNum;
       rouletteState.winningColor = winningNum === 0 ? 'green' : RED_NUMBERS.includes(winningNum) ? 'red' : 'black';
 
-      await supabaseRepo.recordGameRound(
-        rouletteState.roundId,
-        'roulette',
-        'spinning',
-        { roomId: GAME_ROOM_ID, countdown: 5, winningNumber: winningNum, winningColor: rouletteState.winningColor },
-        Date.now()
-      );
+      // Start the wheel immediately at the authoritative deadline. DB persistence
+      // runs in the background and must not add visible latency.
       broadcastRealtime('roulette_spin_started', {
         roundId: rouletteState.roundId,
         winningNumber: winningNum,
@@ -415,6 +412,13 @@ setInterval(async () => {
         countdown: 5,
         endsAt: roulettePhaseEndsAt
       });
+      void supabaseRepo.recordGameRound(
+        rouletteState.roundId,
+        'roulette',
+        'spinning',
+        { roomId: GAME_ROOM_ID, countdown: 5, winningNumber: winningNum, winningColor: rouletteState.winningColor },
+        Date.now()
+      ).catch((error: unknown) => console.error('[Roulette] failed to persist spinning phase', error));
     }
   } else if (rouletteState.phase === 'spinning') {
     rouletteState.countdown = Math.max(0, Math.ceil((roulettePhaseEndsAt - Date.now()) / 1000));
@@ -424,14 +428,23 @@ setInterval(async () => {
       roulettePhaseEndsAt = Date.now() + 4000;
 
       const currentRoundId = rouletteState.roundId;
-      await supabaseRepo.recordGameRound(
+      const winningNum = rouletteState.winningNumber ?? 0;
+      // Result phase is also visible immediately; settlement/persistence follows.
+      broadcastRealtime('roulette_result', {
+        roundId: currentRoundId,
+        winningNumber: winningNum,
+        winningColor: rouletteState.winningColor,
+        winningCategory: rouletteState.winningCategory,
+        countdown: 4,
+        endsAt: roulettePhaseEndsAt
+      });
+      void supabaseRepo.recordGameRound(
         currentRoundId,
         'roulette',
         'result',
         { roomId: GAME_ROOM_ID, countdown: 4 },
         Date.now()
-      );
-      const winningNum = rouletteState.winningNumber ?? 0;
+      ).catch((error: unknown) => console.error('[Roulette] failed to persist result phase', error));
 
       // Supabase is authoritative. Memory is only a fast fallback for local/dev mode.
       let persistedBets: any[] = [];
@@ -627,7 +640,7 @@ setInterval(async () => {
   } finally {
     rouletteCycleBusy = false;
   }
-}, 1000);
+}, 100);
 
 
 // 1. GET Rules
@@ -650,6 +663,7 @@ const handleGetRouletteRound = (_req: Request, res: Response) => {
     roundId: rouletteState.roundId,
     phase: rouletteState.phase,
     countdown: rouletteState.countdown,
+    endsAt: roulettePhaseEndsAt,
     winningNumber: rouletteState.winningNumber,
     winningColor: rouletteState.winningColor,
     winningCategory: rouletteState.winningCategory,
