@@ -433,9 +433,12 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           break;
         }
         case 'roulette_settlement': {
-          // Legacy settlement event: state/history only. Popup comes exclusively
-          // from the targeted roulette_player_result event.
+          // Settlement is the authoritative recovery point. If the targeted
+          // player-result socket event was missed, fetch this player's
+          // settlement and show the same 2-second popup.
           setIsSpinning(false);
+          const settlementRoundId = String(payload.roundId || currentRoundIdRef.current);
+          void showAuthoritativePlayerResult(settlementRoundId);
           loadStats();
           break;
         }
