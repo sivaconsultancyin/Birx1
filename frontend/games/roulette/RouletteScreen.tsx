@@ -239,6 +239,24 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   const hasSpunRoundRef = useRef<string>('');
   // Prevent duplicate popup/fallback settlement handling for the same round.
   const settledPopupRoundRef = useRef<string>('');
+  const lastRenderedRoundRef = useRef<string>('');
+
+  // A round change can arrive through polling/reconnect instead of the
+  // roulette_round_started socket event. Reset every client-side selection
+  // from the round id itself so no old chip/highlight can survive a missed event.
+  useEffect(() => {
+    const roundId = gameState?.roundId;
+    if (!roundId || lastRenderedRoundRef.current === roundId) return;
+    lastRenderedRoundRef.current = roundId;
+
+    confirmedBetsRef.current = [];
+    setConfirmedBets([]);
+    setStagedBets([]);
+    setPreviousBets([]);
+    setBetHistoryStack([]);
+    setSelectedChip(CHIP_VALUES[0] ?? 100);
+    setIsSpinning(gameState?.phase === 'spinning');
+  }, [gameState?.roundId]);
 
   const isBettingPhase = isStateReady && gameState?.phase === 'betting';
 
@@ -273,6 +291,14 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             prev.recentResults?.[0] !== next.recentResults?.[0];
 
           if (!prev || prev.roundId !== next.roundId || prev.phase !== next.phase || recentChanged) {
+            if (prev?.roundId && prev.roundId !== next.roundId) {
+              confirmedBetsRef.current = [];
+              setConfirmedBets([]);
+              setStagedBets([]);
+              setPreviousBets([]);
+              setBetHistoryStack([]);
+              setSelectedChip(CHIP_VALUES[0] ?? 100);
+            }
             phaseEndsAtRef.current = Number((res as typeof res & { endsAt?: number }).endsAt) || null;
             setCountdown(
               phaseEndsAtRef.current
