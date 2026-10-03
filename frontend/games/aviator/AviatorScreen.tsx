@@ -4,7 +4,6 @@ import { AviatorBet, AviatorState, Wallet } from '../../../src/types.ts';
 import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
-import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
 import { AviatorReferenceCanvas } from './AviatorReferenceCanvas';
 
 interface AviatorScreenProps {
@@ -97,7 +96,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
         } : null);
 
         if (currentBetRef.current && !currentBetRef.current.cashedOut) {
-          notifyWinLoss({ type: 'loss', amount: currentBetRef.current.amount });
+
           setCurrentBet(null);
         }
         // Keep the terminal crash state visible. The next round_started event
@@ -147,7 +146,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
         cashedOut: true,
         winAmount: res.winAmount
       } : null);
-      notifyWinLoss({ type: 'win', amount: res.winAmount });
+
     } catch (err: any) {
       setErrorMsg(err.message || 'Cashout failed');
     } finally {
