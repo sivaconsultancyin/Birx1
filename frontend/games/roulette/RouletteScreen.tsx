@@ -200,6 +200,9 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   const [gameState, setGameState] = useState<RouletteState | null>(null);
   const [countdown, setCountdown] = useState<number>(0);
   const [isStateReady, setIsStateReady] = useState(false);
+  // Server-authoritative phase deadline used for the visible countdown.
+  // Never decrement a local counter independently of the backend clock.
+  const phaseEndsAtRef = useRef<number | null>(null);
 
   // Betting State:
   // stagedBets: chips placed on the table by user in current betting phase (not yet confirmed with server)
@@ -239,13 +242,15 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   const isBettingPhase = isStateReady && gameState?.phase === 'betting';
 
-  // Display countdown ticks locally between authoritative realtime phase events.
-  // The server remains authoritative; this only animates the visible seconds smoothly.
+  // Render the countdown from the backend's absolute deadline. This keeps
+  // the displayed 0 synchronized with the same deadline that starts the wheel.
   useEffect(() => {
-    if (!gameState?.phase) return;
+    if (!phaseEndsAtRef.current || !gameState?.phase) return;
     const timer = window.setInterval(() => {
-      setCountdown((prev) => Math.max(0, prev - 1));
-    }, 1000);
+      const endsAt = phaseEndsAtRef.current;
+      if (!endsAt) return;
+      setCountdown(Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)));
+    }, 100);
     return () => window.clearInterval(timer);
   }, [gameState?.phase, gameState?.roundId]);
 
@@ -268,8 +273,13 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             prev.recentResults?.[0] !== next.recentResults?.[0];
 
           if (!prev || prev.roundId !== next.roundId || prev.phase !== next.phase || recentChanged) {
-            setCountdown(res.countdown ?? next.countdown ?? 0);
-            if (next.phase === 'spinning' || next.phase === 'result') {
+            phaseEndsAtRef.current = Number(res.endsAt) || null;
+            setCountdown(
+              phaseEndsAtRef.current
+                ? Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000))
+                : (res.countdown ?? next.countdown ?? 0)
+            );
+            if (next.phase === 'spinning' || next.phase === 'result')
               setWinningNumber(res.winningNumber ?? next.winningNumber ?? null);
               setWinningColor(res.winningColor ?? next.winningColor ?? null);
             }
@@ -278,7 +288,12 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             return next;
           }
           if (prev?.phase === 'closed' && next.phase !== 'closed') {
-            setCountdown(res.countdown ?? next.countdown ?? 0);
+            phaseEndsAtRef.current = Number(res.endsAt) || null;
+            setCountdown(
+              phaseEndsAtRef.current
+                ? Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000))
+                : (res.countdown ?? next.countdown ?? 0)
+            );
             setIsSpinning(next.phase === 'spinning');
             return next;
           }
@@ -316,7 +331,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
               countdown: payload.countdown || 15
             };
           });
-          setCountdown(payload.countdown || 15);
+          phaseEndsAtRef.current = Number(payload.endsAt) || Date.now() + Number(payload.countdown || 15) * 1000;
+          setCountdown(Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000)));
           setConfirmedBets([]);
           setStagedBets([]);
           setBetHistoryStack([]);
@@ -325,16 +341,20 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           break;
         }
         case 'roulette_betting_closed':
-          setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown ?? 2 } : null));
-          setCountdown(payload.countdown ?? 2);
+          // Legacy compatibility only. New backend transitions directly from
+          // betting to spinning, so this event is no longer part of the cycle.
+          phaseEndsAtRef.current = Number(payload.endsAt) || null;
+          setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown ?? 0 } : null));
+          setCountdown(payload.endsAt ? Math.max(0, Math.ceil((Number(payload.endsAt) - Date.now()) / 1000)) : 0);
           setStagedBets([]);
           break;
         case 'roulette_spin_started': {
           const rId = payload.roundId || currentRoundIdRef.current;
           if (hasSpunRoundRef.current === rId) break;
           hasSpunRoundRef.current = rId;
-          setGameState((prev) => (prev ? { ...prev, phase: 'spinning', countdown: payload.countdown || 6 } : null));
-          setCountdown(payload.countdown || 6);
+          phaseEndsAtRef.current = Number(payload.endsAt) || Date.now() + Number(payload.countdown || 5) * 1000;
+          setGameState((prev) => (prev ? { ...prev, phase: 'spinning', countdown: payload.countdown || 5 } : null));
+          setCountdown(Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000)));
           setWinningNumber(payload.winningNumber);
           setWinningColor(payload.winningColor);
           setIsSpinning(true);
@@ -342,6 +362,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           break;
         }
         case 'roulette_result':
+          phaseEndsAtRef.current = Number(payload.endsAt) || Date.now() + Number(payload.countdown || 4) * 1000;
           setGameState((prev) => {
             if (!prev) return prev;
             const resultNumber = Number(payload.winningNumber);
@@ -355,7 +376,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
               recentResults
             };
           });
-          setCountdown(payload.countdown || 4);
+          setCountdown(Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000)));
           setWinningNumber(payload.winningNumber);
           setWinningColor(payload.winningColor);
           if (payload.winningCategory) setWinningCategory(payload.winningCategory);
@@ -399,7 +420,12 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     try {
       const res = await gamesApi.roulette.getRound();
       setGameState(res.state);
-      setCountdown(res.countdown ?? res.state?.countdown ?? 0);
+      phaseEndsAtRef.current = Number(res.endsAt) || null;
+      setCountdown(
+        phaseEndsAtRef.current
+          ? Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000))
+          : (res.countdown ?? res.state?.countdown ?? 0)
+      );
       setIsStateReady(true);
       if (res.winningNumber !== null) {
         setWinningNumber(res.winningNumber);
