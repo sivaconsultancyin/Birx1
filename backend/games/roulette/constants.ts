@@ -8,7 +8,7 @@ export const BLACK_NUMBERS = [2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35]
 export const ROULETTE_LIMITS = { minimumBet:10, maximumBet:50000, maximumExposure:500000 };
 export const DEFAULT_ROULETTE_CLIENT_SEED = 'roulette-client-v1';
 export type ServerRouletteBet = RouletteBet & { userId:string; placedAt:string };
-export const ROULETTE_PAYOUT_RULES = ROULETTE_PAYOUT_RULES = {
+export const ROULETTE_PAYOUT_RULES = {
   straight: { ratio: '35:1', multiplier: 36, description: 'Straight Up: Single number 0-36 (35:1 profit, 36x gross)' },
   split: { ratio: '17:1', multiplier: 18, description: 'Split: Two adjacent numbers (17:1 profit, 18x gross)' },
   street: { ratio: '11:1', multiplier: 12, description: 'Street: Three numbers in a row (11:1 profit, 12x gross)' },
