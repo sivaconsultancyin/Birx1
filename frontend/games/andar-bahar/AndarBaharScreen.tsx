@@ -8,7 +8,6 @@ import { AndarBaharDealtCard, AndarBaharSide, AndarBaharState, Card, Wallet } fr
 import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
-import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
 import { RealisticCasinoTable } from '../../../src/components/casino/RealisticCasinoTable.tsx';
 import { RealisticLiveShuffleEngine } from '../../../src/components/casino/RealisticLiveShuffleEngine.tsx';
@@ -126,10 +125,7 @@ export const AndarBaharScreen: React.FC<AndarBaharScreenProps> = ({
         if (st.userSettlement.isWin) {
           casinoAudio.playWinChime();
         }
-        notifyWinLoss({
-          type: st.userSettlement.isWin ? 'win' : 'loss',
-          amount: st.userSettlement.isWin ? st.userSettlement.winAmount : st.userSettlement.betAmount
-        });
+
       }
     } catch (err: any) {
       if (!isBackground) setErrorMsg(err.message);
@@ -226,10 +222,6 @@ export const AndarBaharScreen: React.FC<AndarBaharScreenProps> = ({
               casinoAudio.playWinChime();
             }
 
-            notifyWinLoss({
-              type: isWin ? 'win' : 'loss',
-              amount: isWin ? res.winAmount : totalBet
-            });
           }, totalAnimDuration + 500);
         }, 550);
       }, 3800);
