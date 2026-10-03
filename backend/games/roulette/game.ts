@@ -4,6 +4,7 @@ import type { RouletteBet, RouletteState, Wallet } from '../../types.ts';
 import { GAME_ROOM_ID, EUROPEAN_WHEEL, RED_NUMBERS, BLACK_NUMBERS, ROULETTE_LIMITS, DEFAULT_ROULETTE_CLIENT_SEED, ROULETTE_PAYOUT_RULES, type ServerRouletteBet } from './constants.ts';
 import { createRouletteFairRound, deriveRouletteOutcome, verifyRouletteFairResult } from './fairness.ts';
 import { computeRouletteSettlement } from './settlement.ts';
+import { debitRouletteBet, creditRoulettePayout, refundRouletteBet, rouletteBetIdempotencyKey } from './wallet.ts';
 
 /** Server-authoritative roulette module. All shared infrastructure is injected by the thin router. */
 
@@ -510,7 +511,7 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
 
   let debitResult: any;
   try {
-    debitResult = await debitForUser(req, totalBet, `Roulette Bet #${rouletteState.roundId}`, 'roulette', idempotencyKey);
+    debitResult = await debitRouletteBet({ debitForUser }, req, totalBet, `Roulette Bet #${rouletteState.roundId}`, idempotencyKey);
   } catch (e: any) {
     return res.status(400).json({ error: 'Insufficient wallet balance' });
   }
@@ -695,7 +696,7 @@ const handlePostRouletteSpin = async (req: Request, res: Response) => {
 
   // Atomic credit if winning
   if (settlement.grossPayout > 0) {
-    await creditForUser(req, settlement.grossPayout, `Roulette Payout #${currentRoundId}`, 'roulette');
+    await creditRoulettePayout({ creditForUser }, req, settlement.grossPayout, `Roulette Payout #${currentRoundId}`);
   }
 
   // Update server state
