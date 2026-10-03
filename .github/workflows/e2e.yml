@@ -30,7 +30,7 @@ jobs:
       - name: Start local frontend
         run: npm run dev -- --host 127.0.0.1 > /tmp/brix-frontend.log 2>&1 &
       - name: Wait for local app
-        run: npx wait-on http://127.0.0.1:3000 http://127.0.0.1:5173
+        run: node -e "const http=require('http'); const urls=['http://127.0.0.1:3000/api/health','http://127.0.0.1:5173']; let left=new Set(urls); const t=Date.now(); const check=()=>{for(const u of [...left]) http.get(u,r=>{if(r.statusCode<500) left.delete(u); r.resume();}).on('error',()=>{}); if(!left.size) process.exit(0); if(Date.now()-t>120000) process.exit(1); setTimeout(check,1000)}; check();"
       - run: npm run test:e2e -- --workers=2
         env:
           E2E_SMOKE_ONLY: '0'
