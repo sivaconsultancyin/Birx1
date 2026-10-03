@@ -7,7 +7,6 @@ import { DiceBetType, DiceState, Wallet } from '../../../src/types.ts';
 import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { AmountSelector } from '../../../src/components/AmountSelector.tsx';
-import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
 
 interface DiceScreenProps {
@@ -111,10 +110,7 @@ export const DiceScreen: React.FC<DiceScreenProps> = ({
         }
         // Authoritative Win/Loss notification popup
         const isWin = (result.winAmount ?? 0) > 0;
-        notifyWinLoss({
-          type: isWin ? 'win' : 'loss',
-          amount: isWin ? result.winAmount : betAmount
-        });
+
       }, 1200);
     } catch (err: any) {
       clearInterval(rollTicker);
