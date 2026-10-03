@@ -356,10 +356,12 @@ const initializeRouletteRoom = async () => {
 
 void initializeRouletteRoom();
 
-// Background Authoritative Roulette Round Cycle
-// Prevent overlapping async ticks. Settlement/persistence can take longer than one
-// second; a second tick must never race the same shared round.
+// Background Authoritative Roulette Round Cycle.
+// Use absolute deadlines instead of decrementing a counter once per setInterval tick.
+// Async DB/lease work may take >1s; elapsed-time deadlines prevent cumulative drift
+// between the table countdown and the actual phase transition.
 let rouletteCycleBusy = false;
+let roulettePhaseEndsAt = Date.now() + Math.max(1, Number(rouletteState.countdown || 15)) * 1000;
 
 setInterval(async () => {
   if (rouletteCycleBusy || !rouletteRoomReady) return;
@@ -369,10 +371,11 @@ setInterval(async () => {
   const persistedRoulette = await safeGetAuthoritativeGameState('roulette');
   if (persistedRoulette) hydrateRoulettePersistence(persistedRoulette);
   if (rouletteState.phase === 'betting') {
-    rouletteState.countdown -= 1;
+    rouletteState.countdown = Math.max(0, Math.ceil((roulettePhaseEndsAt - Date.now()) / 1000));
     if (rouletteState.countdown <= 0) {
       rouletteState.phase = 'closed';
       rouletteState.countdown = 2;
+      roulettePhaseEndsAt = Date.now() + 2000;
       await supabaseRepo.recordGameRound(
         rouletteState.roundId,
         'roulette',
@@ -380,13 +383,18 @@ setInterval(async () => {
         { roomId: GAME_ROOM_ID, countdown: rouletteState.countdown, closedAt: new Date().toISOString() },
         Date.now()
       );
-      broadcastRealtime('roulette_betting_closed', { roundId: rouletteState.roundId });
+      broadcastRealtime('roulette_betting_closed', {
+        roundId: rouletteState.roundId,
+        countdown: 2,
+        endsAt: roulettePhaseEndsAt
+      });
     }
   } else if (rouletteState.phase === 'closed') {
-    rouletteState.countdown -= 1;
+    rouletteState.countdown = Math.max(0, Math.ceil((roulettePhaseEndsAt - Date.now()) / 1000));
     if (rouletteState.countdown <= 0) {
       rouletteState.phase = 'spinning';
       rouletteState.countdown = 5;
+      roulettePhaseEndsAt = Date.now() + 5000;
 
       // Authoritative RNG generation strictly on server before spin starts
       const winningNum = deriveRouletteOutcome(rouletteFairRound.serverSeed, rouletteFairRound.clientSeed, rouletteFairRound.nonce);
@@ -404,14 +412,16 @@ setInterval(async () => {
         roundId: rouletteState.roundId,
         winningNumber: winningNum,
         winningColor: rouletteState.winningColor,
-        countdown: 5
+        countdown: 5,
+        endsAt: roulettePhaseEndsAt
       });
     }
   } else if (rouletteState.phase === 'spinning') {
-    rouletteState.countdown -= 1;
+    rouletteState.countdown = Math.max(0, Math.ceil((roulettePhaseEndsAt - Date.now()) / 1000));
     if (rouletteState.countdown <= 0) {
       rouletteState.phase = 'result';
       rouletteState.countdown = 4;
+      roulettePhaseEndsAt = Date.now() + 4000;
 
       const currentRoundId = rouletteState.roundId;
       await supabaseRepo.recordGameRound(
