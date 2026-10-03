@@ -273,7 +273,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             prev.recentResults?.[0] !== next.recentResults?.[0];
 
           if (!prev || prev.roundId !== next.roundId || prev.phase !== next.phase || recentChanged) {
-            phaseEndsAtRef.current = Number(res.endsAt) || null;
+            phaseEndsAtRef.current = Number((res as typeof res & { endsAt?: number }).endsAt) || null;
             setCountdown(
               phaseEndsAtRef.current
                 ? Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000))
@@ -288,7 +288,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             return next;
           }
           if (prev?.phase === 'closed' && next.phase !== 'closed') {
-            phaseEndsAtRef.current = Number(res.endsAt) || null;
+            phaseEndsAtRef.current = Number((res as typeof res & { endsAt?: number }).endsAt) || null;
             setCountdown(
               phaseEndsAtRef.current
                 ? Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000))
@@ -420,7 +420,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     try {
       const res = await gamesApi.roulette.getRound();
       setGameState(res.state);
-      phaseEndsAtRef.current = Number(res.endsAt) || null;
+      phaseEndsAtRef.current = Number((res as typeof res & { endsAt?: number }).endsAt) || null;
       setCountdown(
         phaseEndsAtRef.current
           ? Math.max(0, Math.ceil((phaseEndsAtRef.current - Date.now()) / 1000))
