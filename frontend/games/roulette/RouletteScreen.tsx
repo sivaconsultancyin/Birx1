@@ -493,7 +493,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     notifyWinLoss({ type: won ? 'win' : 'loss', amount: Math.max(0, amount), id: 'roulette-' + roundId + '-' + Date.now() });
   };
 
-  const showAuthoritativePlayerResult = async (roundId: string, payload?: any) =>
+  const showAuthoritativePlayerResult = async (roundId: string, payload?: any) => {
     if (!roundId || settledPopupRoundRef.current === roundId) return;
     if (payload && payload.userId) {
       // The backend WebSocket bridge already targets the authenticated player.
@@ -694,6 +694,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   ];
 
   return (
+    <>
     {rouletteWinLossPopup && (
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none">
         <div className="rounded-full border border-white/20 bg-black/90 px-5 py-2.5 shadow-2xl backdrop-blur-md">
@@ -1091,5 +1092,6 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         payouts={payoutsData}
       />
     </div>
+    </>
   );
 };
