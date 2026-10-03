@@ -27,7 +27,6 @@ import { Countdown } from '../../../src/components/Countdown.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
 import { RouletteWheel, RED_NUMBERS_SET } from '../../../src/components/roulette/RouletteWheel.tsx';
 import { RouletteTable } from '../../../src/components/roulette/RouletteTable.tsx';
-import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
 
 interface RouletteScreenProps {
   wallet: Wallet;
@@ -493,7 +492,6 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     setRouletteWinLossPopup({ type: won ? 'win' : 'loss', amount: Math.max(0, amount) });
     if (rouletteWinLossTimerRef.current) clearTimeout(rouletteWinLossTimerRef.current);
     rouletteWinLossTimerRef.current = setTimeout(() => setRouletteWinLossPopup(null), 2000);
-    notifyWinLoss({ type: won ? 'win' : 'loss', amount: Math.max(0, amount), id: 'roulette-' + roundId + '-' + Date.now() });
   };
 
   const showAuthoritativePlayerResult = async (roundId: string, payload?: any) => {
