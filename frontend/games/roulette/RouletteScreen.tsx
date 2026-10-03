@@ -218,6 +218,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   const [winningNumber, setWinningNumber] = useState<number | null>(null);
   const [winningColor, setWinningColor] = useState<'red' | 'black' | 'green' | null>(null);
   const [winningCategory, setWinningCategory] = useState<string | null>(null);
+  const [rouletteWinLossPopup, setRouletteWinLossPopup] = useState<{ type: 'win' | 'loss'; amount: number } | null>(null);
+  const rouletteWinLossTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // UI Modals & Stats
   const [showRules, setShowRules] = useState(false);
@@ -482,17 +484,22 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     }
   };
 
-  const showAuthoritativePlayerResult = async (roundId: string, payload?: any) => {
+  const showRouletteWinLossPopup = (payload: any, roundId: string) => {
+    const won = Boolean(payload?.isWin) && Number(payload?.grossPayout) > 0;
+    const amount = won ? Number(payload?.grossPayout) : Number(payload?.totalBet || 0);
+    setRouletteWinLossPopup({ type: won ? 'win' : 'loss', amount: Math.max(0, amount) });
+    if (rouletteWinLossTimerRef.current) clearTimeout(rouletteWinLossTimerRef.current);
+    rouletteWinLossTimerRef.current = setTimeout(() => setRouletteWinLossPopup(null), 2000);
+    notifyWinLoss({ type: won ? 'win' : 'loss', amount: Math.max(0, amount), id: 'roulette-' + roundId + '-' + Date.now() });
+  };
+
+  const showAuthoritativePlayerResult = async (roundId: string, payload?: any) =>
     if (!roundId || settledPopupRoundRef.current === roundId) return;
     if (payload && payload.userId) {
       // The backend WebSocket bridge already targets the authenticated player.
       settledPopupRoundRef.current = roundId;
       const won = Boolean(payload.isWin) && Number(payload.grossPayout) > 0;
-      notifyWinLoss({
-        type: won ? 'win' : 'loss',
-        amount: won ? Number(payload.grossPayout) : Number(payload.totalBet || 0),
-        id: `roulette-${roundId}`
-      });
+      showRouletteWinLossPopup(payload, roundId);
       return;
     }
     try {
@@ -506,11 +513,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       if (!settlement || settledPopupRoundRef.current === roundId) return;
       settledPopupRoundRef.current = roundId;
       const won = Boolean(settlement.isWin) && Number(settlement.grossPayout) > 0;
-      notifyWinLoss({
-        type: won ? 'win' : 'loss',
-        amount: won ? Number(settlement.grossPayout) : Number(settlement.totalBet || 0),
-        id: `roulette-${roundId}`
-      });
+      showRouletteWinLossPopup(settlement, roundId);
     } catch {
       // WebSocket remains the primary settlement transport.
     }
@@ -691,6 +694,18 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   ];
 
   return (
+    {rouletteWinLossPopup && (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none">
+        <div className="rounded-full border border-white/20 bg-black/90 px-5 py-2.5 shadow-2xl backdrop-blur-md">
+          <span className="text-sm font-black tracking-wide text-white">
+            {rouletteWinLossPopup.type === 'win'
+              ? 'WIN +₹' + rouletteWinLossPopup.amount.toLocaleString('en-IN')
+              : 'LOSS -₹' + rouletteWinLossPopup.amount.toLocaleString('en-IN')}
+          </span>
+        </div>
+      </div>
+    )}
+
     <div
       id="screen-roulette"
       className="h-[100dvh] max-h-[100dvh] w-full max-w-md mx-auto flex flex-col overflow-hidden bg-slate-950 text-white relative select-none"
