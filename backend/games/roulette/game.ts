@@ -373,27 +373,9 @@ setInterval(async () => {
   if (rouletteState.phase === 'betting') {
     rouletteState.countdown = Math.max(0, Math.ceil((roulettePhaseEndsAt - Date.now()) / 1000));
     if (rouletteState.countdown <= 0) {
-      rouletteState.phase = 'closed';
-      rouletteState.countdown = 2;
-      roulettePhaseEndsAt = Date.now() + 2000;
-      // Broadcast the phase transition immediately. Persistence must never
-      // delay the player-visible lock/countdown transition.
-      broadcastRealtime('roulette_betting_closed', {
-        roundId: rouletteState.roundId,
-        countdown: 2,
-        endsAt: roulettePhaseEndsAt
-      });
-      void supabaseRepo.recordGameRound(
-        rouletteState.roundId,
-        'roulette',
-        'closed',
-        { roomId: GAME_ROOM_ID, countdown: rouletteState.countdown, closedAt: new Date().toISOString() },
-        Date.now()
-      ).catch((error: unknown) => console.error('[Roulette] failed to persist closed phase', error));
-    }
-  } else if (rouletteState.phase === 'closed') {
-    rouletteState.countdown = Math.max(0, Math.ceil((roulettePhaseEndsAt - Date.now()) / 1000));
-    if (rouletteState.countdown <= 0) {
+      // The betting deadline is the spin deadline. Do not insert a separate
+      // client-visible "closed" phase: the table countdown reaching zero must
+      // transition to the wheel on the same authoritative server tick.
       rouletteState.phase = 'spinning';
       rouletteState.countdown = 5;
       roulettePhaseEndsAt = Date.now() + 5000;
