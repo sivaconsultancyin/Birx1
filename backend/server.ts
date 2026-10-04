@@ -223,7 +223,7 @@ function broadcastRealtime(event: string, data: Record<string, unknown> = {}) {
 }
 
 websocketServer.on('connection', (socket: WebSocket, user: any) => {
-  const client = { socket, userId: user.id };
+  const client = { socket, userId: user?.id || 'anonymous' };
   websocketClients.add(client);
   socket.send(JSON.stringify({ type: 'connected', time: Date.now() }));
   const heartbeat = setInterval(() => {
@@ -676,14 +676,11 @@ const startServer = async () => {
         return;
       }
       try {
+        // WebSocket transport supports anonymous connections for public game state.
+        // Authentication is still required for all game mutations and private events.
         const user = await authenticateWebSocketRequest(req);
-        if (!user) {
-          socket.write('HTTP/1.1 401 Unauthorized\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n');
-          socket.destroy();
-          return;
-        }
         websocketServer.handleUpgrade(req, socket, head, (ws) => {
-          websocketServer.emit('connection', ws, user);
+          websocketServer.emit('connection', ws, user || { id: 'anonymous' });
         });
       } catch {
         socket.destroy();
