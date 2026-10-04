@@ -13,7 +13,9 @@ test('Aviator runs continuous server-authoritative rounds in one permanent room'
   const firstRound = firstJson.state.roundId;
   const firstRoom = 'aviator-main';
 
-  let sawProgress = false;
+  // The first API read may legitimately land after the flight has already
+  // progressed/crashed. Count that authoritative snapshot as progress too.
+  let sawProgress = firstJson.state.phase === 'running' || firstJson.state.phase === 'crashed';
   let sawNewRound = false;
   // A legitimate round can reach the server-side 50x crash cap before the next round starts.
   // Allow the E2E test to observe the full authoritative lifecycle without false negatives.
