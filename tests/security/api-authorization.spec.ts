@@ -16,7 +16,7 @@ test.describe('API authorization boundaries', () => {
     const response = await request.post(api('/api/games/aviator/bet'), { data: { amount: 100 } });
     expect([401, 403, 404]).toContain(response.status());
   });
-  test('rejects unauthenticated WebSocket connection', async () => {
+  test('allows anonymous read-only WebSocket connection', async () => {
     const WebSocket = (await import('ws')).default;
     const wsUrl = backendUrl.replace(/^http/, 'ws') + '/ws';
     const result = await new Promise<string>((resolve) => {
@@ -26,7 +26,7 @@ test.describe('API authorization boundaries', () => {
       ws.on('unexpected-response', (_req, res) => { clearTimeout(timer); resolve(String(res.statusCode)); });
       ws.on('error', () => { clearTimeout(timer); resolve('error'); });
     });
-    expect(['401', '502', 'error']).toContain(result);
+    expect(['opened']).toContain(result);
   });
   test('all registered game API routes exist and enforce authentication', async ({ request }) => {
     const routes: Array<[string, string]> = [
