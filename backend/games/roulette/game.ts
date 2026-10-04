@@ -33,6 +33,10 @@ let rouletteState: RouletteState = {
 
 let rouletteFairRound = initialFairRound;
 
+// Absolute server deadline for the current phase. It is persisted so a restart
+// resumes from the same authoritative clock instead of starting a fresh 15s timer.
+let roulettePhaseEndsAt = Date.now() + Math.max(1, Number(rouletteState.countdown || 15)) * 1000;
+
 // Tracks whether the authoritative Roulette room has been initialized.
 let rouletteRoomReady = false;
 
@@ -44,6 +48,7 @@ const processedRouletteIdempotency = new Map<string, any>();
 function serializeRoulettePersistence() {
   return {
     ...rouletteState,
+    endsAt: roulettePhaseEndsAt,
     fairRound: rouletteFairRound,
     currentRoundBets,
     roundSettlements,
@@ -62,6 +67,10 @@ function hydrateRoulettePersistence(persisted: any) {
   } = persisted;
 
   if (state.roundId) rouletteState = { ...rouletteState, ...state };
+  const persistedEndsAt = Number((persisted as any).endsAt);
+  if (Number.isFinite(persistedEndsAt) && persistedEndsAt > 0) {
+    roulettePhaseEndsAt = persistedEndsAt;
+  }
 
   if (
     persistedFairRound &&
@@ -128,7 +137,6 @@ void initializeRouletteRoom();
 // Async DB/lease work may take >1s; elapsed-time deadlines prevent cumulative drift
 // between the table countdown and the actual phase transition.
 let rouletteCycleBusy = false;
-let roulettePhaseEndsAt = Date.now() + Math.max(1, Number(rouletteState.countdown || 15)) * 1000;
 
 setInterval(async () => {
   if (rouletteCycleBusy || !rouletteRoomReady) return;
@@ -235,6 +243,8 @@ setInterval(async () => {
           grossPayout: playerSettlement.grossPayout,
           netResult: playerSettlement.netResult,
           isWin: playerSettlement.grossPayout > 0,
+          settlementStatus: 'settled',
+          endsAt: roulettePhaseEndsAt,
         });
 
         if (playerSettlement.grossPayout > 0) {
