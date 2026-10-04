@@ -329,7 +329,9 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       } catch {
         // Realtime remains the primary transport; polling is only recovery.
       }
-    }, 2000);
+    // WebSocket is the primary authoritative transport. Keep HTTP reconciliation
+    // as a low-frequency recovery path instead of polling every 2 seconds.
+    }, 10000);
 
     const unsubscribe = subscribeToRealtimeEvents((event) => {
       const payload: any = event.data || {};
