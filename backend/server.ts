@@ -83,6 +83,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   const allowedOrigins = new Set([
     'https://brix1-frontend.onrender.com',
     ...configuredOrigins,
+    ...(process.env.NODE_ENV !== 'production'
+      ? ['http://127.0.0.1:5173', 'http://localhost:5173']
+      : []),
   ]);
   const origin = String(req.headers.origin || '').replace(/\/$/, '');
   if (origin && allowedOrigins.has(origin)) {
