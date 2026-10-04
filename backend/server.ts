@@ -133,6 +133,10 @@ const transactions: Transaction[] = [];
 const PROCESS_OWNER_ID = `brix-${process.pid}-${crypto.randomUUID()}`;
 let leaseConfigWarningShown = false;
 async function acquireGameLease(gameId: string): Promise<boolean> {
+  // CI/E2E runs use an isolated local authoritative process. Do not contend
+  // with the production Render process through the shared Supabase lease.
+  if (process.env.E2E_TEST_MODE === '1' || process.env.E2E_TEST_MODE === 'true') return true;
+
   // Keep the local game loop alive when the lease RPC is unavailable.
   // A single Node process can safely use its in-memory authoritative state.
   if (!getSupabaseConfigStatus().isConfigured) {
