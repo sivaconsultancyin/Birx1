@@ -367,7 +367,10 @@ setInterval(async () => {
         settlementStatus: 'settled',
         recentResults: rouletteState.recentResults
       });
-      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, { gameId: 'roulette' });
+      // Do not broadcast a wallet update without a userId. Wallet changes are
+      // already sent as targeted events above; an anonymous/public room must never
+      // receive another player's wallet signal.
+
     }
   } else if (rouletteState.phase === 'result') {
     // Keep result timing on the same absolute server clock used by every
