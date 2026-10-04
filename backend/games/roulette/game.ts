@@ -164,8 +164,6 @@ setInterval(async () => {
       // runs in the background and must not add visible latency.
       emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.spinStarted, {
         roundId: rouletteState.roundId,
-        winningNumber: winningNum,
-        winningColor: rouletteState.winningColor,
         countdown: 5,
         endsAt: roulettePhaseEndsAt
       });
@@ -173,7 +171,7 @@ setInterval(async () => {
         rouletteState.roundId,
         'roulette',
         'spinning',
-        { roomId: GAME_ROOM_ID, countdown: 5, winningNumber: winningNum, winningColor: rouletteState.winningColor },
+        { roomId: GAME_ROOM_ID, countdown: 5 },
         Date.now()
       ).catch((error: unknown) => console.error('[Roulette] failed to persist spinning phase', error));
     }
