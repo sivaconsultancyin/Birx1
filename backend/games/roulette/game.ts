@@ -353,7 +353,20 @@ setInterval(async () => {
         { roomId: GAME_ROOM_ID, winningNumber: winningNum, winningColor: settlement.winningColor, winningCategory: settlement.winningCategory },
         Date.now()
       );
-      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.settlement, roundSettlements[rouletteState.roundId]);
+      // Settlement is public room state only. Player-specific amounts/results are
+      // sent through the targeted roulette_player_result event above; never broadcast
+      // the full playerSettlements map to every client.
+      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.settlement, {
+        roundId: currentRoundId,
+        winningNumber: winningNum,
+        winningColor: settlement.winningColor,
+        winningCategory: settlement.winningCategory,
+        totalBet: settlement.totalBet,
+        grossPayout: settlement.grossPayout,
+        netResult: settlement.netResult,
+        settlementStatus: 'settled',
+        recentResults: rouletteState.recentResults
+      });
       emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, { gameId: 'roulette' });
     }
   } else if (rouletteState.phase === 'result') {
