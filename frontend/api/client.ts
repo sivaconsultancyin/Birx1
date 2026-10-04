@@ -25,7 +25,10 @@ import {
   WithdrawalRequest
 } from '../../src/types.ts';
 
-const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'https://brix1-backend.onrender.com';
+const BACKEND_URL = ((import.meta as any).env?.VITE_BACKEND_URL || (import.meta as any).env?.VITE_API_URL || '').trim();
+if (!BACKEND_URL) {
+  throw new Error('VITE_BACKEND_URL is not configured. Set it to the backend server URL before building the frontend.');
+}
 const BASE_URL = `${BACKEND_URL.replace(/\/$/, '')}/api`;
 
 async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
