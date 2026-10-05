@@ -116,8 +116,8 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
           </div>
         </div>
       </header>
-      <main className="flex-1 flex gap-4 p-4 overflow-hidden">
-        <aside className="w-80 flex flex-col gap-4 overflow-hidden">
+      <main className="flex-1 flex gap-4 p-4 overflow-hidden min-h-0">
+        <aside className="hidden lg:flex w-80 shrink-0 flex-col gap-4 overflow-hidden">
           <div className="flex-1 glass rounded-3xl p-5 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2"><TrendingUp size={18} className="text-indigo-400" /><h3 className="font-bold uppercase tracking-wider text-xs">Live Bets</h3></div>
@@ -125,13 +125,13 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
             <div className="flex-1 overflow-y-auto space-y-2 pr-2">
               {gameState?.bets?.map((bet: any, i: number) => (
                 <div key={i} className="flex items-center justify-between p-3 rounded-2xl border bg-white/5 border-white/5">
-                  <div><p className="text-xs font-bold text-gray-400">{bet.username ?? 'Player'}</p><p className="text-sm font-black">${Number(bet.amount ?? 0).toFixed(2)}</p></div>
+                  <div><p className="text-xs font-bold text-gray-400">{bet.username ?? 'Player'}</p><p className="text-sm font-black">₹{Number(bet.amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p></div>
                 </div>
               ))}
             </div>
           </div>
         </aside>
-        <section className="flex-1 flex flex-col gap-4 relative">
+        <section className="flex-1 min-w-0 flex flex-col gap-4 relative">
           <div className="glass rounded-2xl p-2 flex gap-2 overflow-x-auto no-scrollbar">
             <Clock size={16} className="text-gray-500 mt-1 ml-2" />
             {(gameState?.history ?? []).map((h: number, i: number) => (
@@ -161,15 +161,15 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
               );
             })()}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
-              <p className="text-[10rem] font-black tabular-nums tracking-tighter drop-shadow-[0_0_50px_rgba(234,67,53,0.4)] text-white">
+              <p className="text-7xl sm:text-8xl lg:text-[10rem] font-black tabular-nums tracking-tighter drop-shadow-[0_0_50px_rgba(234,67,53,0.4)] text-white">
                 {gameState?.phase === 'crashed' ? Number(gameState.crashMultiplier ?? gameState.multiplier ?? 1).toFixed(2) : Number(gameState?.multiplier ?? 1).toFixed(2)}<span className="text-5xl ml-2 text-red-500">x</span>
               </p>
             </div>
           </div>
-          <div className="glass rounded-3xl p-4 flex gap-3 items-center">
-            <AmountSelector value={betAmount} onChange={setBetAmount} disabled={loading} />
-            <button disabled={loading || !!currentBet || gameState?.phase !== 'betting'} onClick={handlePlaceBet} className="flex-1 bg-red-500 hover:bg-red-400 rounded-2xl py-4 font-black uppercase tracking-widest">{gameState?.phase === 'betting' ? 'BET' : 'WAITING'}</button>
-            <button disabled={loading || !currentBet || currentBet.cashedOut || gameState?.phase !== 'running'} onClick={handleCashOut} className="flex-1 bg-emerald-500 hover:bg-emerald-400 rounded-2xl py-4 font-black uppercase tracking-widest">CASH OUT</button>
+          <div className="glass rounded-3xl p-3 sm:p-4 flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 items-center">
+            <div className="w-full sm:w-auto"><AmountSelector value={betAmount} onChange={setBetAmount} disabled={loading} /></div>
+            <button disabled={loading || !!currentBet || gameState?.phase !== 'betting'} onClick={handlePlaceBet} className="flex-1 min-w-[120px] bg-red-500 hover:bg-red-400 rounded-2xl py-4 font-black uppercase tracking-widest">{gameState?.phase === 'betting' ? 'BET' : 'WAITING'}</button>
+            <button disabled={loading || !currentBet || currentBet.cashedOut || gameState?.phase !== 'running'} onClick={handleCashOut} className="flex-1 min-w-[120px] bg-emerald-500 hover:bg-emerald-400 rounded-2xl py-4 font-black uppercase tracking-widest">CASH OUT</button>
           </div>
         </section>
       </main>
