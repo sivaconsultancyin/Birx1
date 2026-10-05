@@ -110,7 +110,7 @@ async function runAviatorCycle() {
   currentServerSeed = crypto.randomBytes(32).toString('hex');
   currentServerSeedHash = hashSeed(currentServerSeed);
   currentNonce = aviatorRoundSequence;
-  currentCrashTarget = generateCrashPoint();
+  currentCrashTarget = generateCrashPoint(currentServerSeed, currentClientSeed, currentNonce);
 
   broadcastRealtime('round_started', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
