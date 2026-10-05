@@ -112,7 +112,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
             <CheckCircle className="text-amber-400" size={18} /><span className="font-bold text-xs uppercase tracking-widest">Fairness</span>
           </button>
           <div className="flex items-center gap-2 border-l border-white/10 pl-6">
-            <span className="text-lg font-black tabular-nums">${wallet.balance.toFixed(2)}</span>
+            <span className="text-lg font-black tabular-nums">₹{wallet.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
       </header>
@@ -162,14 +162,14 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
             })()}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
               <p className="text-[10rem] font-black tabular-nums tracking-tighter drop-shadow-[0_0_50px_rgba(234,67,53,0.4)] text-white">
-                {gameState?.multiplier ? Number(gameState.multiplier).toFixed(2) : '1.00'}<span className="text-5xl ml-2 text-red-500">x</span>
+                {gameState?.phase === 'crashed' ? Number(gameState.crashMultiplier ?? gameState.multiplier ?? 1).toFixed(2) : Number(gameState?.multiplier ?? 1).toFixed(2)}<span className="text-5xl ml-2 text-red-500">x</span>
               </p>
             </div>
           </div>
           <div className="glass rounded-3xl p-4 flex gap-3 items-center">
             <AmountSelector value={betAmount} onChange={setBetAmount} disabled={loading} />
-            <button disabled={loading || !!currentBet} onClick={handlePlaceBet} className="flex-1 bg-red-500 hover:bg-red-400 rounded-2xl py-4 font-black uppercase tracking-widest">BET</button>
-            <button disabled={loading || !currentBet || gameState?.phase !== 'flying'} onClick={handleCashOut} className="flex-1 bg-emerald-500 hover:bg-emerald-400 rounded-2xl py-4 font-black uppercase tracking-widest">CASH OUT</button>
+            <button disabled={loading || !!currentBet || gameState?.phase !== 'betting'} onClick={handlePlaceBet} className="flex-1 bg-red-500 hover:bg-red-400 rounded-2xl py-4 font-black uppercase tracking-widest">{gameState?.phase === 'betting' ? 'BET' : 'WAITING'}</button>
+            <button disabled={loading || !currentBet || currentBet.cashedOut || gameState?.phase !== 'running'} onClick={handleCashOut} className="flex-1 bg-emerald-500 hover:bg-emerald-400 rounded-2xl py-4 font-black uppercase tracking-widest">CASH OUT</button>
           </div>
         </section>
       </main>
