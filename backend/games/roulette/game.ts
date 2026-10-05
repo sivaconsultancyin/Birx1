@@ -155,6 +155,10 @@ setInterval(async () => {
       rouletteState.countdown = 5;
       roulettePhaseEndsAt = Date.now() + 5000;
 
+      // Persist the phase/deadline before notifying clients so reconnects cannot
+      // create a second clock or skip the authoritative spin phase.
+      await safeSaveAuthoritativeGameState('roulette', serializeRoulettePersistence());
+
       // Authoritative RNG generation strictly on server before spin starts
       const winningNum = deriveRouletteOutcome(rouletteFairRound.serverSeed, rouletteFairRound.clientSeed, rouletteFairRound.nonce);
       rouletteState.winningNumber = winningNum;
@@ -181,6 +185,7 @@ setInterval(async () => {
       rouletteState.phase = 'result';
       rouletteState.countdown = 4;
       roulettePhaseEndsAt = Date.now() + 4000;
+      await safeSaveAuthoritativeGameState('roulette', serializeRoulettePersistence());
 
       const currentRoundId = rouletteState.roundId;
       const winningNum = rouletteState.winningNumber ?? 0;
@@ -402,6 +407,7 @@ setInterval(async () => {
       );
       rouletteState.serverSeedHash = rouletteFairRound.serverSeedHash;
       currentRoundBets[newRoundId] = [];
+      await safeSaveAuthoritativeGameState('roulette', serializeRoulettePersistence());
 
       emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.roundStarted, {
         roundId: newRoundId,
@@ -437,15 +443,19 @@ app.get('/api/games/roulette/rules', requireAuth, requirePlayerForGames, handleG
 
 // 2. GET Round / State
 const handleGetRouletteRound = (_req: Request, res: Response) => {
+  const publicWinningNumber = rouletteState.phase === 'result' ? rouletteState.winningNumber : null;
+  const publicWinningColor = rouletteState.phase === 'result' ? rouletteState.winningColor : null;
+  const publicWinningCategory = rouletteState.phase === 'result' ? rouletteState.winningCategory : null;
+  const publicState = { ...rouletteState, winningNumber: publicWinningNumber, winningColor: publicWinningColor, winningCategory: publicWinningCategory };
   res.json({
-    state: rouletteState,
+    state: publicState,
     roundId: rouletteState.roundId,
     phase: rouletteState.phase,
     countdown: rouletteState.countdown,
     endsAt: roulettePhaseEndsAt,
-    winningNumber: rouletteState.winningNumber,
-    winningColor: rouletteState.winningColor,
-    winningCategory: rouletteState.winningCategory,
+    winningNumber: publicWinningNumber,
+    winningColor: publicWinningColor,
+    winningCategory: publicWinningCategory,
     recentResults: rouletteState.recentResults,
     serverSeedHash: rouletteState.serverSeedHash,
     limits: ROULETTE_LIMITS
@@ -668,111 +678,13 @@ app.get('/api/games/roulette/my-settlement/:roundId', requireAuth, requirePlayer
 
 // 7. POST Spin (Instant spin & authoritative settlement flow)
 const handlePostRouletteSpin = async (req: Request, res: Response) => {
-  const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
-
-  // Idempotency check
-  if (idempotencyKey && processedRouletteIdempotency.has(idempotencyKey)) {
-    return res.json(processedRouletteIdempotency.get(idempotencyKey));
+  // Roulette is now fully server-cycle authoritative, like Aviator.
+  // /spin remains as a compatibility endpoint for older clients, but it never
+  // generates an outcome or settles a round directly.
+  if (rouletteState.phase !== 'betting') {
+    return res.status(409).json({ error: 'Betting is closed for this round', roundId: rouletteState.roundId, phase: rouletteState.phase, countdown: rouletteState.countdown });
   }
-
-  let totalBet = 0;
-  try {
-    totalBet = validateRouletteBets(bets);
-  } catch (error) {
-    return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid roulette bets' });
-  }
-
-  // Atomic debit
-  const currentRoundId = rouletteState.roundId;
-  const fairRoundForSpin = rouletteFairRound;
-  try { await debitForUser(req, totalBet, `Roulette Round ${currentRoundId}`, 'roulette', idempotencyKey); } catch (e: any) {
-    return res.status(400).json({ error: 'Insufficient wallet balance' });
-  }
-
-  // Authoritative server outcome from European wheel (0-36)
-  const winningNum = deriveRouletteOutcome(rouletteFairRound.serverSeed, rouletteFairRound.clientSeed, rouletteFairRound.nonce);
-  const settlement = computeRouletteSettlement(winningNum, bets);
-
-  // Atomic credit if winning
-  if (settlement.grossPayout > 0) {
-    await creditRoulettePayout({ creditForUser }, req, settlement.grossPayout, `Roulette Payout #${currentRoundId}`);
-  }
-
-  // Update server state
-  rouletteState.winningNumber = winningNum;
-  rouletteState.winningColor = settlement.winningColor;
-  rouletteState.winningCategory = settlement.winningCategory;
-  rouletteState.recentResults.unshift(winningNum);
-  if (rouletteState.recentResults.length > 20) rouletteState.recentResults.pop();
-
-  rouletteHistoryRecords.unshift({
-    roundId: currentRoundId,
-    number: winningNum,
-    color: settlement.winningColor,
-    timestamp: new Date().toISOString()
-  });
-  if (rouletteHistoryRecords.length > 50) rouletteHistoryRecords.pop();
-
-  recordHistory({
-    gameId: 'roulette',
-    gameName: 'Roulette',
-    betAmount: totalBet,
-    winAmount: settlement.grossPayout,
-    outcome: `Landed on ${winningNum} ${settlement.winningColor.toUpperCase()}`,
-    multiplier: totalBet > 0 ? Number((settlement.grossPayout / totalBet).toFixed(2)) : 0,
-    settlementStatus: 'settled'
-  });
-
-  const nextRoundId = 'RL-' + crypto.randomInt(1000, 10000);
-  rouletteState.roundId = nextRoundId;
-  rouletteFairRound = createRouletteFairRound();
-      rouletteState.serverSeedHash = rouletteFairRound.serverSeedHash;
-
-  const fullSettlementResult = {
-    success: true,
-    roundId: currentRoundId,
-    nextRoundId,
-    winningNumber: winningNum,
-    winningColor: settlement.winningColor,
-    winningCategory: settlement.winningCategory,
-    winningBets: settlement.winningBets,
-    losingBets: settlement.losingBets,
-    totalBet,
-    winAmount: settlement.grossPayout,
-    grossPayout: settlement.grossPayout,
-    netProfit: settlement.netResult,
-    netResult: settlement.netResult,
-    settlementStatus: 'settled',
-    wallet: await supabaseRepo.getWallet(req.user!.id),
-    recentResults: rouletteState.recentResults,
-    provablyFair: undefined as {
-      serverSeedHash: string;
-      serverSeed: string;
-      clientSeed: string;
-      nonce: string;
-      winningNumber: number;
-    } | undefined
-  };
-
-  fullSettlementResult.provablyFair = {
-    serverSeedHash: fairRoundForSpin.serverSeedHash,
-    serverSeed: fairRoundForSpin.serverSeed,
-    clientSeed: fairRoundForSpin.clientSeed,
-    nonce: fairRoundForSpin.nonce,
-    winningNumber: winningNum
-  };
-  roundSettlements[currentRoundId] = fullSettlementResult;
-
-  if (idempotencyKey) {
-    processedRouletteIdempotency.set(idempotencyKey, fullSettlementResult);
-  }
-
-  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.spinStarted, { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, countdown: 5 });
-  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.result, { roundId: currentRoundId, winningNumber: winningNum, winningColor: settlement.winningColor, category: settlement.winningCategory });
-  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.settlement, fullSettlementResult);
-  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, { wallet: await supabaseRepo.getWallet(req.user!.id) });
-
-  return res.json(fullSettlementResult);
+  return handlePostRouletteBets(req, res);
 };
 app.post('/api/games/roulette/spin', requireAuth, requirePlayerForGames, handlePostRouletteSpin);
 
