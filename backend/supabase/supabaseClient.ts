@@ -677,7 +677,7 @@ const supabaseRepoImpl = {
   },
 
   // GAME ROUND PERSISTENCE
-  async recordGameRound(roundId: string, gameId: string, phase: string, resultData: any, roundNumber?: number) {
+  async recordGameRound(roundId: string, gameId: string, phase: string, resultData: any, roundNumber?: number, serverSeedHash?: string | null) {
     const now = new Date().toISOString();
     dbStore.gameRounds.set(roundId, { id: roundId, gameId, phase, resultData, updatedAt: now });
     const admin = getSupabaseAdmin();
@@ -685,6 +685,7 @@ const supabaseRepoImpl = {
       const { error } = await admin.from('game_rounds').upsert({
         id: roundId, game_id: gameId, round_number: Number(roundNumber ?? Date.now()), phase,
         result_data: resultData ?? null,
+        server_seed_hash: serverSeedHash ?? null,
         started_at: resultData?.startedAt || now,
         closed_at: ['closed','result','settled'].includes(phase) ? now : null,
         settled_at: phase === 'settled' ? now : null
