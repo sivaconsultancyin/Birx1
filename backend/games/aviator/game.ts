@@ -104,7 +104,7 @@ async function runAviatorCycle() {
   lastPersistedFlightSecond = -1;
   aviatorRoundSequence += 1;
   aviatorRoundStats.set(aviatorState.roundId, { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 });
-  await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'betting', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
+  await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'betting', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence, currentServerSeedHash);
   // Bets are keyed by authenticated user and survive the round reset independently.
   // Commit the server seed before deriving this round's crash point.
   currentServerSeed = crypto.randomBytes(32).toString('hex');
