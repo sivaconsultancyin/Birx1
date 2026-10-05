@@ -1,4 +1,8 @@
 import crypto from 'node:crypto';
+import { AVIATOR_ROOM_ID, INITIAL_AVIATOR_STATE, AVIATOR_BETTING_SECONDS, AVIATOR_RESULT_DELAY_MS } from './constants.ts';
+import { hashSeed, generateCrashPoint, createAviatorFairRound } from './fairness.ts';
+import { emitAviatorEvent, AVIATOR_SOCKET_EVENTS } from './socket.ts';
+import { calculateAviatorPayout, createAviatorLossOutcome, createAviatorWinOutcome } from './settlement.ts';
 import type { Request, Response } from 'express';
 import type { Card, RouletteBet, RouletteState, TeenPattiPlayer, TeenPattiState, AviatorBet, AviatorState, DiceState, DragonTigerState, DragonTigerBetSide, AndarBaharState, AndarBaharSide, GameHistoryEntry, User, Wallet, Transaction } from '../../types.ts';
 
@@ -9,17 +13,9 @@ export function registerAviatorGame(app: any, deps: any) {
   const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
-const AVIATOR_ROOM_ID = 'aviator-main';
 
-let aviatorState: AviatorState = {
-  roomId: GAME_ROOM_ID,
-  roundId: 'AV-' + crypto.randomInt(1000, 10000),
-  phase: 'betting',
-  multiplier: 1.0,
-  crashMultiplier: null,
-  countdown: 5,
-  previousMultipliers: [2.14, 1.35, 12.8, 1.88, 3.42, 1.05, 5.61]
-};
+
+let aviatorState: AviatorState = { ...INITIAL_AVIATOR_STATE, roundId: 'AV-' + crypto.randomInt(1000, 10000) };
 
 const aviatorBets = new Map<string, AviatorBet>();
 const aviatorRoundStats = new Map<string, { totalBets: number; totalBetAmount: number; totalPayoutAmount: number }>();
@@ -30,31 +26,8 @@ let currentServerSeed = crypto.randomBytes(32).toString('hex');
 let currentServerSeedHash = hashSeed(currentServerSeed);
 let currentClientSeed = 'brix1-public';
 let currentNonce = 0;
-let currentCrashTarget = generateCrashPoint();
+let currentCrashTarget = generateCrashPoint(currentServerSeed, currentClientSeed, currentNonce);
 
-function hashSeed(seed: string): string {
-  return crypto.createHash('sha256').update(seed, 'utf8').digest('hex');
-}
-
-function deriveFairRandom(serverSeed: string, clientSeed: string, nonce: number): number {
-  const message = `${clientSeed}:${nonce}`;
-  const digest = crypto.createHmac('sha256', serverSeed).update(message, 'utf8').digest();
-  // Convert exactly 52 bits from the HMAC digest into U in [0, 1).
-  // The previous implementation used all 64 bits but divided by 2^52,
-  // producing values above 1 and forcing the crash formula to 1.05x.
-  const high32 = digest.readUInt32BE(0);
-  const low20 = digest.readUInt32BE(4) >>> 12;
-  const value = high32 * 0x100000 + low20;
-  return value / 0x10000000000000;
-}
-
-function generateCrashPoint(): number {
-  const rand = deriveFairRandom(currentServerSeed, currentClientSeed, currentNonce);
-  currentNonce += 1;
-  if (rand < 0.05) return 1.0 + Number(((deriveFairRandom(currentServerSeed, currentClientSeed, currentNonce) * 0.15)).toFixed(2));
-  const raw = 0.97 / (1 - rand);
-  return Number(Math.max(1.05, Math.min(raw, 50.0)).toFixed(2));
-}
 let aviatorTimer: NodeJS.Timeout | null = null;
 let lastPersistedFlightSecond = -1;
 let flightStartedAt = 0;
@@ -201,7 +174,7 @@ async function startAviatorFlight() {
           gameName: 'Aviator',
           betAmount: currentAviatorBet.amount,
           winAmount: 0,
-          outcome: `Flew away @ ${currentCrashTarget}x`,
+          outcome: createAviatorLossOutcome(currentCrashTarget),
           multiplier: 0,
           settlementStatus: 'settled'
         });
@@ -243,7 +216,7 @@ async function startAviatorFlight() {
       // Persist the terminal state, then start the next round in the same permanent room.
       await persistAviatorState();
       stopLeaseHeartbeat();
-      setTimeout(() => { void runAviatorCycle(); }, 3500);
+      setTimeout(() => { void runAviatorCycle(); }, AVIATOR_RESULT_DELAY_MS);
     } else {
       aviatorState.multiplier = nextMult;
       // WebSocket is the primary high-frequency live transport. Supabase persistence
@@ -371,7 +344,7 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async
 
   // Authoritative payout calculated strictly on server
   const cashMultiplier = aviatorState.multiplier;
-  const payout = Math.floor(currentAviatorBet.amount * cashMultiplier);
+  const payout = calculateAviatorPayout(currentAviatorBet, cashMultiplier);
 
   const payoutIdempotencyKey = `aviator_payout_${currentAviatorBet.betId}`;
   try {
@@ -405,7 +378,7 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async
     gameName: 'Aviator',
     betAmount: currentAviatorBet.amount,
     winAmount: payout,
-    outcome: `Cashed out @ ${cashMultiplier}x`,
+    outcome: createAviatorWinOutcome(cashMultiplier),
     multiplier: cashMultiplier,
     settlementStatus: 'settled'
   });
