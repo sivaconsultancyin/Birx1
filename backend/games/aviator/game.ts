@@ -56,6 +56,10 @@ async function persistAviatorState() {
     ...aviatorState,
     version: authoritativeVersion,
     crashTarget: currentCrashTarget,
+    serverSeed: currentServerSeed,
+    serverSeedHash: currentServerSeedHash,
+    clientSeed: currentClientSeed,
+    nonce: currentNonce,
     activeBets: Object.fromEntries(aviatorBets.entries())
   });
 }
@@ -64,13 +68,22 @@ async function hydrateAviatorState() {
   try {
     const persisted = await safeGetAuthoritativeGameState('aviator');
     if (!persisted) return;
-    const { crashTarget, activeBets, ...sharedState } = persisted as any;
+    const { crashTarget, serverSeed, serverSeedHash, clientSeed, nonce, activeBets, ...sharedState } = persisted as any;
     const incomingVersion = Number(sharedState.version || 0);
     if (incomingVersion <= lastHydratedVersion) return;
     lastHydratedVersion = incomingVersion;
     authoritativeVersion = Math.max(authoritativeVersion, incomingVersion);
     if (sharedState.roundId) aviatorState = { ...aviatorState, ...sharedState };
+    if (typeof serverSeed === 'string' && serverSeed.length > 0) currentServerSeed = serverSeed;
+    if (typeof serverSeedHash === 'string' && serverSeedHash.length > 0) currentServerSeedHash = serverSeedHash;
+    if (typeof clientSeed === 'string' && clientSeed.length > 0) currentClientSeed = clientSeed;
+    if (Number.isFinite(Number(nonce))) currentNonce = Number(nonce);
     if (typeof crashTarget === 'number') currentCrashTarget = crashTarget;
+    // Recover a missing target from the recovered fairness inputs rather than
+    // mixing a persisted target with a newly generated seed.
+    if (typeof crashTarget !== 'number' && currentServerSeed) {
+      currentCrashTarget = generateCrashPoint(currentServerSeed, currentClientSeed, currentNonce);
+    }
     if (activeBets && typeof activeBets === 'object') {
       aviatorBets.clear();
       for (const [userId, bet] of Object.entries(activeBets)) {
@@ -104,13 +117,13 @@ async function runAviatorCycle() {
   lastPersistedFlightSecond = -1;
   aviatorRoundSequence += 1;
   aviatorRoundStats.set(aviatorState.roundId, { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 });
-  await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'betting', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence, currentServerSeedHash);
-  // Bets are keyed by authenticated user and survive the round reset independently.
-  // Commit the server seed before deriving this round's crash point.
+  // Generate and commit the fairness material before recording the round so the
+  // DB hash belongs to this exact round, never the previous one.
   currentServerSeed = crypto.randomBytes(32).toString('hex');
   currentServerSeedHash = hashSeed(currentServerSeed);
   currentNonce = aviatorRoundSequence;
   currentCrashTarget = generateCrashPoint(currentServerSeed, currentClientSeed, currentNonce);
+  await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'betting', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence, currentServerSeedHash);
 
   broadcastRealtime('round_started', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
@@ -145,7 +158,7 @@ async function startAviatorFlight() {
   // skip directly from betting to crashed/next-round on very short crash points.
   await persistAviatorState();
 
-  await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'in_flight', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence);
+  await supabaseRepo.recordGameRound(aviatorState.roundId, 'aviator', 'in_flight', { startedAt: new Date().toISOString(), roomId: AVIATOR_ROOM_ID }, aviatorRoundSequence, currentServerSeedHash);
 
   broadcastRealtime('betting_closed', { gameId: 'aviator', roomId: AVIATOR_ROOM_ID, roundId: aviatorState.roundId });
 
