@@ -483,7 +483,7 @@ const handleGetRouletteRound = (_req: Request, res: Response) => {
 app.get('/api/games/roulette/round', requireAuth, requirePlayerForGames, handleGetRouletteRound);
 app.get('/api/games/roulette/state', requireAuth, requirePlayerForGames, handleGetRouletteRound);
 
-app.get('/api/games/roulette/fairness/:roundId', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
+app.get('/api/games/roulette/fairness/:roundId', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   const roundId = req.params.roundId;
   let settlement = roundSettlements[roundId];
   if (!settlement?.provablyFair) {
