@@ -24,10 +24,10 @@ let rouletteState: RouletteState = {
   roundId: newRouletteRoundId(),
   phase: 'betting',
   countdown: 15,
-  winningNumber: 17,
-  winningColor: 'black',
-  winningCategory: '17 BLACK • Odd • Low (1-18) • 2nd Dozen • 2nd Col',
-  recentResults: [17, 32, 0, 26, 3, 15, 28, 21, 4, 19],
+  winningNumber: null,
+  winningColor: null,
+  winningCategory: '',
+  recentResults: [],
   serverSeedHash: initialFairRound.serverSeedHash,
   minimumBet: ROULETTE_LIMITS.minimumBet,
   maximumBet: ROULETTE_LIMITS.maximumBet,
@@ -175,8 +175,8 @@ setInterval(async () => {
       // client-visible "closed" phase: the table countdown reaching zero must
       // transition to the wheel on the same authoritative server tick.
       rouletteState.phase = 'spinning';
-      rouletteState.countdown = 5;
-      roulettePhaseEndsAt = Date.now() + 5000;
+      rouletteState.countdown = 6;
+      roulettePhaseEndsAt = Date.now() + 6000;
 
       // Persist the phase/deadline before notifying clients so reconnects cannot
       // create a second clock or skip the authoritative spin phase.
@@ -191,7 +191,7 @@ setInterval(async () => {
       // runs in the background and must not add visible latency.
       emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.spinStarted, {
         roundId: rouletteState.roundId,
-        countdown: 5,
+        countdown: 6,
         endsAt: roulettePhaseEndsAt,
         winningNumber: winningNum,
         winningColor: rouletteState.winningColor
@@ -200,7 +200,7 @@ setInterval(async () => {
         rouletteState.roundId,
         'roulette',
         'spinning',
-        { roomId: GAME_ROOM_ID, countdown: 5 },
+        { roomId: GAME_ROOM_ID, countdown: 6 },
         Date.now()
       ).catch((error: unknown) => console.error('[Roulette] failed to persist spinning phase', error));
     }
