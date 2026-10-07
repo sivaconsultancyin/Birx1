@@ -7,5 +7,4 @@ export const ROULETTE_ROUTES = {
   history: '/history',
   fairness: '/fairness/:roundId',
   settlement: '/settlement/:roundId',
-  mySettlement: '/my-settlement/:roundId',
 } as const;
