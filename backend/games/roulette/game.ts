@@ -259,6 +259,7 @@ setInterval(async () => {
         // database settlement RPC below. Do not credit here independently.
       }
 
+      if (persistedBets.length) {
         const winningBets = persistedBets
           .map(row => {
             const rowBet = {
