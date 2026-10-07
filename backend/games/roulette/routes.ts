@@ -4,7 +4,6 @@ export const ROULETTE_ROUTES = {
   round: '/round',
   state: '/state',
   bets: '/bets',
-  spin: '/spin',
   history: '/history',
   fairness: '/fairness/:roundId',
   settlement: '/settlement/:roundId',
