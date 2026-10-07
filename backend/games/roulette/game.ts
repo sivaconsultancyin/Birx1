@@ -579,9 +579,10 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
 
   // Persist the authoritative bet before the request completes so a process restart
   // cannot lose a debit that was already accepted.
+  const persistedBetIds: string[] = [];
   try {
     for (const bet of serverBets) {
-      await supabaseRepo.recordGameBet({
+      const persisted = await supabaseRepo.recordGameBet({
         id: `roulette:${rouletteState.roundId}:${userId}:${crypto.randomUUID()}`,
         roundId: rouletteState.roundId,
         userId,
