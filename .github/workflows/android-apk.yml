@@ -24,14 +24,11 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install web dependencies
-        run: npm install
+      - name: Install locked dependencies
+        run: npm ci
 
       - name: Build web app
         run: npm run build
-
-      - name: Install Capacitor Android tooling
-        run: npm install --no-save @capacitor/core @capacitor/cli @capacitor/android
 
       - name: Create Android project
         run: npx cap add android
@@ -41,7 +38,7 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
