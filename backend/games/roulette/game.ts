@@ -48,6 +48,36 @@ const currentRoundBets: Record<string, ServerRouletteBet[]> = {};
 const roundSettlements: Record<string, any> = {};
 const processedRouletteIdempotency = new Map<string, any>();
 
+const MAX_IN_MEMORY_ROULETTE_ROUNDS = 25;
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+
+function cleanupRouletteMemory() {
+  const keepRounds = new Set<string>([
+    rouletteState.roundId,
+    ...Object.keys(currentRoundBets).slice(-MAX_IN_MEMORY_ROULETTE_ROUNDS),
+    ...Object.keys(roundSettlements).slice(-MAX_IN_MEMORY_ROULETTE_ROUNDS)
+  ]);
+
+  for (const roundId of Object.keys(currentRoundBets)) {
+    if (!keepRounds.has(roundId)) delete currentRoundBets[roundId];
+  }
+  const settlementIds = Object.keys(roundSettlements);
+  for (const roundId of settlementIds.slice(0, Math.max(0, settlementIds.length - MAX_IN_MEMORY_ROULETTE_ROUNDS))) {
+    delete roundSettlements[roundId];
+  }
+
+  const now = Date.now();
+  for (const [key, value] of processedRouletteIdempotency.entries()) {
+    const createdAt = Number(value?.createdAt || value?.timestamp || 0);
+    if (createdAt > 0 && now - createdAt > IDEMPOTENCY_TTL_MS) processedRouletteIdempotency.delete(key);
+  }
+  while (processedRouletteIdempotency.size > 5000) {
+    const oldest = processedRouletteIdempotency.keys().next().value;
+    if (oldest === undefined) break;
+    processedRouletteIdempotency.delete(oldest);
+  }
+}
+
 function serializeRoulettePersistence() {
   return {
     ...rouletteState,
@@ -141,6 +171,7 @@ void initializeRouletteRoom();
 // between the table countdown and the actual phase transition.
 let rouletteCycleBusy = false;
 
+cleanupRouletteMemory();
 setInterval(async () => {
   if (rouletteCycleBusy || !rouletteRoomReady) return;
   rouletteCycleBusy = true;
@@ -411,6 +442,7 @@ setInterval(async () => {
       // Transition to new round
       const newRoundId = newRouletteRoundId();
       rouletteState.roundId = newRoundId;
+      cleanupRouletteMemory();
       rouletteState.phase = 'betting';
       rouletteState.countdown = 15;
       roulettePhaseEndsAt = Date.now() + 15000;
@@ -668,7 +700,7 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
   };
 
   if (idempotencyKey) {
-    processedRouletteIdempotency.set(idempotencyKey, responsePayload);
+    processedRouletteIdempotency.set(idempotencyKey, { ...responsePayload, createdAt: Date.now() });
   }
 
   emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, { wallet: await supabaseRepo.getWallet(req.user!.id) });
@@ -709,71 +741,65 @@ const handleGetRouletteBets = async (req: Request, res: Response) => {
 app.get('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handleGetRouletteBets);
 
 // 6. GET Settlement by roundId
-const handleGetRouletteSettlement = (req: Request, res: Response) => {
+const handleGetRouletteSettlement = async (req: Request, res: Response) => {
   const roundId = req.params.roundId || rouletteState.roundId;
-  const settlement = roundSettlements[roundId];
-  const userId = req.user!.id;
-
+  let settlement = roundSettlements[roundId];
   if (!settlement) {
-    return res.status(404).json({ error: `Settlement not found for round ${roundId}` });
-  }
-
-  // Never expose the full playerSettlements map. It contains per-user wager and
-  // payout information and is not a public game-state field.
-  const playerSettlement = settlement.playerSettlements?.[userId];
-  return res.json({
-    settlement: {
+    const persisted = await supabaseRepo.getSettlementByRound(roundId, 'roulette');
+    if (persisted) settlement = {
+      ...persisted.details,
       roundId,
-      winningNumber: settlement.winningNumber,
-      winningColor: settlement.winningColor,
-      winningCategory: settlement.winningCategory,
-      settlementStatus: settlement.settlementStatus,
-      totalBet: playerSettlement?.totalBet ?? 0,
-      grossPayout: playerSettlement?.grossPayout ?? 0,
-      netResult: playerSettlement?.netResult ?? 0,
-      isWin: (playerSettlement?.grossPayout ?? 0) > 0
-    }
-  });
+      winningNumber: persisted.details?.winningNumber,
+      winningColor: persisted.details?.winningColor,
+      winningCategory: persisted.details?.winningCategory,
+      settlementStatus: 'settled',
+      playerSettlements: persisted.details?.playerSettlements || {}
+    };
+  }
+  if (!settlement) return res.status(404).json({ error: `Settlement not found for round ${roundId}` });
+  const playerSettlement = settlement.playerSettlements?.[req.user!.id];
+  return res.json({ settlement: {
+    roundId,
+    winningNumber: settlement.winningNumber,
+    winningColor: settlement.winningColor,
+    winningCategory: settlement.winningCategory,
+    settlementStatus: settlement.settlementStatus,
+    totalBet: playerSettlement?.totalBet ?? 0,
+    grossPayout: playerSettlement?.grossPayout ?? 0,
+    netResult: playerSettlement?.netResult ?? 0,
+    isWin: (playerSettlement?.grossPayout ?? 0) > 0
+  }});
 };
+
 app.get('/api/games/roulette/settlement/:roundId', requireAuth, requirePlayerForGames, handleGetRouletteSettlement);
 
 // 7. GET the authenticated player's settlement only.
 // This is a recovery path when a WebSocket player-result event is missed.
-const handleGetMyRouletteSettlement = (req: Request, res: Response) => {
-  const roundId = req.params.roundId;
-  const settlement = roundSettlements[roundId];
-  const userId = req.user!.id;
-  const playerSettlement = settlement?.playerSettlements?.[userId];
-  if (!playerSettlement) {
-    return res.status(404).json({ error: 'Player settlement not found for this round' });
+const handleGetMyRouletteSettlement = async (req: Request, res: Response) => {
+  const roundId = req.params.roundId || rouletteState.roundId;
+  let settlement = roundSettlements[roundId];
+  if (!settlement) {
+    const persisted = await supabaseRepo.getSettlementByRound(roundId, 'roulette');
+    if (persisted) settlement = { ...persisted.details, settlementStatus: 'settled' };
   }
-  return res.json({
-    settlement: {
-      roundId,
-      winningNumber: settlement.winningNumber,
-      winningColor: settlement.winningColor,
-      winningCategory: settlement.winningCategory,
-      totalBet: playerSettlement.totalBet,
-      grossPayout: playerSettlement.grossPayout,
-      netResult: playerSettlement.netResult,
-      isWin: playerSettlement.grossPayout > 0,
-      settlementStatus: settlement.settlementStatus
-    }
-  });
+  const playerSettlement = settlement?.playerSettlements?.[req.user!.id];
+  if (!playerSettlement) return res.status(404).json({ error: 'Player settlement not found for this round' });
+  return res.json({ settlement: {
+    roundId,
+    winningNumber: settlement.winningNumber,
+    winningColor: settlement.winningColor,
+    winningCategory: settlement.winningCategory,
+    totalBet: playerSettlement.totalBet,
+    grossPayout: playerSettlement.grossPayout,
+    netResult: playerSettlement.netResult,
+    isWin: playerSettlement.grossPayout > 0,
+    settlementStatus: settlement.settlementStatus
+  }});
 };
+
 app.get('/api/games/roulette/my-settlement/:roundId', requireAuth, requirePlayerForGames, handleGetMyRouletteSettlement);
 
 // 7. POST Spin (Instant spin & authoritative settlement flow)
-const handlePostRouletteSpin = async (req: Request, res: Response) => {
-  // Roulette is now fully server-cycle authoritative, like Aviator.
-  // /spin remains as a compatibility endpoint for older clients, but it never
-  // generates an outcome or settles a round directly.
-  if (rouletteState.phase !== 'betting') {
-    return res.status(409).json({ error: 'Betting is closed for this round', roundId: rouletteState.roundId, phase: rouletteState.phase, countdown: rouletteState.countdown });
-  }
-  return handlePostRouletteBets(req, res);
-};
-app.post('/api/games/roulette/spin', requireAuth, requirePlayerForGames, handlePostRouletteSpin);
 
 
 // -------------------------------------------------------------
