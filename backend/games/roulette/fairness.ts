@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { EUROPEAN_WHEEL, DEFAULT_ROULETTE_CLIENT_SEED } from './constants.ts';
+import { EUROPEAN_WHEEL } from './constants.ts';
 
 export function createRouletteFairRound() {
   const serverSeed = crypto.randomBytes(32).toString('hex');
@@ -7,7 +7,7 @@ export function createRouletteFairRound() {
   return {
     serverSeed,
     serverSeedHash,
-    clientSeed: DEFAULT_ROULETTE_CLIENT_SEED,
+    clientSeed: crypto.randomBytes(16).toString('hex'),
     nonce: crypto.randomBytes(16).toString('hex'),
   };
 }
