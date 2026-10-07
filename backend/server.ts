@@ -252,9 +252,9 @@ async function authenticateWebSocketRequest(req: import('node:http').IncomingMes
 
 // Supabase remains the authoritative persistence/realtime source; WebSocket is the client transport.
 let stopAuthoritativeRealtime: (() => void) | null = null;
-function startAuthoritativeRealtimeBridge() {
+async function startAuthoritativeRealtimeBridge() {
   if (stopAuthoritativeRealtime || !getSupabaseConfigStatus().isConfigured) return;
-  stopAuthoritativeRealtime = supabaseRepo.subscribeToAuthoritativeGameStates((payload: any) => {
+  stopAuthoritativeRealtime = await supabaseRepo.subscribeToAuthoritativeGameStates((payload: any) => {
     const row = payload?.new;
     if (!row?.game_id || !row?.state) return;
     const rawState = row.state;
@@ -286,7 +286,7 @@ function startAuthoritativeRealtimeBridge() {
     });
   });
 }
-startAuthoritativeRealtimeBridge();
+// Realtime bridge is started and awaited inside startServer() before /ready is exposed.
 
 // -------------------------------------------------------------
 // HEALTH CHECK
@@ -681,6 +681,11 @@ const startServer = async () => {
     }
     // Browsers request /favicon.ico automatically; return an explicit empty response so this is not a real missing resource.
     app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204).end());
+
+    // Establish the authoritative DB -> WebSocket bridge before the HTTP server
+    // becomes reachable. This prevents the first game-state update from racing
+    // Supabase Realtime channel startup.
+    await startAuthoritativeRealtimeBridge();
     // Frontend is deployed separately. The backend serves API + WebSocket only.
     // Do not mount Vite or serve dist/index.html from the production backend.
 
