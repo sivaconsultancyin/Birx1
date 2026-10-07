@@ -275,12 +275,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   // 1. Initial State & Real-time Synchronization (WebSocket)
   useEffect(() => {
-    loadState();
-    loadStats();
-
-    // Restore this player's confirmed bets after refresh/reconnect.
-    // The backend filters by authenticated user and reads Supabase first.
-    void gamesApi.roulette.getBets().then((res) => {
+    void loadState().then(() => gamesApi.roulette.getBets()).then((res) => {
       if (!res?.roundId || res.roundId !== currentRoundIdRef.current) return;
       const restored = Array.isArray(res.bets) ? res.bets : [];
       if (restored.length > 0) {
@@ -290,6 +285,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     }).catch(() => {
       // Realtime/state reconciliation remains authoritative.
     });
+    loadStats();
 
     // Reconcile against the authoritative round endpoint so a missed realtime
     // event cannot leave betting stuck in an old phase.
