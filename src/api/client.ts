@@ -362,7 +362,14 @@ export const gamesApi = {
       }
 
       try {
-        const result = await fetchJson('/games/roulette/bets', {
+        const result = await fetchJson<{
+          success: boolean;
+          roundId: string;
+          bets: RouletteBet[];
+          totalBetPlaced: number;
+          wallet: Wallet;
+          countdown: number;
+        }>('/games/roulette/bets', {
           method: 'POST',
           body: JSON.stringify({ bets, idempotencyKey: retryKey })
         });
