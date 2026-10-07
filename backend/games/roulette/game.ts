@@ -237,6 +237,16 @@ setInterval(async () => {
         persistedBets = await supabaseRepo.getRoundBets(currentRoundId, 'roulette');
       } catch (error) {
         console.error(`[RouletteSettlement:${currentRoundId}] failed to load persisted bets`, error);
+        if (process.env.NODE_ENV === 'production') {
+          throw error;
+        }
+      }
+
+      if (process.env.NODE_ENV === 'production' && persistedBets.length === 0) {
+        // A production settlement must never silently fall back to process memory.
+        // An empty DB read can otherwise turn a real debit into an unsettled bet.
+        const hasAnyBets = (currentRoundBets[currentRoundId] || []).length > 0;
+        if (hasAnyBets) throw new Error('Roulette persisted bets unavailable; settlement must retry');
       }
 
       const bets: ServerRouletteBet[] = persistedBets.length
@@ -281,25 +291,37 @@ setInterval(async () => {
         const losingBetIds = persistedBets.filter(row => !winningIds.has(row.id)).map(row => row.id);
 
         try {
-          await supabaseRepo.atomicSettleRouletteRound({
-            roundId: currentRoundId,
-            resultData: {
-              winningNumber: winningNum,
-              winningColor: settlement.winningColor,
-              winningCategory: settlement.winningCategory,
-              playerSettlements,
-              provablyFair: {
-                serverSeed: rouletteFairRound.serverSeed,
-                serverSeedHash: rouletteFairRound.serverSeedHash,
-                clientSeed: rouletteFairRound.clientSeed,
-                nonce: rouletteFairRound.nonce,
-                winningNumber: winningNum
-              }
-            },
-            winningBets,
-            losingBetIds,
-            outcomeSummary: `Landed on ${winningNum} ${settlement.winningColor.toUpperCase()}`
-          });
+          let settlementCommitted = false;
+          let lastSettlementError: unknown = null;
+          for (let attempt = 1; attempt <= 3 && !settlementCommitted; attempt++) {
+            try {
+              await supabaseRepo.atomicSettleRouletteRound({
+                roundId: currentRoundId,
+                resultData: {
+                  winningNumber: winningNum,
+                  winningColor: settlement.winningColor,
+                  winningCategory: settlement.winningCategory,
+                  playerSettlements,
+                  provablyFair: {
+                    serverSeed: rouletteFairRound.serverSeed,
+                    serverSeedHash: rouletteFairRound.serverSeedHash,
+                    clientSeed: rouletteFairRound.clientSeed,
+                    nonce: rouletteFairRound.nonce,
+                    winningNumber: winningNum
+                  }
+                },
+                winningBets,
+                losingBetIds,
+                outcomeSummary: `Landed on ${winningNum} ${settlement.winningColor.toUpperCase()}`
+              });
+              settlementCommitted = true;
+            } catch (error) {
+              lastSettlementError = error;
+              console.error(`[RouletteSettlement:${currentRoundId}] atomic attempt ${attempt}/3 failed`, error);
+              if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 500));
+            }
+          }
+          if (!settlementCommitted) throw lastSettlementError || new Error('Roulette settlement failed');
 
           for (const playerId of userIds) {
             const playerSettlement = playerSettlements[playerId];
