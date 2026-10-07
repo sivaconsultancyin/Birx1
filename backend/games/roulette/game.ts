@@ -14,6 +14,9 @@ export function registerRouletteGame(app: any, deps: any) {
   const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser } = deps;
 
 // -------------------------------------------------------------
+function newRouletteRoundId(): string {
+  return `RL-${crypto.randomUUID()}`;
+}
 const initialFairRound = createRouletteFairRound();
 
 let rouletteState: RouletteState = {
