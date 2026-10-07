@@ -543,6 +543,14 @@ export function subscribeToRealtimeEvents(onEvent: RealtimeListener): () => void
   };
 }
 
+export function subscribeToGameRealtimeEvents(gameId: GameId, onEvent: RealtimeListener): () => void {
+  return subscribeToRealtimeEvents((payload) => {
+    const incomingGameId = payload.gameId ?? payload.data?.gameId;
+    if (incomingGameId !== gameId) return;
+    onEvent(payload);
+  });
+}
+
 export function subscribeToEvents(onEvent: (event: { type: string; data?: any }) => void): () => void {
   return subscribeToRealtimeEvents((payload) => {
     onEvent({
