@@ -20,7 +20,7 @@ import {
   RouletteHistoryStats,
   Wallet
 } from '../../../src/types.ts';
-import { gamesApi, subscribeToGameRealtimeEvents } from '../../../src/api/client.ts';
+import { gamesApi, authApi, subscribeToGameRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
 import { Countdown } from '../../../src/components/Countdown.tsx';
@@ -489,8 +489,26 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         setConfirmedBets((prev) => [...prev, ...stagedBets]);
         setStagedBets([]);
         setBetHistoryStack([]);
-        if (res.wallet) {
-          onUpdateWallet(res.wallet);
+        // The bet transaction has already debited the authoritative wallet.
+        // Refresh the authenticated wallet immediately after a successful
+        // placement so the header never waits for a page refresh.
+        try {
+          const me = await authApi.getMe();
+          if (me?.wallet) {
+            onUpdateWallet(me.wallet);
+          } else if (res.wallet) {
+            onUpdateWallet(res.wallet);
+          }
+        } catch {
+          if (res.wallet) {
+            onUpdateWallet(res.wallet);
+          } else {
+            // Keep the UI responsive even if the follow-up read is briefly unavailable.
+            onUpdateWallet({
+              ...wallet,
+              balance: Number(wallet.balance) - stagedTotal
+            });
+          }
         }
       }
     } catch (err: any) {
