@@ -453,7 +453,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           break;
         }
         case 'roulette_wallet_updated':
-          if (payload.wallet) onUpdateWallet(payload.wallet);
+          if (payload.wallet && String(payload.userId || '') === String(currentUserIdRef.current || '')) onUpdateWallet(payload.wallet);
           break;
       }
     });
