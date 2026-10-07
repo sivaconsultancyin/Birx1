@@ -318,6 +318,9 @@ export const gamesApi = {
     async getHistory(): Promise<RouletteHistoryStats> {
       return fetchJson('/games/roulette/history');
     },
+    async getBets(): Promise<{ roundId: string; bets: RouletteBet[]; totalBet: number }> {
+      return fetchJson('/games/roulette/bets');
+    },
     async placeBets(bets: RouletteBet[], idempotencyKey?: string): Promise<{
       success: boolean;
       roundId: string;
