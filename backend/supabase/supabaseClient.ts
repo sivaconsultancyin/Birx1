@@ -742,20 +742,51 @@ const supabaseRepoImpl = {
     if (error) throw new Error(error.message);
   },
 
-  subscribeToAuthoritativeGameStates(onChange: (payload: any) => void): (() => void) | null {
+  async subscribeToAuthoritativeGameStates(onChange: (payload: any) => void): Promise<(() => void) | null> {
     const admin = getSupabaseAdmin();
     if (!admin) return null;
+
     const channel = admin
       .channel('authoritative-game-states-server')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'authoritative_game_states' },
         (payload) => onChange(payload)
-      )
-      .subscribe();
-    return () => {
-      void admin.removeChannel(channel);
-    };
+      );
+
+    const cleanup = () => { void admin.removeChannel(channel); };
+
+    // Do not report the HTTP server as ready until the DB realtime listener
+    // has actually subscribed. Otherwise the first authoritative DB update can
+    // race channel startup and be missed by every WebSocket client.
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('Timed out subscribing to authoritative_game_states realtime channel'));
+      }, 10000);
+
+      channel.subscribe((status: string, error?: unknown) => {
+        if (status === 'SUBSCRIBED') {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          resolve();
+          return;
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          cleanup();
+          reject(error instanceof Error ? error : new Error(`Supabase realtime channel status: ${status}`));
+        }
+      });
+    });
+
+    return cleanup;
   },
 
   async getAuthoritativeGameState(gameId: string): Promise<any | null> {
