@@ -278,7 +278,15 @@ app.get('/api/games/aviator/state', async (req: Request, res: Response) => {
       ...aviatorState,
       serverTime: Date.now(),
       flightStartedAt,
-      currentBet: userId ? (aviatorBets.get(userId) ?? null) : null
+      currentBet: userId ? (aviatorBets.get(userId) ?? null) : null,
+      // Sanitized live-bet feed for the Aviator sidebar. Never expose user IDs.
+      bets: Array.from(aviatorBets.values()).map((bet) => ({
+        betId: bet.betId,
+        amount: bet.amount,
+        cashedOut: Boolean(bet.cashedOut),
+        ...(bet.cashOutMultiplier !== undefined ? { cashOutMultiplier: bet.cashOutMultiplier } : {}),
+        ...(bet.winAmount !== undefined ? { winAmount: bet.winAmount } : {})
+      }))
     }
   });
 });
