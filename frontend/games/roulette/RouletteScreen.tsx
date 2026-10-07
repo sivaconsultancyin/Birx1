@@ -20,7 +20,7 @@ import {
   RouletteHistoryStats,
   Wallet
 } from '../../../src/types.ts';
-import { gamesApi, authApi, subscribeToGameRealtimeEvents } from '../../../src/api/client.ts';
+import { gamesApi, subscribeToGameRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
 import { Countdown } from '../../../src/components/Countdown.tsx';
@@ -489,14 +489,18 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
         setConfirmedBets((prev) => [...prev, ...stagedBets]);
         setStagedBets([]);
         setBetHistoryStack([]);
-        // The bet transaction has already debited the authoritative wallet.
-        // Refresh the authenticated wallet immediately after a successful
-        // placement so the header never waits for a page refresh.
-        try {
-          const me = await authApi.getMe();
-          if (me?.wallet) {
-            onUpdateWallet(me.wallet);
-          } else if (res.wallet) {
+        // The POST response already contains the authoritative wallet returned
+        // by the same atomic transaction. Do not make a second /auth/me request:
+        // that extra round-trip is what made the balance visibly lag after betting.
+        if (res.wallet) {
+          onUpdateWallet(res.wallet);
+        } else {
+          onUpdateWallet({
+            ...wallet,
+            balance: Number(wallet.balance) - stagedTotal
+          });
+        }
+      } else if (res.wallet) {
             onUpdateWallet(res.wallet);
           }
         } catch {
