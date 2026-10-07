@@ -652,6 +652,14 @@ const supabaseRepoImpl = {
     return data || [];
   },
 
+  async deleteGameBets(betIds: string[]) {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase is not configured');
+    if (!betIds.length) return;
+    const { error } = await admin.from('bets').delete().in('id', betIds);
+    if (error) throw new Error(error.message);
+  },
+
   async settleGameBet(betId: string, status: 'won' | 'lost', multiplier: number, payout: number) {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
