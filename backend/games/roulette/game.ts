@@ -593,8 +593,16 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
         status: 'placed',
         idempotencyKey: idempotencyKey ? `${idempotencyKey}:${bet.type}:${bet.value ?? bet.numbers?.join(',') ?? 'na'}` : null
       });
+      persistedBetIds.push(String(persisted.id));
     }
   } catch (persistError) {
+    let cleanupError: unknown = null;
+    try {
+      await supabaseRepo.deleteGameBets(persistedBetIds);
+    } catch (error) {
+      cleanupError = error;
+    }
+    let refundError: unknown = null;
     try {
       await supabaseRepo.atomicCredit(
         userId,
@@ -605,7 +613,7 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
         idempotencyKey ? `roulette:persist-refund:${idempotencyKey}` : `roulette:persist-refund:${rouletteState.roundId}:${userId}:${Date.now()}`
       );
     } catch (refundError) {
-      console.error('[RouletteBetPersistence] debit accepted but persistence failed and refund failed', { persistError, refundError, roundId: rouletteState.roundId, userId });
+      console.error('[RouletteBetPersistence] persistence rollback/refund failed', { persistError, cleanupError, refundError, roundId: rouletteState.roundId, userId, persistedBetIds });
     }
     return res.status(503).json({ error: 'Roulette bet could not be persisted. No bet was accepted.' });
   }
