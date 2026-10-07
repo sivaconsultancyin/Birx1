@@ -15,17 +15,6 @@ interface AviatorScreenProps {
   onOpenWallet?: () => void;
 }
 
-const demoPlayers = [
-  ['SkyPilot', '1.42x'],
-  ['AeroFox', '2.18x'],
-  ['Cloud9', '3.06x'],
-  ['NovaJet', '1.17x'],
-  ['BlueWing', '4.21x'],
-  ['Falcon', '1.83x'],
-  ['Orbit', '5.44x'],
-  ['JetStream', '2.71x']
-];
-
 export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   wallet,
   onUpdateWallet,
@@ -105,6 +94,52 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
         // performs the authoritative resync for the new betting round.
       }
     });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const handlePlaceBet = async () => {
+    if (!gameState || gameState.phase !== 'betting') return;
+    if (wallet.balance < betAmount) {
+      setErrorMsg('Insufficient balance for this bet');
+      return;
+    }
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await gamesApi.aviator.placeBet(betAmount);
+      setCurrentBet(res.bet);
+      onUpdateWallet(res.wallet);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to place bet');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCashout = async () => {
+    if (!currentBet || currentBet.cashedOut || gameState?.phase !== 'running') return;
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await gamesApi.aviator.cashOut();
+      onUpdateWallet(res.wallet);
+      setCurrentBet((prev) => prev ? { ...prev, cashedOut: true, winAmount: res.winAmount } : null);
+      notifyWinLoss({ type: 'win', amount: res.winAmount, id: `aviator-win-${currentBet.betId}` });
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Cashout failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const multiplier = gameState?.multiplier || 1;
+  const phase = gameState?.phase || 'betting';
+  const isRunning = phase === 'running';
+  const isCrashed = phase === 'crashed';
 
     return (
     <div id="screen-aviator" className="aviator-source-app-shell">
