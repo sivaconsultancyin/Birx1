@@ -216,8 +216,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             }
             return {
               ...(prev || {
-                winningNumber: 0,
-                winningColor: 'green',
+                winningNumber: null,
+                winningColor: null,
                 recentResults: [],
                 serverSeedHash: '',
                 limits: { minimumBet: 10, maximumBet: 50000, maximumExposure: 500000 }
@@ -243,8 +243,9 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           // Legacy compatibility only. New backend transitions directly from
           // betting to spinning, so this event is no longer part of the cycle.
           phaseEndsAtRef.current = Number(payload.endsAt) || null;
-          setGameState((prev) => (prev ? { ...prev, phase: 'closed', countdown: payload.countdown ?? 0 } : null));
-          setCountdown(payload.endsAt ? Math.max(0, Math.ceil((Number(payload.endsAt) - Date.now()) / 1000)) : 0);
+          // Legacy event: do not introduce a separate client phase. Keep the
+          // authoritative server phase unchanged and only clear staged UI bets.
+          setGameState((prev) => prev);
           setStagedBets([]);
           break;
         case 'roulette_spin_started': {
