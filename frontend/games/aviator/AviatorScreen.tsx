@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Clock, Plane, ShieldCheck, Volume2, VolumeX, Menu, MessageCircle, Users, TrendingUp } from 'lucide-react';
 import { AviatorBet, AviatorState, Wallet } from '../../../src/types.ts';
-import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
+import { gamesApi, subscribeToGameRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
 import { AviatorReferenceCanvas } from './AviatorReferenceCanvas';
@@ -59,7 +59,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
 
     void syncState();
 
-    const unsubscribe = subscribeToRealtimeEvents((payload) => {
+    const unsubscribe = subscribeToGameRealtimeEvents('aviator', (payload) => {
       if (!mounted) return;
       const data: any = payload.data || {};
 
