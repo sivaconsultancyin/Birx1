@@ -304,7 +304,17 @@ setInterval(async () => {
             totalPayoutAmount: settlement.grossPayout,
             netHouseResult: settlement.totalBet - settlement.grossPayout,
             outcomeSummary: `Landed on ${winningNum} ${settlement.winningColor.toUpperCase()}`,
-            details: { winningNumber: winningNum, winningColor: settlement.winningColor }
+            details: {
+              winningNumber: winningNum,
+              winningColor: settlement.winningColor,
+              provablyFair: {
+                serverSeed: rouletteFairRound.serverSeed,
+                serverSeedHash: rouletteFairRound.serverSeedHash,
+                clientSeed: rouletteFairRound.clientSeed,
+                nonce: rouletteFairRound.nonce,
+                winningNumber: winningNum
+              }
+            }
           });
         } catch (error) {
           console.error(`[RouletteSettlement:${currentRoundId}] failed to persist settlement summary`, error);
@@ -341,6 +351,13 @@ setInterval(async () => {
 
       roundSettlements[rouletteState.roundId] = {
         roundId: rouletteState.roundId,
+        provablyFair: {
+          serverSeed: rouletteFairRound.serverSeed,
+          serverSeedHash: rouletteFairRound.serverSeedHash,
+          clientSeed: rouletteFairRound.clientSeed,
+          nonce: rouletteFairRound.nonce,
+          winningNumber: winningNum
+        },
         winningNumber: winningNum,
         winningColor: settlement.winningColor,
         winningCategory: settlement.winningCategory,
@@ -468,10 +485,22 @@ app.get('/api/games/roulette/state', requireAuth, requirePlayerForGames, handleG
 
 app.get('/api/games/roulette/fairness/:roundId', requireAuth, requirePlayerForGames, (req: Request, res: Response) => {
   const roundId = req.params.roundId;
-  const settlement = roundSettlements[roundId];
+  let settlement = roundSettlements[roundId];
+  if (!settlement?.provablyFair) {
+    try {
+      const persisted = await supabaseRepo.getSettlementByRound(roundId, 'roulette');
+      settlement = persisted ? { provablyFair: persisted.details?.provablyFair } : null;
+    } catch (error) {
+      console.error('[RouletteFairness] persisted proof lookup failed', error);
+    }
+  }
   if (!settlement?.provablyFair) return res.status(404).json({ error: 'Fairness proof is available after settlement' });
   const proof = settlement.provablyFair;
-  return res.json({ roundId, ...proof, verified: verifyRouletteFairResult(proof.serverSeed, proof.serverSeedHash, proof.clientSeed, proof.nonce, proof.winningNumber) });
+  return res.json({
+    roundId,
+    ...proof,
+    verified: verifyRouletteFairResult(proof.serverSeed, proof.serverSeedHash, proof.clientSeed, proof.nonce, proof.winningNumber)
+  });
 });
 
 // 3. GET History & Analytics
