@@ -214,15 +214,9 @@ setInterval(async () => {
 
       const currentRoundId = rouletteState.roundId;
       const winningNum = rouletteState.winningNumber ?? 0;
-      // Result phase is also visible immediately; settlement/persistence follows.
-      emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.result, {
-        roundId: currentRoundId,
-        winningNumber: winningNum,
-        winningColor: rouletteState.winningColor,
-        winningCategory: rouletteState.winningCategory,
-        countdown: 4,
-        endsAt: roulettePhaseEndsAt
-      });
+      // Settlement is authoritative. The public result event is emitted only
+      // after the DB settlement commits below, so clients never observe a
+      // result that could later roll back.
       void supabaseRepo.recordGameRound(
         currentRoundId,
         'roulette',
