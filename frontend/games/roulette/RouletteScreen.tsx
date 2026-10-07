@@ -223,6 +223,16 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
   // UI Modals & Stats
   const [showRules, setShowRules] = useState(false);
   const currentUserIdRef = useRef<string>('');
+  useEffect(() => {
+    const token = localStorage.getItem('brix_token') || '';
+    try {
+      const part = token.split('.')[1];
+      const payload = part ? JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) : null;
+      currentUserIdRef.current = String(payload?.sub || payload?.userId || '');
+    } catch {
+      currentUserIdRef.current = '';
+    }
+  }, []);
   const [showStats, setShowStats] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [stats, setStats] = useState<RouletteHistoryStats | null>(null);
