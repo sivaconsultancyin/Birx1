@@ -4,14 +4,14 @@ import type { RouletteBet, RouletteState, Wallet } from '../../types.ts';
 import { GAME_ROOM_ID, EUROPEAN_WHEEL, RED_NUMBERS, BLACK_NUMBERS, ROULETTE_LIMITS, DEFAULT_ROULETTE_CLIENT_SEED, ROULETTE_PAYOUT_RULES, type ServerRouletteBet } from './constants.ts';
 import { createRouletteFairRound, deriveRouletteOutcome, verifyRouletteFairResult } from './fairness.ts';
 import { computeRouletteSettlement } from './settlement.ts';
-import { debitRouletteBet, creditRoulettePayout, refundRouletteBet, rouletteBetIdempotencyKey } from './wallet.ts';
+import { rouletteBetIdempotencyKey } from './wallet.ts';
 import { validateRouletteBets, attachRouletteUser } from './bets.ts';
 import { ROULETTE_SOCKET_EVENTS, emitRouletteEvent } from './socket.ts';
 
 /** Server-authoritative roulette module. All shared infrastructure is injected by the thin router. */
 
 export function registerRouletteGame(app: any, deps: any) {
-  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser } = deps;
+  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, getRequestUser } = deps;
 
 // -------------------------------------------------------------
 function newRouletteRoundId(): string {
@@ -252,6 +252,10 @@ setInterval(async () => {
             userId: row.user_id,
             placedAt: row.created_at
         }));
+
+      if (!verifyRouletteFairResult(rouletteFairRound.serverSeed, rouletteFairRound.serverSeedHash, rouletteFairRound.clientSeed, rouletteFairRound.nonce, winningNum)) {
+        throw new Error(`Roulette fairness verification failed for round ${currentRoundId}`);
+      }
 
       const settlement = computeRouletteSettlement(winningNum, bets);
       const playerSettlements: Record<string, any> = {};
