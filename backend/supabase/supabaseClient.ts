@@ -670,6 +670,19 @@ const supabaseRepoImpl = {
     return data;
   },
 
+  async getPendingRoulettePayouts(limit = 100) {
+    const admin = getSupabaseAdmin();
+    if (!admin) return [];
+    const { data, error } = await admin.from('settlements')
+      .select('id, round_id, details')
+      .eq('game_id', 'roulette')
+      .eq('outcome_summary', 'PAYOUT_PENDING_RETRY')
+      .order('created_at', { ascending: true })
+      .limit(limit);
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
   async getSettlementByRound(roundId: string, gameId: string) {
     const admin = getSupabaseAdmin();
     if (!admin) return null;
