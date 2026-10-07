@@ -1,4 +1,4 @@
-import type { RouletteBet } from '../../types.ts';
+import type { RouletteBet, RouletteBetType } from '../../types.ts';
 import { ROULETTE_LIMITS } from './constants.ts';
 
 const OUTSIDE_TYPES = new Set<RouletteBetType>([
