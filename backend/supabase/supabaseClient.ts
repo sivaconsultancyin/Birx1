@@ -704,6 +704,25 @@ const supabaseRepoImpl = {
     return data || [];
   },
 
+  async getRouletteHistory(limit = 50) {
+    const admin = getSupabaseAdmin();
+    if (!admin) return [];
+    const { data, error } = await admin
+      .from('game_rounds')
+      .select('id, result_data, closed_at')
+      .eq('game_id', 'roulette')
+      .eq('phase', 'settled')
+      .order('closed_at', { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(error.message);
+    return (data || []).map((row: any) => ({
+      roundId: row.id,
+      winningNumber: Number(row.result_data?.winningNumber),
+      color: row.result_data?.winningColor || 'unknown',
+      timestamp: row.closed_at || new Date().toISOString()
+    })).filter((r: any) => Number.isInteger(r.winningNumber) && r.winningNumber >= 0 && r.winningNumber <= 36);
+  },
+
   async getSettlementByRound(roundId: string, gameId: string) {
     const admin = getSupabaseAdmin();
     if (!admin) return null;
