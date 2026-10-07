@@ -354,17 +354,20 @@ setInterval(async () => {
               settlementStatus: 'settled',
               endsAt: roulettePhaseEndsAt
             });
-            if (playerSettlement.grossPayout > 0) {
-              try {
-                const wallet = await supabaseRepo.getWallet(playerId);
-                emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, {
-                  userId: playerId,
-                  wallet,
-                  roundId: currentRoundId
-                });
-              } catch (walletError) {
-                console.error(`[RouletteSettlement:${currentRoundId}] failed to refresh wallet for ${playerId}`, walletError);
-              }
+            // Wallet changes happen for every settled player: the stake was
+            // debited at bet placement, and winners may receive a payout.
+            // Always send the authoritative post-settlement wallet so losses
+            // also update live without requiring a page refresh.
+            try {
+              const wallet = await supabaseRepo.getWallet(playerId);
+              emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, {
+                userId: playerId,
+                wallet,
+                roundId: currentRoundId,
+                settlementStatus: 'settled'
+              });
+            } catch (walletError) {
+              console.error(`[RouletteSettlement:${currentRoundId}] failed to refresh wallet for ${playerId}`, walletError);
             }
           }
         } catch (error) {
