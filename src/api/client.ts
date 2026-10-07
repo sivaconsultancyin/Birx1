@@ -519,9 +519,9 @@ export function subscribeToRealtimeEvents(onEvent: (payload: RealtimeEventPayloa
   };
 }
 
-export function subscribeToGameRealtimeEvents(gameId: GameId, onEvent: RealtimeListener): () => void {
+export function subscribeToGameRealtimeEvents(gameId: GameId, onEvent: (payload: RealtimeEventPayload) => void): () => void {
   return subscribeToRealtimeEvents((payload) => {
-    const incomingGameId = payload.gameId ?? payload.data?.gameId;
+    const incomingGameId = payload.data?.gameId;
     if (incomingGameId !== gameId) return;
     onEvent(payload);
   });
