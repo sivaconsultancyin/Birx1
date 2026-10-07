@@ -491,7 +491,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     setErrorMsg(null);
 
     try {
-      const res = await gamesApi.roulette.placeBets(stagedBets);
+      const res: Awaited<ReturnType<typeof gamesApi.roulette.placeBets>> & { message?: string } = await gamesApi.roulette.placeBets(stagedBets);
       if (!res?.success) {
         if (res?.wallet) onUpdateWallet(res.wallet);
         throw new Error(res?.message || 'No bet was accepted');
