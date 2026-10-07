@@ -547,7 +547,7 @@ app.get('/api/games/roulette/fairness/:roundId', requireAuth, requirePlayerForGa
 const handleGetRouletteHistory = async (_req: Request, res: Response) => {
   try {
     const persisted = await supabaseRepo.getRouletteHistory(50);
-    const records = persisted.length > 0 ? persisted : rouletteHistoryRecords;
+    const records = persisted;
     const frequency = new Map<number, number>();
     records.forEach((r: any) => frequency.set(Number(r.winningNumber), (frequency.get(Number(r.winningNumber)) || 0) + 1));
     const sortedNums = [...frequency.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n);
@@ -560,7 +560,7 @@ const handleGetRouletteHistory = async (_req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('[Roulette] failed to load persistent history', error);
-    return res.json({ history: rouletteHistoryRecords, analytics: { hotNumbers: [], coldNumbers: [] } });
+    return res.status(503).json({ error: 'Roulette history is temporarily unavailable.' });
   }
 };
 
@@ -655,8 +655,7 @@ const handleGetRouletteBets = async (req: Request, res: Response) => {
       }));
   } catch (error) {
     console.error('[RouletteBets] failed to load persisted active bets', error);
-    bets = ((currentRoundBets[roundId] || []) as ServerRouletteBet[])
-      .filter((bet) => bet.userId === userId);
+    return res.status(503).json({ error: 'Roulette bets are temporarily unavailable.' });
   }
 
   res.json({
@@ -702,29 +701,6 @@ app.get('/api/games/roulette/settlement/:roundId', requireAuth, requirePlayerFor
 
 // 7. GET the authenticated player's settlement only.
 // This is a recovery path when a WebSocket player-result event is missed.
-const handleGetMyRouletteSettlement = async (req: Request, res: Response) => {
-  const roundId = req.params.roundId || rouletteState.roundId;
-  let settlement = roundSettlements[roundId];
-  if (!settlement) {
-    const persisted = await supabaseRepo.getSettlementByRound(roundId, 'roulette');
-    if (persisted) settlement = { ...persisted.details, settlementStatus: 'settled' };
-  }
-  const playerSettlement = settlement?.playerSettlements?.[req.user!.id];
-  if (!playerSettlement) return res.status(404).json({ error: 'Player settlement not found for this round' });
-  return res.json({ settlement: {
-    roundId,
-    winningNumber: settlement.winningNumber,
-    winningColor: settlement.winningColor,
-    winningCategory: settlement.winningCategory,
-    totalBet: playerSettlement.totalBet,
-    grossPayout: playerSettlement.grossPayout,
-    netResult: playerSettlement.netResult,
-    isWin: playerSettlement.grossPayout > 0,
-    settlementStatus: settlement.settlementStatus
-  }});
-};
-
-app.get('/api/games/roulette/my-settlement/:roundId', requireAuth, requirePlayerForGames, handleGetMyRouletteSettlement);
 
 // 7. POST Spin (Instant spin & authoritative settlement flow)
 
