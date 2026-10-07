@@ -14,6 +14,17 @@ interface AviatorScreenProps {
   onOpenWallet?: () => void;
 }
 
+const demoPlayers = [
+  ['SkyPilot', '1.42x'],
+  ['AeroFox', '2.18x'],
+  ['Cloud9', '3.06x'],
+  ['NovaJet', '1.17x'],
+  ['BlueWing', '4.21x'],
+  ['Falcon', '1.83x'],
+  ['Orbit', '5.44x'],
+  ['JetStream', '2.71x']
+];
+
 export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   wallet,
   onUpdateWallet,
@@ -29,7 +40,6 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   const [muted, setMuted] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [cashoutToast, setCashoutToast] = useState<{ amount: number; multiplier: number } | null>(null);
   const currentBetRef = useRef<AviatorBet | null>(null);
   currentBetRef.current = currentBet;
 
@@ -132,9 +142,6 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
     try {
       const res = await gamesApi.aviator.cashOut();
       onUpdateWallet(res.wallet);
-      setCashoutToast({ amount: res.winAmount, multiplier: res.cashMultiplier });
-      notifyWinLoss({ type: 'win', amount: res.winAmount, id: `aviator-win-${currentBet.betId}` });
-      window.setTimeout(() => setCashoutToast(null), 2000);
       setCurrentBet((prev) => prev ? {
         ...prev,
         cashedOut: true,
@@ -196,25 +203,22 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
       <div className="aviator-reference-layout">
         <aside className="aviator-left-panel">
           <div className="aviator-panel-heading">
-            <span>LIVE BETS</span>
+            <span>LIVE PLAYERS</span>
             <span className="aviator-live-dot" />
           </div>
           <div className="aviator-player-summary">
             <Users size={15} />
-            <strong>{gameState?.bets?.length ?? 0}</strong>
-            <span>active bets</span>
+            <strong>{Math.max(1, 248 + (gameState?.roundId?.length || 0))}</strong>
+            <span>players online</span>
           </div>
           <div className="aviator-player-list">
-            {(gameState?.bets ?? []).map((bet, index) => (
-              <div className="aviator-player-row" key={bet.betId}>
-                <span className="aviator-avatar">P</span>
-                <span className="aviator-player-name">Player {index + 1}</span>
-                <span className={`aviator-player-mult ${bet.cashedOut ? 'hot' : ''}`}>
-                  {bet.cashedOut ? `${Number(bet.cashOutMultiplier ?? 0).toFixed(2)}x` : `₹${Number(bet.amount).toLocaleString('en-IN')}`}
-                </span>
+            {demoPlayers.map(([name, mult], index) => (
+              <div className="aviator-player-row" key={name}>
+                <span className="aviator-avatar">{name[0]}</span>
+                <span className="aviator-player-name">{name}</span>
+                <span className={`aviator-player-mult ${index % 3 === 0 ? 'hot' : ''}`}>{mult}</span>
               </div>
             ))}
-            {!gameState?.bets?.length && <div className="aviator-empty-live">No active bets</div>}
           </div>
           <div className="aviator-side-history">
             <div className="aviator-panel-heading"><span>RECENT ROUNDS</span><TrendingUp size={14} /></div>
@@ -266,26 +270,6 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
                 {currentBet && !currentBet.cashedOut && isRunning ? cashoutButton : placeButton()}
               </div>
             </div>
-            <div className="aviator-ref-bet-card aviator-ref-bet-card-secondary">
-              <div className="aviator-ref-tabs"><span>BET</span><span className="active">AUTO</span></div>
-              <div className="aviator-ref-card-body">
-                <div className="aviator-auto-row">
-                  <span>Auto Cash Out</span>
-                  <strong>2.00x</strong>
-                </div>
-                <div className="aviator-ref-quick">
-                  {[2, 3, 5, 10].map((n) => (
-                    <button type="button" key={n} disabled>{n}.00x</button>
-                  ))}
-                </div>
-                <button type="button" className="aviator-ref-action aviator-ref-action-muted" disabled>
-                  AUTO BET
-                </button>
-                <div className="aviator-ref-secondary-note">
-                  Auto-bet controls are visually matched to the reference card; settlement remains server-authoritative.
-                </div>
-              </div>
-            </div>
           </section>
 
           <footer className="aviator-reference-footer">
@@ -294,13 +278,6 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
           </footer>
         </main>
       </div>
-
-      {cashoutToast && (
-        <div className="aviator-cashout-toast" role="status">
-          <strong>₹{cashoutToast.amount.toLocaleString('en-IN')}</strong>
-          <span>Cash Out · {cashoutToast.multiplier.toFixed(2)}x</span>
-        </div>
-      )}
 
       {showMenu && (
         <div className="aviator-ref-modal-backdrop" onClick={() => setShowMenu(false)}>
