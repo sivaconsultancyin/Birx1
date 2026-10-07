@@ -20,7 +20,7 @@ import {
   RouletteHistoryStats,
   Wallet
 } from '../../../src/types.ts';
-import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
+import { gamesApi, subscribeToGameRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { BettingChip, CHIP_VALUES } from '../../../src/components/BettingChip.tsx';
 import { Countdown } from '../../../src/components/Countdown.tsx';
@@ -333,7 +333,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     // as a low-frequency recovery path instead of polling every 2 seconds.
     }, 10000);
 
-    const unsubscribe = subscribeToRealtimeEvents((event) => {
+    const unsubscribe = subscribeToGameRealtimeEvents('roulette', (event) => {
       const payload: any = event.data || {};
       if (!payload || !payload.type) return;
 
