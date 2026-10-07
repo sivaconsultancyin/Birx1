@@ -3,7 +3,6 @@ export * from './constants.ts';
 export * from './bets.ts';
 export * from './settlement.ts';
 export * from './fairness.ts';
-export * from './wallet.ts';
 export * from './routes.ts';
 export * from './socket.ts';
 
