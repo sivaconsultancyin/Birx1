@@ -21,10 +21,6 @@ import {
   ValidationResult
 } from './rouletteCoordinates.ts';
 
-// Re-export for backward compatibility
-export const EUROPEAN_WHEEL_NUMBERS = EUROPEAN_WHEEL_ORDER;
-export { RED_NUMBERS_SET };
-
 interface RouletteWheelProps {
   roundId?: string;
   isSpinning: boolean;
