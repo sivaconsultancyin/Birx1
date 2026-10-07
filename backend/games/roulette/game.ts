@@ -243,16 +243,14 @@ setInterval(async () => {
         if (hasAnyBets) throw new Error('Roulette persisted bets unavailable; settlement must retry');
       }
 
-      const bets: ServerRouletteBet[] = persistedBets.length
-        ? persistedBets.map((row: any) => ({
+      const bets: ServerRouletteBet[] = persistedBets.map((row: any) => ({
             type: row.bet_type,
             value: row.bet_value?.value ?? undefined,
             numbers: row.bet_value?.numbers ?? undefined,
             amount: Number(row.amount),
             userId: row.user_id,
             placedAt: row.created_at
-          }))
-        : ((currentRoundBets[currentRoundId] || []) as ServerRouletteBet[]);
+        }));
 
       const settlement = computeRouletteSettlement(winningNum, bets);
       const playerSettlements: Record<string, any> = {};
