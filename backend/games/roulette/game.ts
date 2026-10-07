@@ -135,18 +135,7 @@ const rouletteHistoryRecords: {
   number: number;
   color: 'red' | 'black' | 'green';
   timestamp: string;
-}[] = [
-  { roundId: 'RL-1090', number: 17, color: 'black', timestamp: new Date(Date.now() - 300000).toISOString() },
-  { roundId: 'RL-1089', number: 32, color: 'red', timestamp: new Date(Date.now() - 360000).toISOString() },
-  { roundId: 'RL-1088', number: 0, color: 'green', timestamp: new Date(Date.now() - 420000).toISOString() },
-  { roundId: 'RL-1087', number: 26, color: 'black', timestamp: new Date(Date.now() - 480000).toISOString() },
-  { roundId: 'RL-1086', number: 3, color: 'red', timestamp: new Date(Date.now() - 540000).toISOString() },
-  { roundId: 'RL-1085', number: 15, color: 'black', timestamp: new Date(Date.now() - 600000).toISOString() },
-  { roundId: 'RL-1084', number: 28, color: 'black', timestamp: new Date(Date.now() - 660000).toISOString() },
-  { roundId: 'RL-1083', number: 21, color: 'red', timestamp: new Date(Date.now() - 720000).toISOString() },
-  { roundId: 'RL-1082', number: 4, color: 'black', timestamp: new Date(Date.now() - 780000).toISOString() },
-  { roundId: 'RL-1081', number: 19, color: 'red', timestamp: new Date(Date.now() - 840000).toISOString() }
-];
+}[] = [];
 
 const initializeRouletteRoom = async () => {
   try {
