@@ -194,7 +194,7 @@ export class CanvasRenderer {
     const bobOffset = Math.sin(t * 4) * 1.2;
     ctx.translate(0, bobOffset);
 
-    const s = 0.9;
+    const s = 0.62;
     ctx.scale(s, s);
 
     ctx.fillStyle = '#ff1744';
