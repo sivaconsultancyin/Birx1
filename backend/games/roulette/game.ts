@@ -283,7 +283,7 @@ setInterval(async () => {
       }
 
       if (persistedBets.length) {
-        const winningBets = persistedBets
+        const allSettledBets = persistedBets
           .map(row => {
             const rowBet = {
               type: row.bet_type,
@@ -300,7 +300,8 @@ setInterval(async () => {
               multiplier: one.grossPayout > 0 ? Number((one.grossPayout / Number(row.amount)).toFixed(2)) : 0
             };
           });
-        const winningIds = new Set(winningBets.filter(b => b.payout > 0).map(b => b.id));
+        const winningBets = allSettledBets.filter((bet) => bet.payout > 0);
+        const winningIds = new Set(winningBets.map(b => b.id));
         const losingBetIds = persistedBets.filter(row => !winningIds.has(row.id)).map(row => row.id);
 
         try {
