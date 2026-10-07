@@ -670,6 +670,18 @@ const supabaseRepoImpl = {
     return data;
   },
 
+  async getSettlementByRound(roundId: string, gameId: string) {
+    const admin = getSupabaseAdmin();
+    if (!admin) return null;
+    const { data, error } = await admin.from('settlements')
+      .select('*')
+      .eq('round_id', roundId)
+      .eq('game_id', gameId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
   async recordSettlement(input: { id: string; roundId: string; gameId: string; totalBetsCount: number; totalBetAmount: number; totalPayoutAmount: number; netHouseResult: number; outcomeSummary: string; details?: any }) {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
