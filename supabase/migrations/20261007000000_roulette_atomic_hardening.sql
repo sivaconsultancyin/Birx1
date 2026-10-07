@@ -36,7 +36,7 @@ BEGIN
     INSERT INTO public.bets(id,round_id,user_id,game_id,bet_type,bet_value,amount,status,idempotency_key)
     VALUES(v_bet_id,p_round_id,p_user_id,p_game_id,v_bet->>'type',
       jsonb_build_object('value',v_bet->'value','numbers',v_bet->'numbers'),
-      (v_bet->>'amount')::NUMERIC,'placed',p_idempotency_key);
+      (v_bet->>'amount')::NUMERIC,'placed',p_idempotency_key||':'||v_bet_id);
     v_ids := v_ids || to_jsonb(v_bet_id);
   END LOOP;
 
