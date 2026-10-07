@@ -255,87 +255,37 @@ setInterval(async () => {
           endsAt: roulettePhaseEndsAt,
         });
 
-        if (playerSettlement.grossPayout > 0) {
-          const payoutKey = `roulette:settlement:${currentRoundId}:${userId}`;
-          try {
-            const credit = await supabaseRepo.atomicCredit(
-              userId,
-              playerSettlement.grossPayout,
-              'payout',
-              `Roulette Payout #${currentRoundId}`,
-              'roulette',
-              payoutKey
-            );
-            emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, {
-              userId,
-              wallet: credit.wallet,
-              roundId: currentRoundId
-            });
-          } catch (error) {
-            // Persist a deterministic retry record. The payout idempotency key
-            // makes every retry safe even if the original credit actually
-            // succeeded but its response was lost.
-            console.error(`[RouletteSettlement:${currentRoundId}] payout failed for user ${userId}`, error);
-            try {
-              await supabaseRepo.recordSettlement({
-                id: `roulette:payout-pending:${currentRoundId}:${userId}`,
-                roundId: currentRoundId,
-                gameId: 'roulette',
-                totalBetsCount: 1,
-                totalBetAmount: playerSettlement.totalBet,
-                totalPayoutAmount: playerSettlement.grossPayout,
-                netHouseResult: playerSettlement.totalBet - playerSettlement.grossPayout,
-                outcomeSummary: 'PAYOUT_PENDING_RETRY',
-                details: {
-                  payoutRetry: {
-                    userId,
-                    amount: playerSettlement.grossPayout,
-                    idempotencyKey: payoutKey,
-                    attempts: 1,
-                    nextRetryAt: new Date(Date.now() + 5000).toISOString()
-                  }
-                }
-              });
-            } catch (persistError) {
-              console.error(`[RouletteSettlement:${currentRoundId}] failed to persist payout retry record for user ${userId}`, persistError);
-            }
-          }
-        }
+        // Wallet credit + bet status are committed together by the
+        // database settlement RPC below. Do not credit here independently.
       }
 
-      if (persistedBets.length) {
-        for (const row of persistedBets) {
-          const rowBet = {
-            type: row.bet_type,
-            value: row.bet_value?.value ?? undefined,
-            numbers: row.bet_value?.numbers ?? undefined,
-            amount: Number(row.amount)
-          };
-          const one = computeRouletteSettlement(winningNum, [rowBet]);
-          try {
-            await supabaseRepo.settleGameBet(
-              row.id,
-              one.grossPayout > 0 ? 'won' : 'lost',
-              one.grossPayout > 0 ? Number((one.grossPayout / Number(row.amount)).toFixed(2)) : 0,
-              one.grossPayout
-            );
-          } catch (error) {
-            console.error(`[RouletteSettlement:${currentRoundId}] failed to settle bet ${row.id}`, error);
-          }
-        }
+        const winningBets = persistedBets
+          .map(row => {
+            const rowBet = {
+              type: row.bet_type,
+              value: row.bet_value?.value ?? undefined,
+              numbers: row.bet_value?.numbers ?? undefined,
+              amount: Number(row.amount)
+            };
+            const one = computeRouletteSettlement(winningNum, [rowBet]);
+            return {
+              id: row.id,
+              userId: row.user_id,
+              amount: Number(row.amount),
+              payout: one.grossPayout,
+              multiplier: one.grossPayout > 0 ? Number((one.grossPayout / Number(row.amount)).toFixed(2)) : 0
+            };
+          });
+        const winningIds = new Set(winningBets.filter(b => b.payout > 0).map(b => b.id));
+        const losingBetIds = persistedBets.filter(row => !winningIds.has(row.id)).map(row => row.id);
+
         try {
-          await supabaseRepo.recordSettlement({
-            id: `roulette:${currentRoundId}`,
+          await supabaseRepo.atomicSettleRouletteRound({
             roundId: currentRoundId,
-            gameId: 'roulette',
-            totalBetsCount: persistedBets.length,
-            totalBetAmount: settlement.totalBet,
-            totalPayoutAmount: settlement.grossPayout,
-            netHouseResult: settlement.totalBet - settlement.grossPayout,
-            outcomeSummary: `Landed on ${winningNum} ${settlement.winningColor.toUpperCase()}`,
-            details: {
+            resultData: {
               winningNumber: winningNum,
               winningColor: settlement.winningColor,
+              winningCategory: settlement.winningCategory,
               provablyFair: {
                 serverSeed: rouletteFairRound.serverSeed,
                 serverSeedHash: rouletteFairRound.serverSeedHash,
@@ -343,10 +293,31 @@ setInterval(async () => {
                 nonce: rouletteFairRound.nonce,
                 winningNumber: winningNum
               }
-            }
+            },
+            winningBets,
+            losingBetIds,
+            outcomeSummary: `Landed on ${winningNum} ${settlement.winningColor.toUpperCase()}`
           });
+
+          for (const playerId of userIds) {
+            if (playerSettlements[playerId]?.grossPayout > 0) {
+              try {
+                const wallet = await supabaseRepo.getWallet(playerId);
+                emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, {
+                  userId: playerId,
+                  wallet,
+                  roundId: currentRoundId
+                });
+              } catch (walletError) {
+                console.error(`[RouletteSettlement:${currentRoundId}] failed to refresh wallet for ${playerId}`, walletError);
+              }
+            }
+          }
         } catch (error) {
-          console.error(`[RouletteSettlement:${currentRoundId}] failed to persist settlement summary`, error);
+          // The RPC is transactional: wallet credits, bet statuses, round
+          // settlement and settlement row roll back together on failure.
+          console.error(`[RouletteSettlement:${currentRoundId}] atomic settlement failed`, error);
+          throw error;
         }
       }
 
