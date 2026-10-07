@@ -222,6 +222,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
   // UI Modals & Stats
   const [showRules, setShowRules] = useState(false);
+  const currentUserIdRef = useRef<string>('');
   const [showStats, setShowStats] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [stats, setStats] = useState<RouletteHistoryStats | null>(null);
