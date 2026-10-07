@@ -502,42 +502,26 @@ app.get('/api/games/roulette/fairness/:roundId', requireAuth, requirePlayerForGa
 });
 
 // 3. GET History & Analytics
-const handleGetRouletteHistory = (_req: Request, res: Response) => {
-  const records = rouletteHistoryRecords;
-  const total = records.length || 1;
-  const reds = records.filter((r) => r.color === 'red').length;
-  const blacks = records.filter((r) => r.color === 'black').length;
-  const greens = records.filter((r) => r.color === 'green').length;
-  const odds = records.filter((r) => r.number > 0 && r.number % 2 !== 0).length;
-  const evens = records.filter((r) => r.number > 0 && r.number % 2 === 0).length;
-  const lows = records.filter((r) => r.number >= 1 && r.number <= 18).length;
-  const highs = records.filter((r) => r.number >= 19 && r.number <= 36).length;
-
-  // Number frequency for Hot/Cold
-  const freqMap: Record<number, number> = {};
-  records.forEach((r) => {
-    freqMap[r.number] = (freqMap[r.number] || 0) + 1;
-  });
-  const sortedNums = Object.keys(freqMap)
-    .map(Number)
-    .sort((a, b) => freqMap[b] - freqMap[a]);
-
-  const hotNumbers = sortedNums.slice(0, 4);
-  const coldNumbers = EUROPEAN_WHEEL.filter((n) => !sortedNums.includes(n)).slice(0, 4);
-
-  res.json({
-    history: records,
-    redPercentage: Math.round((reds / total) * 100),
-    blackPercentage: Math.round((blacks / total) * 100),
-    greenPercentage: Math.round((greens / total) * 100),
-    oddPercentage: Math.round((odds / total) * 100),
-    evenPercentage: Math.round((evens / total) * 100),
-    lowPercentage: Math.round((lows / total) * 100),
-    highPercentage: Math.round((highs / total) * 100),
-    hotNumbers: hotNumbers.length > 0 ? hotNumbers : [17, 32, 21, 3],
-    coldNumbers: coldNumbers.length > 0 ? coldNumbers : [0, 26, 35, 11]
-  });
+const handleGetRouletteHistory = async (_req: Request, res: Response) => {
+  try {
+    const persisted = await supabaseRepo.getRouletteHistory(50);
+    const records = persisted.length > 0 ? persisted : rouletteHistoryRecords;
+    const frequency = new Map<number, number>();
+    records.forEach((r: any) => frequency.set(Number(r.winningNumber), (frequency.get(Number(r.winningNumber)) || 0) + 1));
+    const sortedNums = [...frequency.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n);
+    return res.json({
+      history: records,
+      analytics: {
+        hotNumbers: sortedNums.slice(0, 4),
+        coldNumbers: EUROPEAN_WHEEL.filter((n) => !sortedNums.includes(n)).slice(0, 4)
+      }
+    });
+  } catch (error) {
+    console.error('[Roulette] failed to load persistent history', error);
+    return res.json({ history: rouletteHistoryRecords, analytics: { hotNumbers: [], coldNumbers: [] } });
+  }
 };
+
 app.get('/api/games/roulette/history', requireAuth, requirePlayerForGames, handleGetRouletteHistory);
 
 // 4. POST Bets (Register bets for ongoing authoritative round)
