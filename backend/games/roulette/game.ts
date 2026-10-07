@@ -159,6 +159,7 @@ void initializeRouletteRoom();
 // Async DB/lease work may take >1s; elapsed-time deadlines prevent cumulative drift
 // between the table countdown and the actual phase transition.
 let rouletteCycleBusy = false;
+let rouletteSettlementPending = false;
 
 cleanupRouletteMemory();
 setInterval(async () => {
