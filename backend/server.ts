@@ -639,14 +639,25 @@ app.get('/api/games/history', requireAuth, requirePlayerForGames, (_req: Request
 });
 
 // -------------------------------------------------------------
-const gameModuleDeps = {
+const sharedGameModuleDeps = {
   supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService,
-  recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState,
+  recordHistory, acquireGameLease, safeSaveAuthoritativeGameState,
   safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser,
   generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands,
   computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState,
   rateLimit, getSupabaseConfigStatus, authService, crypto
 };
+
+// Hard game boundary: each module receives a scoped realtime publisher.
+// Shared EventBus/WebSocket infrastructure stays common, but every game event
+// is stamped with its own gameId + roomId so one game's changes cannot leak into another.
+function createGameModuleDeps(gameId: string, roomId: string) {
+  return {
+    ...sharedGameModuleDeps,
+    broadcastRealtime: (event: string, data: Record<string, unknown> = {}) =>
+      broadcastRealtime(event, { gameId, roomId, ...data })
+  };
+}
 
 // Browser smoke tests can boot the HTTP/Vite server without starting the
 // long-running game loops. Full game E2E runs should use the configured Supabase
@@ -654,12 +665,12 @@ const gameModuleDeps = {
 const skipGameLoops = process.env.E2E_SMOKE_ONLY === '1';
 
 if (!skipGameLoops) {
-  registerRouletteGame(app, gameModuleDeps);
-  registerTeenPattiGame(app, gameModuleDeps);
-  registerAviatorGame(app, gameModuleDeps);
-  registerDiceGame(app, gameModuleDeps);
-  registerDragonTigerGame(app, gameModuleDeps);
-  registerAndarBaharGame(app, gameModuleDeps);
+  registerRouletteGame(app, createGameModuleDeps('roulette', 'roulette-main'));
+  registerTeenPattiGame(app, createGameModuleDeps('teen-patti', 'teen-patti-main'));
+  registerAviatorGame(app, createGameModuleDeps('aviator', 'aviator-main'));
+  registerDiceGame(app, createGameModuleDeps('dice', 'dice-main'));
+  registerDragonTigerGame(app, createGameModuleDeps('dragon-tiger', 'dragon-tiger-main'));
+  registerAndarBaharGame(app, createGameModuleDeps('andar-bahar', 'andar-bahar-main'));
 }
 
 const startServer = async () => {
