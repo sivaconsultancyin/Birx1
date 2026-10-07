@@ -318,6 +318,7 @@ setInterval(async () => {
               winningNumber: winningNum,
               winningColor: settlement.winningColor,
               winningCategory: settlement.winningCategory,
+              playerSettlements,
               provablyFair: {
                 serverSeed: rouletteFairRound.serverSeed,
                 serverSeedHash: rouletteFairRound.serverSeedHash,
