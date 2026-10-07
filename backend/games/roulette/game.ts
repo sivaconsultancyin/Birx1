@@ -18,7 +18,7 @@ const initialFairRound = createRouletteFairRound();
 
 let rouletteState: RouletteState = {
   roomId: GAME_ROOM_ID,
-  roundId: 'RL-' + crypto.randomInt(1000, 10000),
+  roundId: newRouletteRoundId(),
   phase: 'betting',
   countdown: 15,
   winningNumber: 17,
@@ -437,7 +437,7 @@ setInterval(async () => {
     rouletteState.countdown = Math.max(0, Math.ceil((roulettePhaseEndsAt - Date.now()) / 1000));
     if (rouletteState.countdown <= 0) {
       // Transition to new round
-      const newRoundId = 'RL-' + crypto.randomInt(1000, 10000);
+      const newRoundId = newRouletteRoundId();
       rouletteState.roundId = newRoundId;
       rouletteState.phase = 'betting';
       rouletteState.countdown = 15;
