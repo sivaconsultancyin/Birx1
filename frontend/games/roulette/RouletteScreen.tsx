@@ -376,7 +376,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     }
     try {
       const res = await fetch(
-        `${((import.meta as any).env?.VITE_BACKEND_URL || (import.meta as any).env?.VITE_API_URL || '') as string}/api/games/roulette/my-settlement/${encodeURIComponent(roundId)}`,
+        `${((import.meta as any).env?.VITE_BACKEND_URL || (import.meta as any).env?.VITE_API_URL || '') as string}/api/games/roulette/settlement/${encodeURIComponent(roundId)}`,
         { credentials: 'include', headers: { Authorization: `Bearer ${localStorage.getItem('brix_token') || ''}` } }
       );
       if (!res.ok) return;
