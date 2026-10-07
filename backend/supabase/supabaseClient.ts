@@ -660,6 +660,27 @@ const supabaseRepoImpl = {
     if (error) throw new Error(error.message);
   },
 
+  async atomicSettleRouletteRound(input: {
+    roundId: string;
+    resultData: Record<string, unknown>;
+    winningBets: Array<{ id: string; userId: string; amount: number; payout: number; multiplier: number }>;
+    losingBetIds: string[];
+    outcomeSummary: string;
+  }) {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase admin client unavailable');
+    const { data, error } = await admin.rpc('atomic_settle_round', {
+      p_game_id: 'roulette',
+      p_round_id: input.roundId,
+      p_result_data: input.resultData,
+      p_winning_bets: input.winningBets,
+      p_losing_bet_ids: input.losingBetIds,
+      p_outcome_summary: input.outcomeSummary
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
   async settleGameBet(betId: string, status: 'won' | 'lost', multiplier: number, payout: number) {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
