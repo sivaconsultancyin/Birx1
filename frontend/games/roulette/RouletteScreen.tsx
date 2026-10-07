@@ -294,8 +294,14 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           break;
         case 'roulette_player_result': {
           const roundId = String(payload.roundId || currentRoundIdRef.current);
+          // The player-result event is the fastest authoritative settlement
+          // signal. Apply its wallet immediately before showing the popup.
+          if (payload.wallet && (!payload.userId || String(payload.userId) === String(currentUserIdRef.current))) {
+            onUpdateWallet(payload.wallet);
+          }
           void showAuthoritativePlayerResult(roundId, payload);
           setConfirmedBets([]);
+          confirmedBetsRef.current = [];
           setStagedBets([]);
           setBetHistoryStack([]);
           setIsSpinning(false);
@@ -312,7 +318,9 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
           break;
         }
         case 'roulette_wallet_updated':
-          if (payload.wallet && String(payload.userId || '') === String(currentUserIdRef.current || '')) onUpdateWallet(payload.wallet);
+          if (payload.wallet && (!payload.userId || String(payload.userId) === String(currentUserIdRef.current))) {
+            onUpdateWallet(payload.wallet);
+          }
           break;
       }
     });
@@ -469,8 +477,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       return;
     }
 
-    const stagedTotal = stagedBets.reduce((s, b) => s + b.amount, 0);
-    if (wallet.balance < stagedTotal) {
+    const stagedTotal = stagedBets.reduce((s, bet) => s + Number(bet.amount || 0), 0);
+    if (Number(wallet.balance) < stagedTotal) {
       setErrorMsg('Insufficient wallet balance to place this bet');
       return;
     }
@@ -484,39 +492,28 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
 
     try {
       const res = await gamesApi.roulette.placeBets(stagedBets);
-      if (res && res.success) {
-        // Add placed bets to confirmed bets
-        setConfirmedBets((prev) => [...prev, ...stagedBets]);
-        setStagedBets([]);
-        setBetHistoryStack([]);
-        // The POST response already contains the authoritative wallet returned
-        // by the same atomic transaction. Do not make a second /auth/me request:
-        // that extra round-trip is what made the balance visibly lag after betting.
-        if (res.wallet) {
-          onUpdateWallet(res.wallet);
-        } else {
-          onUpdateWallet({
-            ...wallet,
-            balance: Number(wallet.balance) - stagedTotal
-          });
-        }
-      } else if (res.wallet) {
-            onUpdateWallet(res.wallet);
-          }
-        } catch {
-          if (res.wallet) {
-            onUpdateWallet(res.wallet);
-          } else {
-            // Keep the UI responsive even if the follow-up read is briefly unavailable.
-            onUpdateWallet({
-              ...wallet,
-              balance: Number(wallet.balance) - stagedTotal
-            });
-          }
-        }
+      if (!res?.success) {
+        if (res?.wallet) onUpdateWallet(res.wallet);
+        throw new Error(res?.message || 'No bet was accepted');
       }
+
+      // The atomic placement response is authoritative. Apply its wallet
+      // immediately; never wait for a polling/reload cycle.
+      if (res.wallet) {
+        onUpdateWallet(res.wallet);
+      } else {
+        onUpdateWallet({
+          ...wallet,
+          balance: Number(wallet.balance) - stagedTotal
+        });
+      }
+
+      setConfirmedBets((prev) => [...prev, ...stagedBets]);
+      confirmedBetsRef.current = [...confirmedBetsRef.current, ...stagedBets];
+      setStagedBets([]);
+      setBetHistoryStack([]);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to place bet. Please try again.');
+      setErrorMsg(err?.message || 'Failed to place bet. Please try again.');
     } finally {
       setIsPlacingBet(false);
     }
