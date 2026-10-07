@@ -1,6 +1,6 @@
 import { getMultiplierAtTime } from './CrashAlgorithm.js';
 
-const TARGET_SCREEN_FRACTION = 0.52;
+const TARGET_SCREEN_FRACTION = 0.65;
 const LERP_SPEED = 3.0;
 
 export class FlightPath {
@@ -54,16 +54,11 @@ export class FlightPath {
   }
 
   multiplierToY(multiplier) {
-    // Keep the flight visually inside a bounded takeoff lane.
-    // X carries the flight forward; multiplier only raises the plane gradually.
     const viewMax = this._fixedViewMax;
     const logMax = Math.log(viewMax);
     const logVal = Math.log(Math.max(1, multiplier));
-    const fraction = logMax > 0 ? Math.min(1, Math.max(0, logVal / logMax)) : 0;
-
-    const laneCenterY = this.paddingTop + this.plotHeight * 0.72;
-    const maxRise = this.plotHeight * 0.50;
-    return laneCenterY - fraction * maxRise;
+    const fraction = logMax > 0 ? logVal / logMax : 0;
+    return this.paddingTop + this.plotHeight - fraction * this.plotHeight;
   }
 
   getPlanePosition(flightTimeMs, crashMultiplier) {
