@@ -570,6 +570,32 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
   }
 
   const userId = req.user!.id;
+
+  // The wallet debit is asynchronous. The round can close while that RPC is
+  // in flight, so re-check the authoritative phase/deadline before persisting
+  // any bet. A late debit is immediately refunded and never becomes a bet.
+  const roundStillOpen =
+    rouletteState.phase === 'betting' &&
+    (!roulettePhaseEndsAt || Date.now() < roulettePhaseEndsAt);
+
+  if (!roundStillOpen) {
+    try {
+      await supabaseRepo.atomicCredit(
+        userId,
+        totalBet,
+        'refund',
+        `Roulette late-bet refund #${rouletteState.roundId}`,
+        'roulette',
+        idempotencyKey ? `roulette:late-bet-refund:${idempotencyKey}` : undefined
+      );
+    } catch (refundError) {
+      console.error('[RouletteBetTiming] late debit refund failed', {
+        refundError, roundId: rouletteState.roundId, userId
+      });
+    }
+    return res.status(409).json({ error: 'Betting closed before the bet was accepted' });
+  }
+
   const placedAt = new Date().toISOString();
   const serverBets: ServerRouletteBet[] = bets.map((bet) => ({
     ...bet,
