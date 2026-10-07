@@ -298,7 +298,6 @@ export interface AviatorState {
   crashMultiplier: number | null;
   countdown: number;
   previousMultipliers: number[];
-  bets?: Array<{ betId: string; amount: number; cashedOut: boolean; cashOutMultiplier?: number; winAmount?: number }>;
 }
 
 export interface AviatorBet {
