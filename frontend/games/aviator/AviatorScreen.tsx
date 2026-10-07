@@ -266,20 +266,24 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
                 {currentBet && !currentBet.cashedOut && isRunning ? cashoutButton : placeButton()}
               </div>
             </div>
-            <div className="aviator-ref-bet-card">
-              <div className="aviator-ref-tabs"><span className="active">BET</span><span>AUTO</span></div>
+            <div className="aviator-ref-bet-card aviator-ref-bet-card-secondary">
+              <div className="aviator-ref-tabs"><span>BET</span><span className="active">AUTO</span></div>
               <div className="aviator-ref-card-body">
-                <div className="aviator-ref-amount">
-                  <button type="button" disabled>−</button>
-                  <strong>₹{betAmount.toLocaleString('en-IN')}</strong>
-                  <button type="button" disabled>+</button>
+                <div className="aviator-auto-row">
+                  <span>Auto Cash Out</span>
+                  <strong>2.00x</strong>
                 </div>
                 <div className="aviator-ref-quick">
-                  {[50, 100, 500, 1000].map((n) => <button type="button" key={n} disabled>₹{n}</button>)}
+                  {[2, 3, 5, 10].map((n) => (
+                    <button type="button" key={n} disabled>{n}.00x</button>
+                  ))}
                 </div>
-                <button type="button" className="aviator-ref-action aviator-ref-action-bet" disabled>
-                  BET ₹{betAmount.toLocaleString('en-IN')}
+                <button type="button" className="aviator-ref-action aviator-ref-action-muted" disabled>
+                  AUTO BET
                 </button>
+                <div className="aviator-ref-secondary-note">
+                  Auto-bet controls are visually matched to the reference card; settlement remains server-authoritative.
+                </div>
               </div>
             </div>
           </section>
