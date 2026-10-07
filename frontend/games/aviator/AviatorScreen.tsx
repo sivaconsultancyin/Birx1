@@ -208,15 +208,17 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
           </div>
           <div className="aviator-player-summary">
             <Users size={15} />
-            <strong>{Math.max(1, 248 + (gameState?.roundId?.length || 0))}</strong>
-            <span>players online</span>
+            <strong>{Math.max(0, Number((gameState as any)?.bets?.length ?? 0))}</strong>
+            <span>active bets</span>
           </div>
           <div className="aviator-player-list">
-            {demoPlayers.map(([name, mult], index) => (
-              <div className="aviator-player-row" key={name}>
-                <span className="aviator-avatar">{name[0]}</span>
-                <span className="aviator-player-name">{name}</span>
-                <span className={`aviator-player-mult ${index % 3 === 0 ? 'hot' : ''}`}>{mult}</span>
+            {(((gameState as any)?.bets ?? []) as Array<any>).map((bet, index) => (
+              <div className="aviator-player-row" key={bet.betId || index}>
+                <span className="aviator-avatar">P</span>
+                <span className="aviator-player-name">Player {index + 1}</span>
+                <span className={`aviator-player-mult ${bet.cashedOut ? 'hot' : ''}`}>
+                  {bet.cashedOut ? `${Number(bet.cashOutMultiplier ?? 0).toFixed(2)}x` : `₹${Number(bet.amount ?? 0).toLocaleString('en-IN')}`}
+                </span>
               </div>
             ))}
           </div>
@@ -256,20 +258,22 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
           {errorMsg && <div className="aviator-reference-error">{errorMsg}</div>}
 
           <section className="aviator-ref-bet-row">
-            <div className="aviator-ref-bet-card">
-              <div className="aviator-ref-tabs"><span className="active">BET</span><span>AUTO</span></div>
-              <div className="aviator-ref-card-body">
-                <div className="aviator-ref-amount">
-                  <button type="button" onClick={() => setBetAmount((v) => Math.max(10, v - 10))}>−</button>
-                  <strong>₹{betAmount.toLocaleString('en-IN')}</strong>
-                  <button type="button" onClick={() => setBetAmount((v) => Math.min(25000, v + 10))}>+</button>
+            {[1, 2].map((slot) => (
+              <div className="aviator-ref-bet-card" key={slot}>
+                <div className="aviator-ref-tabs"><span className="active">BET</span><span>AUTO</span></div>
+                <div className="aviator-ref-card-body">
+                  <div className="aviator-ref-amount">
+                    <button type="button" onClick={() => setBetAmount((v) => Math.max(10, v - 10))}>−</button>
+                    <strong>₹{betAmount.toLocaleString('en-IN')}</strong>
+                    <button type="button" onClick={() => setBetAmount((v) => Math.min(25000, v + 10))}>+</button>
+                  </div>
+                  <div className="aviator-ref-quick">
+                    {[50, 100, 500, 1000].map((n) => <button type="button" key={n} onClick={() => setBetAmount(n)}>₹{n}</button>)}
+                  </div>
+                  {slot === 1 && currentBet && !currentBet.cashedOut && isRunning ? cashoutButton : placeButton()}
                 </div>
-                <div className="aviator-ref-quick">
-                  {[50, 100, 500, 1000].map((n) => <button type="button" key={n} onClick={() => setBetAmount(n)}>₹{n}</button>)}
-                </div>
-                {currentBet && !currentBet.cashedOut && isRunning ? cashoutButton : placeButton()}
               </div>
-            </div>
+            ))}
           </section>
 
           <footer className="aviator-reference-footer">
