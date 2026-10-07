@@ -560,10 +560,13 @@ app.get('/api/games/roulette/history', requireAuth, requirePlayerForGames, handl
 // 4. POST Bets (Register bets for ongoing authoritative round)
 const handlePostRouletteBets = async (req: Request, res: Response) => {
   const { bets, idempotencyKey }: { bets: RouletteBet[]; idempotencyKey?: string } = req.body;
+  const userId = req.user!.id;
+  const clientKey = typeof idempotencyKey === 'string' ? idempotencyKey.trim() : '';
+  if (!clientKey) return res.status(400).json({ error: 'Roulette bet idempotencyKey is required' });
+  const scopedKey = rouletteBetIdempotencyKey(userId, clientKey);
 
-  // Idempotency check to prevent double debit
-  if (idempotencyKey && processedRouletteIdempotency.has(idempotencyKey)) {
-    return res.json(processedRouletteIdempotency.get(idempotencyKey));
+  if (processedRouletteIdempotency.has(scopedKey)) {
+    return res.json(processedRouletteIdempotency.get(scopedKey));
   }
 
   let totalBet = 0;
@@ -573,139 +576,53 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
     return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid roulette bets' });
   }
 
-  if (rouletteState.phase !== 'betting') {
+  const roundId = rouletteState.roundId;
+  if (rouletteState.phase !== 'betting' || Date.now() >= roulettePhaseEndsAt) {
     return res.status(400).json({ error: 'Betting is currently closed for this round' });
   }
 
-  let debitResult: any;
   try {
-    debitResult = await debitRouletteBet({ debitForUser }, req, totalBet, `Roulette Bet #${rouletteState.roundId}`, idempotencyKey);
-  } catch (e: any) {
-    return res.status(400).json({ error: 'Insufficient wallet balance' });
-  }
+    const result = await supabaseRepo.atomicPlaceRouletteBets({
+      userId,
+      gameId: 'roulette',
+      roundId,
+      bets,
+      idempotencyKey: scopedKey
+    });
 
-  const userId = req.user!.id;
+    if (!result?.success) throw new Error('Roulette bet transaction was not accepted');
 
-  // The wallet debit is asynchronous. The round can close while that RPC is
-  // in flight, so re-check the authoritative phase/deadline before persisting
-  // any bet. A late debit is immediately refunded and never becomes a bet.
-  const roundStillOpen =
-    rouletteState.phase === 'betting' &&
-    (!roulettePhaseEndsAt || Date.now() < roulettePhaseEndsAt);
+    const placedAt = new Date().toISOString();
+    const serverBets: ServerRouletteBet[] = bets.map((bet) => ({ ...bet, userId, placedAt }));
+    currentRoundBets[roundId] = [...(currentRoundBets[roundId] || []), ...serverBets];
 
-  if (!roundStillOpen) {
-    try {
-      await supabaseRepo.atomicCredit(
-        userId,
-        totalBet,
-        'refund',
-        `Roulette late-bet refund #${rouletteState.roundId}`,
-        'roulette',
-        idempotencyKey ? `roulette:late-bet-refund:${idempotencyKey}` : undefined
-      );
-    } catch (refundError) {
-      console.error('[RouletteBetTiming] late debit refund failed', {
-        refundError, roundId: rouletteState.roundId, userId
-      });
+    const wallet = await supabaseRepo.getWallet(userId);
+    const responsePayload = {
+      success: true,
+      roundId,
+      bets: bets,
+      totalBetPlaced: totalBet,
+      wallet,
+      countdown: rouletteState.countdown
+    };
+
+    processedRouletteIdempotency.set(scopedKey, { ...responsePayload, createdAt: Date.now() });
+
+    // Targeted to this player only. Never broadcast another player's wallet.
+    emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, {
+      userId,
+      wallet,
+      roundId
+    });
+    return res.json(responsePayload);
+  } catch (error: any) {
+    const message = String(error?.message || '');
+    if (/closed|betting|round/i.test(message)) {
+      return res.status(409).json({ error: 'Betting is currently closed for this round' });
     }
-    return res.status(409).json({ error: 'Betting closed before the bet was accepted' });
-  }
-
-  const placedAt = new Date().toISOString();
-  const serverBets: ServerRouletteBet[] = bets.map((bet) => ({
-    ...bet,
-    userId,
-    placedAt
-  }));
-
-  // Ensure the authoritative round exists in public.game_rounds before inserting
-  // bets. The bets table has a foreign key to game_rounds(round_id).
-  try {
-    await supabaseRepo.recordGameRound(
-      rouletteState.roundId,
-      'roulette',
-      rouletteState.phase,
-      {
-        roomId: rouletteState.roomId,
-        startedAt: placedAt,
-        countdown: rouletteState.countdown
-      }
-    );
-  } catch (roundPersistError) {
-    try {
-      await supabaseRepo.atomicCredit(
-        userId,
-        totalBet,
-        'refund',
-        `Roulette round persistence refund #${rouletteState.roundId}`,
-        'roulette',
-        idempotencyKey ? `roulette:round-refund:${idempotencyKey}` : `roulette:round-refund:${rouletteState.roundId}:${userId}:${Date.now()}`
-      );
-    } catch (refundError) {
-      console.error('[RouletteRoundPersistence] round persistence failed and refund failed', { roundPersistError, refundError, roundId: rouletteState.roundId, userId });
-    }
-    return res.status(503).json({ error: 'Roulette round could not be persisted. No bet was accepted.' });
-  }
-
-  // Persist the authoritative bet before the request completes so a process restart
-  // cannot lose a debit that was already accepted.
-  const persistedBetIds: string[] = [];
-  try {
-    for (const bet of serverBets) {
-      const persisted = await supabaseRepo.recordGameBet({
-        id: `roulette:${rouletteState.roundId}:${userId}:${crypto.randomUUID()}`,
-        roundId: rouletteState.roundId,
-        userId,
-        gameId: 'roulette',
-        betType: bet.type,
-        betValue: { value: bet.value ?? null, numbers: bet.numbers ?? null },
-        amount: Number(bet.amount),
-        status: 'placed',
-        idempotencyKey: idempotencyKey ? `${idempotencyKey}:${bet.type}:${bet.value ?? bet.numbers?.join(',') ?? 'na'}` : null
-      });
-      persistedBetIds.push(String(persisted.id));
-    }
-  } catch (persistError) {
-    let cleanupError: unknown = null;
-    try {
-      await supabaseRepo.deleteGameBets(persistedBetIds);
-    } catch (error) {
-      cleanupError = error;
-    }
-    let refundError: unknown = null;
-    try {
-      await supabaseRepo.atomicCredit(
-        userId,
-        totalBet,
-        'refund',
-        `Roulette bet persistence refund #${rouletteState.roundId}`,
-        'roulette',
-        idempotencyKey ? `roulette:persist-refund:${idempotencyKey}` : `roulette:persist-refund:${rouletteState.roundId}:${userId}:${Date.now()}`
-      );
-    } catch (refundError) {
-      console.error('[RouletteBetPersistence] persistence rollback/refund failed', { persistError, cleanupError, refundError, roundId: rouletteState.roundId, userId, persistedBetIds });
-    }
+    console.error('[RouletteBet] atomic placement failed', { error, roundId, userId });
     return res.status(503).json({ error: 'Roulette bet could not be persisted. No bet was accepted.' });
   }
-
-  const existingBets = (currentRoundBets[rouletteState.roundId] || []) as ServerRouletteBet[];
-  currentRoundBets[rouletteState.roundId] = [...existingBets, ...serverBets];
-
-  const responsePayload = {
-    success: true,
-    roundId: rouletteState.roundId,
-    bets: currentRoundBets[rouletteState.roundId].map(({ userId: _userId, placedAt: _placedAt, ...bet }) => bet),
-    totalBetPlaced: totalBet,
-    wallet: await supabaseRepo.getWallet(req.user!.id),
-    countdown: rouletteState.countdown
-  };
-
-  if (idempotencyKey) {
-    processedRouletteIdempotency.set(idempotencyKey, { ...responsePayload, createdAt: Date.now() });
-  }
-
-  emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, { wallet: await supabaseRepo.getWallet(req.user!.id) });
-  return res.json(responsePayload);
 };
 app.post('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handlePostRouletteBets);
 
