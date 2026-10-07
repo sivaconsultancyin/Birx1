@@ -352,7 +352,8 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
       const hist = await gamesApi.roulette.getHistory();
       setStats(hist);
     } catch {
-      // Ignore
+      setStats(null);
+      setErrorMsg('Roulette statistics are temporarily unavailable.');
     }
   };
 
