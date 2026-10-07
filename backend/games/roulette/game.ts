@@ -169,7 +169,9 @@ setInterval(async () => {
       emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.spinStarted, {
         roundId: rouletteState.roundId,
         countdown: 5,
-        endsAt: roulettePhaseEndsAt
+        endsAt: roulettePhaseEndsAt,
+        winningNumber: winningNum,
+        winningColor: rouletteState.winningColor
       });
       void supabaseRepo.recordGameRound(
         rouletteState.roundId,
@@ -629,11 +631,32 @@ const handlePostRouletteBets = async (req: Request, res: Response) => {
 app.post('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handlePostRouletteBets);
 
 // 5. GET Active Bets
-const handleGetRouletteBets = (_req: Request, res: Response) => {
-  const bets = currentRoundBets[rouletteState.roundId] || [];
+const handleGetRouletteBets = async (req: Request, res: Response) => {
+  const roundId = rouletteState.roundId;
+  const userId = req.user!.id;
+  let bets: ServerRouletteBet[] = [];
+
+  try {
+    const persisted = await supabaseRepo.getRoundBets(roundId, 'roulette');
+    bets = (persisted || [])
+      .filter((row: any) => row.user_id === userId)
+      .map((row: any) => ({
+        type: row.bet_type,
+        value: row.bet_value?.value ?? undefined,
+        numbers: row.bet_value?.numbers ?? undefined,
+        amount: Number(row.amount),
+        userId,
+        placedAt: row.created_at
+      }));
+  } catch (error) {
+    console.error('[RouletteBets] failed to load persisted active bets', error);
+    bets = ((currentRoundBets[roundId] || []) as ServerRouletteBet[])
+      .filter((bet) => bet.userId === userId);
+  }
+
   res.json({
-    roundId: rouletteState.roundId,
-    bets,
+    roundId,
+    bets: bets.map(({ userId: _userId, placedAt: _placedAt, ...bet }) => bet),
     totalBet: bets.reduce((sum, b) => sum + Number(b.amount || 0), 0)
   });
 };
