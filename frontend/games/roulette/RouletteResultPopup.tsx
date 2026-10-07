@@ -27,7 +27,7 @@ export const RouletteResultPopup: React.FC<RouletteResultPopupProps> = ({
   betAmount,
   netProfit,
   roundId,
-  durationMs = 3500
+  durationMs = 2000
 }) => {
   const [progress, setProgress] = useState(100);
 
