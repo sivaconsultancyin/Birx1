@@ -343,6 +343,18 @@ setInterval(async () => {
 
           for (const playerId of userIds) {
             const playerSettlement = playerSettlements[playerId];
+            let wallet: any = undefined;
+            try {
+              wallet = await supabaseRepo.getWallet(playerId);
+            } catch (walletError) {
+              // Settlement is already committed. Do not suppress the player
+              // result just because a wallet read is temporarily unavailable.
+              console.error(`[RouletteSettlement:${currentRoundId}] wallet read failed for ${playerId}`, walletError);
+            }
+
+            // Emit exactly ONE player_result per player/round. It contains the
+            // authoritative wallet when available, so the client can update
+            // payout immediately without waiting for another event.
             emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.playerResult, {
               userId: playerId,
               roundId: currentRoundId,
@@ -352,39 +364,18 @@ setInterval(async () => {
               netResult: playerSettlement.netResult,
               isWin: playerSettlement.grossPayout > 0,
               settlementStatus: 'settled',
+              wallet,
               endsAt: roulettePhaseEndsAt
             });
-            // Wallet changes happen for every settled player: the stake was
-            // debited at bet placement, and winners may receive a payout.
-            // Always send the authoritative post-settlement wallet so losses
-            // also update live without requiring a page refresh.
-            try {
-              const wallet = await supabaseRepo.getWallet(playerId);
-              // Emit a player-targeted wallet update as well as the room event.
-              // Some clients filter room broadcasts by event name/userId; the
-              // targeted event makes the authoritative payout visible immediately.
-              const walletPayload = {
+
+            if (wallet) {
+              emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, {
                 userId: playerId,
                 wallet,
                 roundId: currentRoundId,
                 settlementStatus: 'settled',
                 source: 'roulette_settlement'
-              };
-              emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, walletPayload);
-              emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.playerResult, {
-                userId: playerId,
-                roundId: currentRoundId,
-                winningNumber: winningNum,
-                totalBet: playerSettlement.totalBet,
-                grossPayout: playerSettlement.grossPayout,
-                netResult: playerSettlement.netResult,
-                isWin: playerSettlement.grossPayout > 0,
-                settlementStatus: 'settled',
-                wallet,
-                endsAt: roulettePhaseEndsAt
               });
-            } catch (walletError) {
-              console.error(`[RouletteSettlement:${currentRoundId}] failed to refresh wallet for ${playerId}`, walletError);
             }
           }
         } catch (error) {
