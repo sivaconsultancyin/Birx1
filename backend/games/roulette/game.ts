@@ -730,10 +730,28 @@ app.get('/api/games/roulette/bets', requireAuth, requirePlayerForGames, handleGe
 const handleGetRouletteSettlement = (req: Request, res: Response) => {
   const roundId = req.params.roundId || rouletteState.roundId;
   const settlement = roundSettlements[roundId];
+  const userId = req.user!.id;
+
   if (!settlement) {
     return res.status(404).json({ error: `Settlement not found for round ${roundId}` });
   }
-  return res.json({ settlement });
+
+  // Never expose the full playerSettlements map. It contains per-user wager and
+  // payout information and is not a public game-state field.
+  const playerSettlement = settlement.playerSettlements?.[userId];
+  return res.json({
+    settlement: {
+      roundId,
+      winningNumber: settlement.winningNumber,
+      winningColor: settlement.winningColor,
+      winningCategory: settlement.winningCategory,
+      settlementStatus: settlement.settlementStatus,
+      totalBet: playerSettlement?.totalBet ?? 0,
+      grossPayout: playerSettlement?.grossPayout ?? 0,
+      netResult: playerSettlement?.netResult ?? 0,
+      isWin: (playerSettlement?.grossPayout ?? 0) > 0
+    }
+  });
 };
 app.get('/api/games/roulette/settlement/:roundId', requireAuth, requirePlayerForGames, handleGetRouletteSettlement);
 
