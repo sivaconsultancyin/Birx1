@@ -145,6 +145,22 @@ const initializeRouletteRoom = async () => {
     } else {
       await safeSaveAuthoritativeGameState('roulette', serializeRoulettePersistence());
     }
+
+    // Ensure the restored/current authoritative round exists in game_rounds
+    // before any bet can reach atomic_place_bets. This prevents the first
+    // betting round after a process restart from being rejected as "round not found".
+    await supabaseRepo.recordGameRound(
+      rouletteState.roundId,
+      'roulette',
+      rouletteState.phase,
+      {
+        roomId: GAME_ROOM_ID,
+        countdown: rouletteState.countdown,
+        startedAt: new Date().toISOString()
+      },
+      Date.now(),
+      rouletteFairRound.serverSeedHash
+    );
   } catch (error) {
     console.error('[Roulette] failed to initialize shared room state', error);
   } finally {
