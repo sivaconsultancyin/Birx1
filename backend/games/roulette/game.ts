@@ -253,8 +253,8 @@ setInterval(async () => {
         });
 
         if (playerSettlement.grossPayout > 0) {
+          const payoutKey = `roulette:settlement:${currentRoundId}:${userId}`;
           try {
-            const payoutKey = `roulette:settlement:${currentRoundId}:${userId}`;
             const credit = await supabaseRepo.atomicCredit(
               userId,
               playerSettlement.grossPayout,
@@ -269,7 +269,33 @@ setInterval(async () => {
               roundId: currentRoundId
             });
           } catch (error) {
+            // Persist a deterministic retry record. The payout idempotency key
+            // makes every retry safe even if the original credit actually
+            // succeeded but its response was lost.
             console.error(`[RouletteSettlement:${currentRoundId}] payout failed for user ${userId}`, error);
+            try {
+              await supabaseRepo.recordSettlement({
+                id: `roulette:payout-pending:${currentRoundId}:${userId}`,
+                roundId: currentRoundId,
+                gameId: 'roulette',
+                totalBetsCount: 1,
+                totalBetAmount: playerSettlement.totalBet,
+                totalPayoutAmount: playerSettlement.grossPayout,
+                netHouseResult: playerSettlement.totalBet - playerSettlement.grossPayout,
+                outcomeSummary: 'PAYOUT_PENDING_RETRY',
+                details: {
+                  payoutRetry: {
+                    userId,
+                    amount: playerSettlement.grossPayout,
+                    idempotencyKey: payoutKey,
+                    attempts: 1,
+                    nextRetryAt: new Date(Date.now() + 5000).toISOString()
+                  }
+                }
+              });
+            } catch (persistError) {
+              console.error(`[RouletteSettlement:${currentRoundId}] failed to persist payout retry record for user ${userId}`, persistError);
+            }
           }
         }
       }
