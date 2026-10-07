@@ -123,14 +123,7 @@ export const AviatorReferenceCanvas: React.FC<Props> = ({
   return (
     <div ref={hostRef} className="aviator-reference-canvas-host">
       <canvas ref={canvasRef} className="aviator-reference-canvas" aria-label="Aviator flight animation" />
-      <div className="aviator-canvas-overlay">
-        <span className="aviator-round-phase">{phase === 'running' ? 'FLYING AWAY' : phase === 'crashed' ? 'FLEW AWAY' : `NEXT FLIGHT · ${countdown}s`}</span>
-        <strong className={phase === 'crashed' ? 'crashed' : ''}>{(phase === 'crashed' ? Number(crashMultiplier ?? multiplier) : Number(multiplier || 1)).toFixed(2)}x</strong>
-        {phase !== 'running' && phase !== 'crashed' && <small>WAITING FOR TAKEOFF</small>}
-      </div>
-      <div className="aviator-canvas-tools">
-        <button type="button" onClick={onToggleMute} aria-label="Toggle sound">{muted ? '🔇' : '🔊'}</button>
-      </div>
+
     </div>
   );
 };
