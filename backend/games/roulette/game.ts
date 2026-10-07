@@ -264,30 +264,10 @@ setInterval(async () => {
       const settlement = computeRouletteSettlement(winningNum, bets);
       const playerSettlements: Record<string, any> = {};
 
-      // Bets were debited when placed. Credit each player's gross payout exactly once
-      // using a deterministic idempotency key so a restart/recovery cannot double-pay.
       const userIds = [...new Set(bets.map((bet) => bet.userId).filter(Boolean))];
       for (const userId of userIds) {
         const playerBets = bets.filter((bet) => bet.userId === userId);
-        const playerSettlement = computeRouletteSettlement(winningNum, playerBets);
-        playerSettlements[userId] = playerSettlement;
-
-        // Send the authoritative player outcome from the backend. The frontend
-        // must not have to reconstruct settlement from local bet state.
-        emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.playerResult, {
-          userId,
-          roundId: currentRoundId,
-          winningNumber: winningNum,
-          totalBet: playerSettlement.totalBet,
-          grossPayout: playerSettlement.grossPayout,
-          netResult: playerSettlement.netResult,
-          isWin: playerSettlement.grossPayout > 0,
-          settlementStatus: 'settled',
-          endsAt: roulettePhaseEndsAt,
-        });
-
-        // Wallet credit + bet status are committed together by the
-        // database settlement RPC below. Do not credit here independently.
+        playerSettlements[userId] = computeRouletteSettlement(winningNum, playerBets);
       }
 
       if (persistedBets.length) {
@@ -333,7 +313,19 @@ setInterval(async () => {
           });
 
           for (const playerId of userIds) {
-            if (playerSettlements[playerId]?.grossPayout > 0) {
+            const playerSettlement = playerSettlements[playerId];
+            emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.playerResult, {
+              userId: playerId,
+              roundId: currentRoundId,
+              winningNumber: winningNum,
+              totalBet: playerSettlement.totalBet,
+              grossPayout: playerSettlement.grossPayout,
+              netResult: playerSettlement.netResult,
+              isWin: playerSettlement.grossPayout > 0,
+              settlementStatus: 'settled',
+              endsAt: roulettePhaseEndsAt
+            });
+            if (playerSettlement.grossPayout > 0) {
               try {
                 const wallet = await supabaseRepo.getWallet(playerId);
                 emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, {
