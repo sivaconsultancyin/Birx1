@@ -278,6 +278,19 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
     loadState();
     loadStats();
 
+    // Restore this player's confirmed bets after refresh/reconnect.
+    // The backend filters by authenticated user and reads Supabase first.
+    void gamesApi.roulette.getBets().then((res) => {
+      if (!res?.roundId || res.roundId !== currentRoundIdRef.current) return;
+      const restored = Array.isArray(res.bets) ? res.bets : [];
+      if (restored.length > 0) {
+        confirmedBetsRef.current = restored;
+        setConfirmedBets(restored);
+      }
+    }).catch(() => {
+      // Realtime/state reconciliation remains authoritative.
+    });
+
     // Reconcile against the authoritative round endpoint so a missed realtime
     // event cannot leave betting stuck in an old phase.
     const reconcileTimer = window.setInterval(async () => {
@@ -399,7 +412,7 @@ export const RouletteScreen: React.FC<RouletteScreenProps> = ({
             if (!prev) return prev;
             const resultNumber = Number(payload.winningNumber);
             const recentResults = Number.isFinite(resultNumber)
-              ? [resultNumber, ...(prev.recentResults || []).filter((n) => n !== resultNumber)].slice(0, 20)
+              ? [resultNumber, ...(prev.recentResults || [])].slice(0, 20)
               : prev.recentResults;
             return {
               ...prev,
