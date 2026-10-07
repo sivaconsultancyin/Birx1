@@ -28,6 +28,22 @@ import {
 const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'https://brix1-backend.onrender.com';
 const BASE_URL = `${BACKEND_URL.replace(/\/$/, '')}/api`;
 
+function rouletteBetFingerprint(bets: RouletteBet[]): string {
+  const canonical = bets.map(b => ({
+    type: b.type,
+    value: b.value ?? null,
+    numbers: Array.isArray(b.numbers) ? [...b.numbers].sort((a, z) => a - z) : null,
+    amount: b.amount
+  })).sort((a, z) => JSON.stringify(a).localeCompare(JSON.stringify(z)));
+  const raw = JSON.stringify(canonical);
+  let hash = 2166136261;
+  for (let i = 0; i < raw.length; i++) {
+    hash ^= raw.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
 async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('brix_token');
   const response = await fetch(`${BASE_URL}${endpoint}`, {
@@ -329,13 +345,36 @@ export const gamesApi = {
       wallet: Wallet;
       countdown: number;
     }> {
-      return fetchJson('/games/roulette/bets', {
-        method: 'POST',
-        body: JSON.stringify({
-          bets,
-          idempotencyKey: idempotencyKey || `rl_bet_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
-        })
-      });
+      let retryKey = idempotencyKey;
+      let storageKey: string | null = null;
+
+      if (!retryKey) {
+        // Fetch the authoritative round so the retry identity cannot be reused
+        // for the same bet slip in a later round.
+        const round = await fetchJson<{ roundId: string }>('/games/roulette/round');
+        storageKey = `brix:roulette:bet-retry:${round.roundId}:${rouletteBetFingerprint(bets)}`;
+        try {
+          retryKey = sessionStorage.getItem(storageKey) || `rl_bet_${round.roundId}_${rouletteBetFingerprint(bets)}`;
+          sessionStorage.setItem(storageKey, retryKey);
+        } catch {
+          retryKey = `rl_bet_${round.roundId}_${rouletteBetFingerprint(bets)}`;
+        }
+      }
+
+      try {
+        const result = await fetchJson('/games/roulette/bets', {
+          method: 'POST',
+          body: JSON.stringify({ bets, idempotencyKey: retryKey })
+        });
+        if (storageKey) {
+          try { sessionStorage.removeItem(storageKey); } catch { /* storage unavailable */ }
+        }
+        return result;
+      } catch (error) {
+        // Keep the key stored so a caller retrying after a timeout/network error
+        // sends the exact same idempotency key.
+        throw error;
+      }
     },
     async getMyBets(): Promise<{ roundId: string; bets: RouletteBet[]; totalBet: number }> {
       return fetchJson('/games/roulette/bets');
