@@ -369,8 +369,16 @@ setInterval(async () => {
         } catch (error) {
           // The RPC is transactional: wallet credits, bet statuses, round
           // settlement and settlement row roll back together on failure.
-          console.error(`[RouletteSettlement:${currentRoundId}] atomic settlement failed`, error);
-          throw error;
+          // Never leave the round permanently stuck in "result". Move it back to
+          // an immediate server-authoritative retry state; no result/popup event
+          // is emitted until the atomic settlement commits.
+          console.error(`[RouletteSettlement:${currentRoundId}] atomic settlement failed; scheduling retry`, error);
+          rouletteSettlementPending = true;
+          rouletteState.phase = 'spinning';
+          rouletteState.countdown = 0;
+          roulettePhaseEndsAt = Date.now();
+          await safeSaveAuthoritativeGameState('roulette', serializeRoulettePersistence());
+          return;
         }
       }
 
@@ -456,8 +464,11 @@ setInterval(async () => {
     }
   } else if (rouletteState.phase === 'result') {
     if (rouletteSettlementPending) {
-      rouletteState.countdown = 1;
-      roulettePhaseEndsAt = Date.now() + 1000;
+      // A failed atomic settlement must never wait out the result timer.
+      // Retry immediately through the same spinning->result settlement path.
+      rouletteState.phase = 'spinning';
+      rouletteState.countdown = 0;
+      roulettePhaseEndsAt = Date.now();
       return;
     }
     // Keep result timing on the same absolute server clock used by every
