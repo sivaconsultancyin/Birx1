@@ -21,6 +21,9 @@ import {
   ValidationResult
 } from './rouletteCoordinates.ts';
 
+// Compatibility export: keep one canonical RED_NUMBERS_SET definition in rouletteCoordinates.ts.
+export { RED_NUMBERS_SET } from './rouletteCoordinates.ts';
+
 interface RouletteWheelProps {
   roundId?: string;
   isSpinning: boolean;
