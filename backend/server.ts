@@ -655,7 +655,7 @@ function createGameModuleDeps(gameId: string, roomId: string) {
   return {
     ...sharedGameModuleDeps,
     broadcastRealtime: (event: string, data: Record<string, unknown> = {}) =>
-      broadcastRealtime(event, { gameId, roomId, ...data })
+      broadcastRealtime(event, { ...data, gameId, roomId })
   };
 }
 
