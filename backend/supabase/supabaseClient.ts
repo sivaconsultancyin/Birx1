@@ -630,6 +630,26 @@ const supabaseRepoImpl = {
   },
 
   // AVIATOR ROUND/BET/SETTLEMENT PERSISTENCE
+  async atomicPlaceRouletteBets(input: {
+    userId: string;
+    gameId: 'roulette';
+    roundId: string;
+    bets: Array<{ type: string; value?: unknown; numbers?: number[]; amount: number }>;
+    idempotencyKey: string;
+  }) {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Supabase admin client unavailable');
+    const { data, error } = await admin.rpc('atomic_place_bets', {
+      p_user_id: input.userId,
+      p_game_id: input.gameId,
+      p_round_id: input.roundId,
+      p_bets: input.bets,
+      p_idempotency_key: input.idempotencyKey
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
   async recordGameBet(input: { id: string; roundId: string; userId: string; gameId: string; betType: string; betValue?: any; amount: number; multiplier?: number | null; payout?: number | null; status: string; idempotencyKey?: string | null; settledAt?: string | null }) {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Supabase is not configured');
