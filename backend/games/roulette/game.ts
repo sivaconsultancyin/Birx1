@@ -360,11 +360,28 @@ setInterval(async () => {
             // also update live without requiring a page refresh.
             try {
               const wallet = await supabaseRepo.getWallet(playerId);
-              emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, {
+              // Emit a player-targeted wallet update as well as the room event.
+              // Some clients filter room broadcasts by event name/userId; the
+              // targeted event makes the authoritative payout visible immediately.
+              const walletPayload = {
                 userId: playerId,
                 wallet,
                 roundId: currentRoundId,
-                settlementStatus: 'settled'
+                settlementStatus: 'settled',
+                source: 'roulette_settlement'
+              };
+              emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.walletUpdated, walletPayload);
+              emitRouletteEvent(broadcastRealtime, ROULETTE_SOCKET_EVENTS.playerResult, {
+                userId: playerId,
+                roundId: currentRoundId,
+                winningNumber: winningNum,
+                totalBet: playerSettlement.totalBet,
+                grossPayout: playerSettlement.grossPayout,
+                netResult: playerSettlement.netResult,
+                isWin: playerSettlement.grossPayout > 0,
+                settlementStatus: 'settled',
+                wallet,
+                endsAt: roulettePhaseEndsAt
               });
             } catch (walletError) {
               console.error(`[RouletteSettlement:${currentRoundId}] failed to refresh wallet for ${playerId}`, walletError);
