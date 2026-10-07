@@ -86,7 +86,7 @@ export class ParticlePool {
       randomVy: 15,
       maxLife: 600,
       size: 2.5,
-      color: '#ff8800',
+      color: '#ff1744',
       alpha: 0.7,
     });
   }
