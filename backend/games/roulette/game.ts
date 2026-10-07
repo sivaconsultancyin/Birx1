@@ -435,6 +435,11 @@ setInterval(async () => {
 
     }
   } else if (rouletteState.phase === 'result') {
+    if (rouletteSettlementPending) {
+      rouletteState.countdown = 1;
+      roulettePhaseEndsAt = Date.now() + 1000;
+      return;
+    }
     // Keep result timing on the same absolute server clock used by every
     // other phase. The cycle runs every 100ms, so decrementing by 1 here
     // would otherwise end a 4-second result phase in roughly 400ms.
