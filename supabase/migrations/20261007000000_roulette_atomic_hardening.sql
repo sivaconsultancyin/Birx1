@@ -29,7 +29,7 @@ BEGIN
     v_total := v_total + (v_bet->>'amount')::NUMERIC;
   END LOOP;
 
-  v_debit := public.atomic_wallet_debit(p_user_id,v_total,'bet','Placed bet on '||p_game_id||' round #'||p_round_id,p_game_id,p_idempotency_key,'BET-'||p_round_id||'-'||gen_random_uuid()::text);
+  v_debit := public.atomic_wallet_debit(p_user_id,v_total,'bet','Placed bet on '||p_game_id||' round #'||p_round_id,p_game_id,p_idempotency_key || ':wallet','BET-'||p_round_id||'-'||gen_random_uuid()::text);
 
   FOR v_bet IN SELECT * FROM jsonb_array_elements(p_bets) LOOP
     v_bet_id := 'roulette:'||p_round_id||':'||p_user_id||':'||gen_random_uuid()::text;
