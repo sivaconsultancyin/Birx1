@@ -394,9 +394,6 @@ setInterval(async () => {
         winningNumber: winningNum,
         winningColor: settlement.winningColor,
         winningCategory: settlement.winningCategory,
-        totalBet: settlement.totalBet,
-        grossPayout: settlement.grossPayout,
-        netResult: settlement.netResult,
         settlementStatus: 'settled',
         recentResults: rouletteState.recentResults
       });
