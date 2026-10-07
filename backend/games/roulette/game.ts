@@ -314,7 +314,11 @@ setInterval(async () => {
               if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 500));
             }
           }
-          if (!settlementCommitted) throw lastSettlementError || new Error('Roulette settlement failed');
+          if (!settlementCommitted) {
+            rouletteSettlementPending = true;
+            throw lastSettlementError || new Error('Roulette settlement failed');
+          }
+          rouletteSettlementPending = false;
 
           for (const playerId of userIds) {
             const playerSettlement = playerSettlements[playerId];
