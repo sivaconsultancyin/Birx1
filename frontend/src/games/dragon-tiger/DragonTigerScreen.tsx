@@ -1,7 +1,7 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect } from 'react';
-import { ExternalDragonTigerUI } from '../../../src/components/external/ExternalDragonTigerUI.tsx';
+import { ExternalDragonTigerUI } from './components/ExternalDragonTigerUI.tsx';
 import { Flame, Shield, Award, RotateCcw, Clock } from 'lucide-react';
 import { Card, DragonTigerBetSide, DragonTigerState, Wallet } from '../../../src/types.ts';
 import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
