@@ -39,12 +39,6 @@ import { storageService } from './storage/storageService.ts';
 import { gameRecoveryService } from './recovery/gameRecoveryService.ts';
 import { gameEventBus } from './events/gameEventBus.ts';
 import { createSocketServer } from './shared/socket/socketServer.ts';
-import { createAviatorRouter } from './games/aviator/routes/index.ts';
-import { createRouletteRouter } from './games/roulette/routes/index.ts';
-import { createTeenPattiRouter } from './games/teen-patti/routes/index.ts';
-import { createDiceRouter } from './games/dice/routes/index.ts';
-import { createDragonTigerRouter } from './games/dragon-tiger/routes/index.ts';
-import { createAndarBaharRouter } from './games/andar-bahar/routes/index.ts';
 
 
 const app = express();
@@ -102,13 +96,6 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', service: 'brix-backend', environment: process.env.NODE_ENV || 'development' });
 });
 // Foundation API namespaces. Gameplay is intentionally not implemented here.
-app.use('/api/aviator', createAviatorRouter());
-app.use('/api/roulette', createRouletteRouter());
-app.use('/api/teen-patti', createTeenPattiRouter());
-app.use('/api/dice', createDiceRouter());
-app.use('/api/dragon-tiger', createDragonTigerRouter());
-app.use('/api/andar-bahar', createAndarBaharRouter());
-
 
 app.disable('x-powered-by');
 app.use((_req: Request, res: Response, next) => {
