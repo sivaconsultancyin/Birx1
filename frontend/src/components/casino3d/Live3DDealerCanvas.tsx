@@ -107,7 +107,7 @@ export const Live3DDealerCanvas: React.FC<Live3DDealerCanvasProps> = ({
         sceneRef.current?.dealCard({
           id: cardId,
           suit: card.suit,
-          rank: card.value,
+          rank: String(card.value),
           targetPos: { x: targetX, y: 0.06, z: 0.65 },
           targetRotY: (idx - 1) * 0.08,
           isFaceUp: true,
@@ -187,7 +187,7 @@ export const Live3DDealerCanvas: React.FC<Live3DDealerCanvasProps> = ({
         sceneRef.current?.dealCard({
           id: cardId,
           suit: item.card.suit,
-          rank: item.card.value,
+          rank: String(item.card.value),
           targetPos: { x: targetX, y: 0.06 + idx * 0.008, z: targetZ },
           isFaceUp: true,
           dealerSide: isAndar ? 'left' : 'right'
