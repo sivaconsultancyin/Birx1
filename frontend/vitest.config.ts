@@ -1,2 +1,2 @@
 import {defineConfig} from 'vitest';
-export default defineConfig({test:{environment:'jsdom',include:['src/**/*.test.ts','src/**/*.test.tsx']}});
+export default defineConfig({test:{environment:'node',include:['src/**/*.test.ts','src/**/*.test.tsx']}});
