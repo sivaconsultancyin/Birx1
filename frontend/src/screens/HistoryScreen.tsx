@@ -128,7 +128,7 @@ export const HistoryScreen: React.FC = () => {
       ) : (
         <div className="space-y-2">
           {filtered.map((item) => (
-            <HistoryItem key={item.id} record={item} />
+            <HistoryItem key={item.id} entry={item} />
           ))}
 
           {filtered.length === 0 && (
