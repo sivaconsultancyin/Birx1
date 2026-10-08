@@ -290,7 +290,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
               <div
                 ref={planeRef}
                 className={`aviator-reference-plane ${isCrashed ? 'crashed' : ''}`}
-                style={{ left: `${planeX}%`, top: `${planeY}%` }}
+                style={{ left: `${planeX}%`, top: `${planeY}%`, transition: 'left 90ms linear, top 90ms linear, transform 180ms ease-out, opacity 180ms ease-out', transform: isCrashed ? 'translate3d(42px, -34px, 0) rotate(-8deg)' : 'translate3d(0, 0, 0)', opacity: isCrashed ? 0 : 1 }}
               >
                 <Plane size={58} fill="currentColor" />
                 <span />
