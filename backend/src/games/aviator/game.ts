@@ -264,7 +264,7 @@ async function startAviatorFlight() {
 // Start initial aviator flight cycle
 runAviatorCycle();
 
-app.get('/api/games/aviator/fairness', async (_req: Request, res: Response) => {
+app.get('/api/aviator/fairness', async (_req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({
     algorithm: 'HMAC-SHA-256',
@@ -276,7 +276,7 @@ app.get('/api/games/aviator/fairness', async (_req: Request, res: Response) => {
   });
 });
 
-app.get('/api/games/aviator/state', async (req: Request, res: Response) => {
+app.get('/api/aviator/state', async (req: Request, res: Response) => {
   // Public round state is non-sensitive; betting and cashout endpoints remain authenticated.
   const userId = req.user?.id;
   await hydrateAviatorState();
@@ -293,7 +293,7 @@ app.get('/api/games/aviator/state', async (req: Request, res: Response) => {
   });
 });
 
-app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
+app.post('/api/aviator/bet', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   await hydrateAviatorState();
   const { amount } = req.body;
   const numAmount = Number(amount);
@@ -357,7 +357,7 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
   });
 });
 
-app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
+app.post('/api/aviator/cashout', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   await hydrateAviatorState();
   let currentAviatorBet: AviatorBet | undefined;
   let cashMultiplier = 0;
