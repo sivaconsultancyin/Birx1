@@ -1,6 +1,4 @@
 import type { Request, Response } from 'express';
-import type { AviatorGameDeps } from '../game.ts';
-
 export interface AviatorControllerRuntime {
   getFairness(res: Response): Promise<void> | void;
   getState(req: Request, res: Response): Promise<void>;
