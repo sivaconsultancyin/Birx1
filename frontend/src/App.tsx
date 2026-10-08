@@ -279,7 +279,7 @@ export default function App() {
         </main>
 
         {/* Fixed Bottom Navigation */}
-        <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+        <BottomNavigation activeTab={activeTab as import('./components/BottomNavigation.tsx').NavTab} onTabChange={(tab) => setActiveTab(tab)} />
       </div>
     </div>
   );
