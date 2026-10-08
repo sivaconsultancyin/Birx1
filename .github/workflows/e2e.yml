@@ -48,12 +48,16 @@ jobs:
         run: npm run preview --workspace @brix/frontend -- --host 127.0.0.1 --port 4173 > /tmp/brix-frontend.log 2>&1 &
       - name: Wait for services
         run: |
-          node - <<'NODE'
-          const http=require('http');
-          const urls=['http://127.0.0.1:3000/api/health','http://127.0.0.1:4173'];
-          const start=Date.now();
-          const check=()=>{let pending=0;for(const u of urls){pending++;http.get(u,res=>{res.resume();pending--;if(res.statusCode<500){} if(pending===0&&Date.now()-start<120000) setTimeout(check,200);}).on('error',()=>{pending--;if(pending===0){if(Date.now()-start>120000)process.exit(1);setTimeout(check,1000);}});}if(Date.now()-start>120000)process.exit(1)};check();
-          NODE
+          for i in $(seq 1 60); do
+            backend=$(curl -s -o /tmp/backend-health.json -w "%{http_code}" http://127.0.0.1:3000/api/health || true)
+            frontend=$(curl -s -o /tmp/frontend-health.html -w "%{http_code}" http://127.0.0.1:4173 || true)
+            if [ "$backend" = "200" ] && [ "$frontend" = "200" ]; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/brix-backend.log || true
+          cat /tmp/brix-frontend.log || true
+          exit 1
+
       - name: Run E2E
         run: npm run e2e --workspace @brix/frontend -- --workers=1
         env:
