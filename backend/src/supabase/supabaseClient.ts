@@ -464,7 +464,7 @@ const supabaseRepoImpl = {
     dbStore.transactions.unshift(tx);
 
     const result = { success: true, wallet, transaction: tx };
-    if (idempotencyKey) {
+    if (typeof idempotencyKey === 'string' && idempotencyKey.length > 0) {
       dbStore.idempotency.set(idempotencyKey, result);
     }
     return result;
