@@ -14,7 +14,7 @@ import { RealisticLiveShuffleEngine } from '../../../src/components/casino/Reali
 import { RealHumanShuffleVideo } from '../../../src/components/casino/RealHumanShuffleVideo.tsx';
 import { DealerDealingHand } from '../../../src/components/casino/DealerDealingHand.tsx';
 import { Live3DDealerCanvas } from '../../../src/components/casino3d/Live3DDealerCanvas.tsx';
-import { PlayingCard } from '../../../src/components/teenpatti/PlayingCard.tsx';
+import { PlayingCard } from './PlayingCard.tsx';
 import { casinoAudio } from '../../../src/utils/casinoAudio.ts';
 
 interface AndarBaharScreenProps {
