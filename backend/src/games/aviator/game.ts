@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { AVIATOR_ROOM_ID, INITIAL_AVIATOR_STATE, AVIATOR_BETTING_SECONDS, AVIATOR_RESULT_DELAY_MS } from './constants.ts';
 import { hashSeed, generateCrashPoint } from './fairness.ts';
 import { AVIATOR_SOCKET_EVENTS } from './socket.ts';
-import { createAviatorLossOutcome, createAviatorWinOutcome } from './settlement.ts';
+import { calculateAviatorPayout, createAviatorLossOutcome, createAviatorWinOutcome } from './settlement.ts';
 import type { AviatorBet, AviatorState } from './types/aviatorTypes.ts';
 import type { Wallet } from '../../types.ts';
 import type { Request, Response } from 'express';
