@@ -98,8 +98,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(express.json({ limit: '256kb' }));
-app.get('/api/health', (_req: Request, res: Response) => res.status(200).json({ status: 'ok', service: 'brix-backend' }));
-
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', service: 'brix-backend', environment: process.env.NODE_ENV || 'development' });
 });
