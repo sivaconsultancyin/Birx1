@@ -1,8 +1,6 @@
 import {
   AndarBaharSide,
   AndarBaharState,
-  AviatorBet,
-  AviatorState,
   CoinRecharge,
   DiceBetType,
   DiceState,
@@ -432,24 +430,7 @@ export const gamesApi = {
     }
   },
 
-  // 3. Aviator
-  aviator: {
-    async getState(): Promise<{ state: AviatorState & { currentBet: AviatorBet | null } }> {
-      return fetchJson('/games/aviator/state');
-    },
-    async placeBet(amount: number): Promise<{ success: boolean; bet: AviatorBet; wallet: Wallet }> {
-      return fetchJson('/games/aviator/bet', {
-        method: 'POST',
-        body: JSON.stringify({ amount })
-      });
-    },
-    async cashOut(): Promise<{ success: boolean; cashMultiplier: number; winAmount: number; wallet: Wallet }> {
-      return fetchJson('/games/aviator/cashout', {
-        method: 'POST'
-      });
-    }
-  },
-
+  // 3. Aviator API is isolated under games/aviator/api/aviatorApi.ts
   // 4. Dice
   dice: {
     async getState(): Promise<{ state: DiceState }> {
