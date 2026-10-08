@@ -4,7 +4,6 @@ import { createServer as createHttpServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { registerRouletteGame } from './games/roulette/game.ts';
 import { registerTeenPattiGame } from './games/teen-patti/game.ts';
-import { registerAviatorGame } from './games/aviator/game.ts';
 import { registerDiceGame } from './games/dice/game.ts';
 import { registerDragonTigerGame } from './games/dragon-tiger/game.ts';
 import { registerAndarBaharGame } from './games/andar-bahar/game.ts';
@@ -20,8 +19,6 @@ import {
   RouletteState,
   TeenPattiPlayer,
   TeenPattiState,
-  AviatorBet,
-  AviatorState,
   DiceState,
   DragonTigerState,
   DragonTigerBetSide,
