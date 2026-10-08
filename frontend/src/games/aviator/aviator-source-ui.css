@@ -2154,3 +2154,228 @@ html { touch-action: manipulation; }
   .aviator-arena-top { top: 8px; left: 9px; right: 9px; }
   .aviator-arena-tools { top: 8px; right: 8px; }
 }
+
+
+/* ===== Aviator stock-style screen shell ===== */
+#screen-aviator.aviator-reference-screen {
+  --avi-bg: #07080d;
+  --avi-panel: #101218;
+  --avi-panel-2: #151821;
+  --avi-line: rgba(255,255,255,.075);
+  --avi-muted: rgba(255,255,255,.58);
+  --avi-green: #21c56b;
+  --avi-red: #ff3b5c;
+  min-height: 100dvh;
+  background: radial-gradient(circle at 50% 28%, rgba(34,51,82,.22), transparent 42%), var(--avi-bg);
+}
+
+#screen-aviator .aviator-reference-layout {
+  width: min(1480px, 100%);
+  margin: 0 auto;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 235px minmax(0, 1fr);
+  gap: 10px;
+}
+
+#screen-aviator .aviator-left-panel {
+  min-width: 0;
+  background: linear-gradient(180deg, #11141b, #0c0e13);
+  border: 1px solid var(--avi-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#screen-aviator .aviator-panel-heading {
+  min-height: 38px;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--avi-line);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+#screen-aviator .aviator-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--avi-green);
+  box-shadow: 0 0 9px rgba(33,197,107,.8);
+}
+
+#screen-aviator .aviator-player-summary {
+  padding: 10px 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--avi-muted);
+  font-size: 10px;
+}
+
+#screen-aviator .aviator-player-summary strong { color: #fff; font-size: 13px; }
+#screen-aviator .aviator-player-list { padding: 0 7px 8px; }
+#screen-aviator .aviator-player-row {
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: 25px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 4px;
+  border-radius: 6px;
+}
+#screen-aviator .aviator-player-row + .aviator-player-row { border-top: 1px solid rgba(255,255,255,.035); }
+#screen-aviator .aviator-avatar {
+  width: 23px; height: 23px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: #242a36; color: #fff; font-size: 9px; font-weight: 800;
+}
+#screen-aviator .aviator-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d9dce4; font-size: 10px; }
+#screen-aviator .aviator-player-mult { color: #aeb4c2; font: 700 10px ui-monospace,monospace; }
+#screen-aviator .aviator-player-mult.hot { color: #ffca57; }
+#screen-aviator .aviator-side-history { padding-bottom: 8px; }
+#screen-aviator .aviator-side-history > .aviator-panel-heading { margin-top: 3px; }
+#screen-aviator .aviator-side-history > span {
+  display: inline-block; margin: 7px 0 0 7px; padding: 3px 6px;
+  border-radius: 10px; background: rgba(255,255,255,.045);
+  font: 700 9px ui-monospace,monospace;
+}
+#screen-aviator .aviator-side-history > .high { color:#ffc34d; }
+#screen-aviator .aviator-side-history > .mid { color:#54d88c; }
+#screen-aviator .aviator-side-history > .low { color:#9da5b5; }
+
+#screen-aviator .aviator-reference-main { min-width: 0; }
+#screen-aviator .aviator-reference-history {
+  height: 34px; display: flex; align-items: center; gap: 5px;
+  overflow-x: auto; scrollbar-width: none; padding: 0 4px 6px;
+}
+#screen-aviator .aviator-reference-history::-webkit-scrollbar { display:none; }
+#screen-aviator .aviator-reference-history svg { flex:0 0 auto; color:#8c94a5; }
+#screen-aviator .aviator-reference-history span {
+  flex: 0 0 auto; padding: 4px 8px; border-radius: 10px;
+  background: rgba(255,255,255,.045); font: 700 9px ui-monospace,monospace;
+}
+#screen-aviator .aviator-reference-history .high { color:#ffc34d; }
+#screen-aviator .aviator-reference-history .mid { color:#50d98b; }
+#screen-aviator .aviator-reference-history .low { color:#9da5b5; }
+
+#screen-aviator .aviator-reference-arena {
+  position: relative; width: 100%; min-height: clamp(245px, 39vw, 405px);
+  aspect-ratio: 16 / 8.4; border: 1px solid var(--avi-line);
+  border-radius: 10px; overflow: hidden;
+  background: #080a10;
+  box-shadow: inset 0 1px rgba(255,255,255,.03), 0 12px 35px rgba(0,0,0,.28);
+}
+#screen-aviator .aviator-reference-canvas-host,
+#screen-aviator .aviator-reference-canvas { width:100%; height:100%; }
+#screen-aviator .aviator-reference-canvas-host { position:absolute; inset:0; }
+#screen-aviator .aviator-reference-canvas { display:block; }
+
+#screen-aviator .aviator-arena-overlay {
+  position:absolute; inset:0; z-index:5; pointer-events:none;
+  display:flex; align-items:center; justify-content:center;
+}
+#screen-aviator .aviator-arena-top {
+  position:absolute; top:9px; left:11px; right:11px;
+  display:flex; justify-content:space-between; gap:8px;
+}
+#screen-aviator .aviator-round-id,
+#screen-aviator .aviator-status {
+  padding:5px 8px; border-radius:6px;
+  background:rgba(5,7,12,.58); border:1px solid rgba(255,255,255,.06);
+  backdrop-filter:blur(8px); font:700 8px ui-monospace,monospace;
+}
+#screen-aviator .aviator-status { color:#8ee6b1; }
+#screen-aviator .aviator-status.crashed { color:#ff6680; }
+#screen-aviator .aviator-reference-multiplier { text-align:center; margin-top:-1%; }
+#screen-aviator .aviator-reference-multiplier strong {
+  display:block; color:#fff; font:800 clamp(42px,7vw,76px)/.9 ui-monospace,monospace;
+  letter-spacing:-.055em; text-shadow:0 5px 25px rgba(0,0,0,.55);
+}
+#screen-aviator .aviator-reference-multiplier.crashed strong { color:#ff4b67; }
+#screen-aviator .aviator-flew-away {
+  margin-bottom:8px; color:#ff4b67; font-size:11px; font-weight:900; letter-spacing:.15em;
+}
+#screen-aviator .aviator-reference-multiplier span,
+#screen-aviator .aviator-takeoff { color:rgba(255,255,255,.55); font-size:9px; font-weight:700; letter-spacing:.1em; }
+#screen-aviator .aviator-takeoff { margin-top:13px; text-align:center; }
+#screen-aviator .aviator-takeoff strong { display:block; margin-top:3px; color:#fff; font:800 23px ui-monospace,monospace; }
+
+#screen-aviator .aviator-arena-tools {
+  position:absolute; top:9px; right:9px; z-index:10; display:flex; gap:5px;
+}
+#screen-aviator .aviator-arena-tools button {
+  width:30px; height:30px; display:grid; place-items:center;
+  border:1px solid rgba(255,255,255,.08); border-radius:7px;
+  background:rgba(10,12,18,.62); color:#cdd2dc; backdrop-filter:blur(8px);
+}
+
+#screen-aviator .aviator-ref-bet-row {
+  display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;
+}
+#screen-aviator .aviator-ref-bet-card {
+  overflow:hidden; border:1px solid var(--avi-line); border-radius:9px; background:var(--avi-panel);
+}
+#screen-aviator .aviator-ref-tabs {
+  height:33px; display:flex; border-bottom:1px solid var(--avi-line);
+}
+#screen-aviator .aviator-ref-tabs span {
+  flex:1; display:grid; place-items:center; color:#737b8b;
+  font-size:9px; font-weight:800; letter-spacing:.08em;
+}
+#screen-aviator .aviator-ref-tabs .active { color:#fff; border-bottom:2px solid var(--avi-green); }
+#screen-aviator .aviator-ref-card-body { padding:9px; }
+#screen-aviator .aviator-ref-amount {
+  display:grid; grid-template-columns:34px 1fr 34px; height:38px; margin-bottom:7px;
+  border:1px solid var(--avi-line); border-radius:6px; overflow:hidden; background:var(--avi-panel-2);
+}
+#screen-aviator .aviator-ref-amount button { background:transparent; color:#c9ced8; font-size:17px; }
+#screen-aviator .aviator-ref-amount strong { display:grid; place-items:center; color:#fff; font:800 13px ui-monospace,monospace; }
+#screen-aviator .aviator-ref-quick { display:flex; gap:4px; margin-bottom:7px; }
+#screen-aviator .aviator-ref-quick button {
+  flex:1; min-width:0; height:27px; border:1px solid var(--avi-line);
+  border-radius:5px; background:rgba(255,255,255,.035); color:#aeb5c2; font-size:9px; font-weight:700;
+}
+#screen-aviator .aviator-ref-action {
+  width:100%; min-height:42px; border-radius:7px; font-weight:900; letter-spacing:.03em;
+}
+#screen-aviator .aviator-ref-action-bet { background:var(--avi-green); color:#06130b; }
+#screen-aviator .aviator-ref-action-cashout { background:#f28b26; color:#160b02; }
+#screen-aviator .aviator-ref-action-cashout small { display:block; margin-top:2px; font-size:9px; opacity:.8; }
+#screen-aviator .aviator-ref-action-muted { background:#262b35; color:#747d8c; cursor:not-allowed; }
+#screen-aviator .aviator-auto-row {
+  min-height:31px; display:flex; align-items:center; justify-content:space-between;
+  border-bottom:1px solid rgba(255,255,255,.045); color:#858d9d; font-size:9px;
+}
+#screen-aviator .aviator-auto-row strong { color:#fff; font:800 11px ui-monospace,monospace; }
+#screen-aviator .aviator-auto-row b { color:#777f8f; font-size:9px; }
+#screen-aviator .aviator-ref-secondary-note { min-height:45px; padding:7px 0; color:#656d7b; font-size:8px; line-height:1.45; }
+#screen-aviator .aviator-reference-footer {
+  min-height:31px; display:flex; align-items:center; justify-content:space-between;
+  padding:6px 2px; color:#606978; font-size:8px;
+}
+#screen-aviator .aviator-reference-footer button { display:flex; align-items:center; gap:5px; background:none; color:#7f8998; }
+
+#screen-aviator .aviator-reference-error {
+  margin-top:7px; padding:8px 10px; border:1px solid rgba(255,65,90,.25);
+  border-radius:6px; background:rgba(255,65,90,.08); color:#ff7186; font-size:10px;
+}
+
+@media (max-width: 760px) {
+  #screen-aviator .aviator-reference-layout { display:block; padding:6px; }
+  #screen-aviator .aviator-left-panel { display:none; }
+  #screen-aviator .aviator-reference-history { height:30px; }
+  #screen-aviator .aviator-reference-arena {
+    min-height:235px; aspect-ratio:1.48 / 1; border-radius:8px;
+  }
+  #screen-aviator .aviator-reference-multiplier strong { font-size:clamp(39px,13vw,61px); }
+  #screen-aviator .aviator-ref-bet-row { grid-template-columns:1fr; gap:6px; }
+  #screen-aviator .aviator-ref-bet-card:nth-child(2) { order:2; }
+  #screen-aviator .aviator-reference-footer { padding-bottom:12px; }
+}
+@media (min-width: 761px) and (max-width: 1050px) {
+  #screen-aviator .aviator-reference-layout { grid-template-columns:190px minmax(0,1fr); }
+}
