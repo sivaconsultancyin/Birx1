@@ -74,12 +74,24 @@ export const AviatorReferenceCanvas: React.FC<Props> = ({
 
       if (s.phase === 'running') {
         const serverMultiplier = Math.max(1, Number(s.multiplier || 1));
-        // Keep local 60 FPS interpolation visually smooth while never letting
-        // the renderer outrun the authoritative server multiplier.
-        if (serverMultiplier < lastServerMultiplier) flightTime = 0;
-        else flightTime += dt;
+        const crash = Math.max(1.01, Number(s.crashMultiplier ?? Math.max(10, serverMultiplier + 1)));
+        const targetFlightTime = renderer.getFlightPath().multiplierToFlightTime(serverMultiplier, crash);
+        // Follow the authoritative server position while interpolating only
+        // the visual time, preventing drift between curve and multiplier.
+        if (serverMultiplier < lastServerMultiplier) {
+          flightTime = targetFlightTime;
+        } else {
+          const follow = 1 - Math.exp(-dt / 70);
+          flightTime += (targetFlightTime - flightTime) * follow;
+          if (Math.abs(targetFlightTime - flightTime) < 1) flightTime = targetFlightTime;
+        }
         lastServerMultiplier = serverMultiplier;
-      } else if (s.phase === 'betting') {
+      } else if (s.phase === 'crashed') {
+        const serverMultiplier = Math.max(1, Number(s.crashMultiplier || s.multiplier || 1));
+        const crash = Math.max(1.01, Number(s.crashMultiplier || serverMultiplier));
+        flightTime = renderer.getFlightPath().multiplierToFlightTime(serverMultiplier, crash);
+        lastServerMultiplier = serverMultiplier;
+      } else {
         flightTime = 0;
         lastServerMultiplier = 1;
       }
