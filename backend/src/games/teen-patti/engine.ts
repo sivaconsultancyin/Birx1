@@ -1,4 +1,4 @@
-import { Card, TeenPattiHandRank, TeenPattiPlayer, TeenPattiState, TeenPattiDealer } from '../types.ts';
+import { Card, TeenPattiHandRank, TeenPattiPlayer, TeenPattiState, TeenPattiDealer } from '../../types.ts';
 
 // -------------------------------------------------------------
 // CONSTANTS & RULES
