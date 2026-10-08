@@ -477,7 +477,7 @@ export const TeenPattiTable: React.FC<TeenPattiTableProps> = ({
               return (
                 <div
                   key={`dealer-card-slot-${idx}`}
-                  ref={(el) => (dealerSlotRefs.current[idx] = el)}
+                  ref={(el) => { dealerSlotRefs.current[idx] = el; }}
                   className="relative"
                 >
                   {isDealt ? (
@@ -641,7 +641,7 @@ export const TeenPattiTable: React.FC<TeenPattiTableProps> = ({
               return (
                 <div
                   key={`player-card-slot-${idx}`}
-                  ref={(el) => (playerSlotRefs.current[idx] = el)}
+                  ref={(el) => { playerSlotRefs.current[idx] = el; }}
                   className="relative"
                 >
                   {isDealt || phase === 'betting' || phase === 'lock' ? (
