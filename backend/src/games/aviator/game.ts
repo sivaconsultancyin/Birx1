@@ -30,6 +30,14 @@ let currentCrashTarget = generateCrashPoint(currentServerSeed, currentClientSeed
 
 let aviatorTimer: NodeJS.Timeout | null = null;
 let lastPersistedFlightSecond = -1;
+let settlementMutation: Promise<void> = Promise.resolve();
+async function withSettlementMutation<T>(fn: () => Promise<T>): Promise<T> {
+  const previous = settlementMutation;
+  let release!: () => void;
+  settlementMutation = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try { return await fn(); } finally { release(); }
+}
 let flightStartedAt = 0;
 let leaseHeartbeat: NodeJS.Timeout | null = null;
 
@@ -287,12 +295,15 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
   await hydrateAviatorState();
   const { amount } = req.body;
   const numAmount = Number(amount);
-  if (!numAmount || numAmount < 10) {
-    return res.status(400).json({ error: 'Minimum bet is ₹10' });
+  if (!Number.isFinite(numAmount) || numAmount < 10 || numAmount > 25000 || Math.round(numAmount * 100) !== numAmount * 100) {
+    return res.status(400).json({ error: 'Bet must be between ₹10 and ₹25,000 with at most 2 decimal places' });
   }
 
   if (aviatorState.phase !== 'betting') {
     return res.status(400).json({ error: 'Betting is closed for this round' });
+  }
+  if (aviatorBets.has(req.user!.id)) {
+    return res.status(409).json({ error: 'You already have an active bet for this round' });
   }
 
   const betId = `av_bet_${crypto.randomUUID()}`;
