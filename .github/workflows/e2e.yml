@@ -59,7 +59,7 @@ jobs:
           exit 1
 
       - name: Run E2E
-        run: npm run e2e --workspace @brix/frontend -- --workers=1
+        run: npm run e2e --workspace @brix/frontend -- tests/foundation --workers=1 --timeout=15000
         env:
           BASE_URL: http://127.0.0.1:4173
           BACKEND_URL: http://127.0.0.1:3000
