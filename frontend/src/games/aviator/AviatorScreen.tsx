@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
+import { Clock, ShieldCheck, Volume2, VolumeX, Menu, MessageCircle, Users, TrendingUp } from 'lucide-react';
+import type { Wallet } from '../../../types.ts';
 import { AviatorCanvas } from './components/AviatorCanvas';
 import { useAviatorGame } from './hooks/useAviatorGame';
-import { Clock, Plane, ShieldCheck, Volume2, VolumeX, Menu, MessageCircle, Users, TrendingUp } from 'lucide-react';
-import type { Wallet } from '../../../types.ts';
-import { GameHeader } from '../../../src/components/GameHeader.tsx';
-import { RulesModal } from '../../../src/components/RulesModal.tsx';
-import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
+import { GameHeader } from '../../../components/GameHeader.tsx';
+import { RulesModal } from '../../../components/RulesModal.tsx';
 
 interface AviatorScreenProps {
   wallet: Wallet;
@@ -15,148 +14,32 @@ interface AviatorScreenProps {
 }
 
 const demoPlayers = [
-  ['SkyPilot', '1.42x'],
-  ['AeroFox', '2.18x'],
-  ['Cloud9', '3.06x'],
-  ['NovaJet', '1.17x'],
-  ['BlueWing', '4.21x'],
-  ['Falcon', '1.83x'],
-  ['Orbit', '5.44x'],
-  ['JetStream', '2.71x']
+  ['SkyPilot', '1.42x'], ['AeroFox', '2.18x'], ['Cloud9', '3.06x'], ['NovaJet', '1.17x'],
+  ['BlueWing', '4.21x'], ['Falcon', '1.83x'], ['Orbit', '5.44x'], ['JetStream', '2.71x']
 ];
 
-export const AviatorScreen: React.FC<AviatorScreenProps> = ({
-  wallet,
-  onUpdateWallet,
-  onBack,
-  onOpenWallet
-}) => {
+export const AviatorScreen: React.FC<AviatorScreenProps> = ({ wallet, onUpdateWallet, onBack, onOpenWallet }) => {
   const { gameState, currentBet, loading, errorMsg, placeBet, cashOut, setErrorMsg } = useAviatorGame(wallet, onUpdateWallet);
   const [betAmount, setBetAmount] = useState(100);
   const [showRules, setShowRules] = useState(false);
   const [muted, setMuted] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showChat, setShowChat] = useState(false);
-
   const multiplier = gameState?.multiplier || 1;
   const phase = gameState?.phase || 'betting';
   const isRunning = phase === 'running';
   const isCrashed = phase === 'crashed';
 
   const placeButton = (secondary = false) => (
-    <button
-      type="button"
-      disabled={secondary || loading || phase !== 'betting'}
+    <button type="button" disabled={secondary || loading || phase !== 'betting'}
       onClick={secondary ? undefined : () => void placeBet(betAmount)}
-      className={`aviator-ref-action ${secondary ? 'aviator-ref-action-muted' : 'aviator-ref-action-bet'}`}
-    >
+      className={`aviator-ref-action ${secondary ? 'aviator-ref-action-muted' : 'aviator-ref-action-bet'}`}>
       {secondary ? 'SECOND SLOT' : phase === 'betting' ? `PLACE BET · ₹${betAmount.toLocaleString('en-IN')}` : 'WAITING FOR NEXT ROUND'}
     </button>
   );
 
   const cashoutButton = (
     <button id="btn-aviator-cashout" type="button" disabled={loading} onClick={() => void cashOut()} className="aviator-ref-action aviator-ref-action-cashout">
-      <span>CASH OUT</span>
-      <small>₹{Math.floor((currentBet?.amount ?? 0) * multiplier).toLocaleString('en-IN')} · {multiplier.toFixed(2)}x</small>
-    </button>
-  );
-
-  return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, []);
-
-  const handlePlaceBet = async () => {
-    if (!gameState || gameState.phase !== 'betting') {
-      setErrorMsg('Betting is only open during the countdown phase');
-      return;
-    }
-    if (wallet.balance < betAmount) {
-      setErrorMsg('Insufficient balance for this bet');
-      return;
-    }
-
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const res = await gamesApi.aviator.placeBet(betAmount);
-      setCurrentBet(res.bet);
-      onUpdateWallet(res.wallet);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to place bet');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCashout = async () => {
-    if (!currentBet || currentBet.cashedOut || gameState?.phase !== 'running') return;
-
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const res = await gamesApi.aviator.cashOut();
-      onUpdateWallet(res.wallet);
-      setCurrentBet((prev) => prev ? {
-        ...prev,
-        cashedOut: true,
-        winAmount: res.winAmount
-      } : null);
-      notifyWinLoss({ type: 'win', amount: res.winAmount });
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Cashout failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const multiplier = gameState?.multiplier || 1;
-  const phase = gameState?.phase || 'betting';
-  const isRunning = phase === 'running';
-  const isCrashed = phase === 'crashed';
-
-  // Keep the plane on the exact same curve geometry used by the SVG.
-  const progress = Math.min(1, Math.max(0, Math.log(Math.max(1, multiplier)) / Math.log(10)));
-  const cubic = (p0: number, p1: number, p2: number, p3: number, t: number) =>
-    (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t ** 2 * p2 + t ** 3 * p3;
-  const curvePoint = (t: number) => {
-    if (t <= 0.5) {
-      const u = t * 2;
-      return {
-        x: cubic(0, 180, 250, 390, u),
-        y: cubic(550, 540, 500 - progress * 100, 460 - progress * 210, u)
-      };
-    }
-    const u = (t - 0.5) * 2;
-    return {
-      x: cubic(390, 530, 670, 1000, u),
-      y: cubic(460 - progress * 210, 420 - progress * 200, 300 - progress * 200, 60 - progress * 40, u)
-    };
-  };
-  const planePoint = curvePoint(progress);
-  const planeX = (planePoint.x / 1000) * 100;
-  const planeY = (planePoint.y / 560) * 100;
-
-  const placeButton = (secondary = false) => (
-    <button
-      type="button"
-      disabled={secondary || loading || phase !== 'betting'}
-      onClick={secondary ? undefined : handlePlaceBet}
-      className={`aviator-ref-action ${secondary ? 'aviator-ref-action-muted' : 'aviator-ref-action-bet'}`}
-    >
-      {secondary ? 'SECOND SLOT' : phase === 'betting' ? `PLACE BET · ₹${betAmount.toLocaleString('en-IN')}` : 'WAITING FOR NEXT ROUND'}
-    </button>
-  );
-
-  const cashoutButton = (
-    <button
-      id="btn-aviator-cashout"
-      type="button"
-      disabled={loading}
-      onClick={handleCashout}
-      className="aviator-ref-action aviator-ref-action-cashout"
-    >
       <span>CASH OUT</span>
       <small>₹{Math.floor((currentBet?.amount ?? 0) * multiplier).toLocaleString('en-IN')} · {multiplier.toFixed(2)}x</small>
     </button>
