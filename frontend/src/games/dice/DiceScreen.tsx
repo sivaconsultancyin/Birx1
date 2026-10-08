@@ -1,7 +1,7 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect } from 'react';
-import { ExternalDiceUI } from '../../../src/components/external/ExternalDiceUI.tsx';
+import { ExternalDiceUI } from './components/ExternalDiceUI.tsx';
 import { Dices, RotateCw, Sparkles, TrendingUp } from 'lucide-react';
 import { DiceBetType, DiceState, Wallet } from '../../../src/types.ts';
 import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
