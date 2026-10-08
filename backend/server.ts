@@ -32,15 +32,6 @@ import {
   UserRole,
   Wallet
 } from './types.ts';
-import {
-  generateDeck,
-  secureShuffleDeck,
-  evaluateTeenPattiHand,
-  compareHands,
-  computePlayerSettlement,
-  createAuthoritativeTeenPattiRound,
-  sanitizeTeenPattiState
-} from './engines/teenPattiEngine.ts';
 import { supabaseRepo, getSupabaseConfigStatus } from './supabase/supabaseClient.ts';
 import { authService, requireAuth, requirePlayerForGames, requireRoles } from './auth/authService.ts';
 import { walletService } from './wallet/walletService.ts';
@@ -643,8 +634,6 @@ const sharedGameModuleDeps = {
   supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService,
   recordHistory, acquireGameLease, safeSaveAuthoritativeGameState,
   safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser,
-  generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands,
-  computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState,
   rateLimit, getSupabaseConfigStatus, authService, crypto
 };
 
