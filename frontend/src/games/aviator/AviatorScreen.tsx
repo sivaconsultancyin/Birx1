@@ -3,8 +3,8 @@ import { Clock, ShieldCheck, Volume2, VolumeX, Menu, MessageCircle, Users, Trend
 import type { Wallet } from '../../../types.ts';
 import { AviatorCanvas } from './components/AviatorCanvas';
 import { useAviatorGame } from './hooks/useAviatorGame';
-import { GameHeader } from '../../../components/GameHeader.tsx';
-import { RulesModal } from '../../../components/RulesModal.tsx';
+import { GameHeader } from '../../../src/components/GameHeader.tsx';
+import { RulesModal } from '../../../src/components/RulesModal.tsx';
 
 interface AviatorScreenProps {
   wallet: Wallet;
