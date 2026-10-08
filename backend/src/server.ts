@@ -228,8 +228,11 @@ function sendRealtimeToWebSocket(event: { type: string; data: Record<string, unk
 // Central backend event flow:
 // game modules -> EventBus -> realtime subscribers -> WebSocket -> clients.
 // Games never need to know how browser delivery is implemented.
+let socketIo: ReturnType<typeof createSocketServer> | null = null;
 const stopWebSocketEventBridge = gameEventBus.onAny((event) => {
   sendRealtimeToWebSocket(event);
+  const gameId = typeof event.data?.gameId === 'string' ? event.data.gameId : null;
+  if (socketIo && gameId) socketIo.of(`/${gameId}`).emit(event.type, event.data);
 });
 
 function broadcastRealtime(event: string, data: Record<string, unknown> = {}) {
@@ -700,8 +703,7 @@ const startServer = async () => {
     // Do not mount Vite or serve dist/index.html from the production backend.
 
     const httpServer = createHttpServer(app);
-    const socketIo = createSocketServer(httpServer);
-    void socketIo;
+    socketIo = createSocketServer(httpServer);
     httpServer.on('upgrade', async (req, socket, head) => {
       if (req.url !== '/ws') {
         socket.destroy();
