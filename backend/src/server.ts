@@ -32,21 +32,13 @@ import {
   UserRole,
   Wallet
 } from './types.ts';
-import {
-  generateDeck,
-  secureShuffleDeck,
-  evaluateTeenPattiHand,
-  compareHands,
-  computePlayerSettlement,
-  createAuthoritativeTeenPattiRound,
-  sanitizeTeenPattiState
-} from './engines/teenPattiEngine.ts';
 import { supabaseRepo, getSupabaseConfigStatus } from './supabase/supabaseClient.ts';
 import { authService, requireAuth, requirePlayerForGames, requireRoles } from './auth/authService.ts';
 import { walletService } from './wallet/walletService.ts';
 import { storageService } from './storage/storageService.ts';
 import { gameRecoveryService } from './recovery/gameRecoveryService.ts';
 import { gameEventBus } from './events/gameEventBus.ts';
+import { createSocketServer } from './shared/socket/socketServer.ts';
 
 
 const app = express();
@@ -643,8 +635,6 @@ const sharedGameModuleDeps = {
   supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService,
   recordHistory, acquireGameLease, safeSaveAuthoritativeGameState,
   safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser,
-  generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands,
-  computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState,
   rateLimit, getSupabaseConfigStatus, authService, crypto
 };
 
@@ -690,6 +680,8 @@ const startServer = async () => {
     // Do not mount Vite or serve dist/index.html from the production backend.
 
     const httpServer = createHttpServer(app);
+    const socketIo = createSocketServer(httpServer);
+    void socketIo;
     httpServer.on('upgrade', async (req, socket, head) => {
       if (req.url !== '/ws') {
         socket.destroy();
