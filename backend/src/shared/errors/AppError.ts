@@ -1,0 +1,2 @@
+export type ErrorCode='VALIDATION_ERROR'|'AUTHENTICATION_ERROR'|'AUTHORIZATION_ERROR'|'NOT_FOUND'|'INTERNAL_ERROR';
+export class AppError extends Error{constructor(public readonly code:ErrorCode,public readonly status:number,message:string){super(message);this.name='AppError';}}
