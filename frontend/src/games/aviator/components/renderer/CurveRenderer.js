@@ -1,4 +1,4 @@
-import { getMultiplierAtTime } from '../utils/CrashAlgorithm.js';
+import { getMultiplierAtTime } from '../../utils/CrashAlgorithm.js';
 import { getCurveColor } from './effects.js';
 
 const MAX_PATH_POINTS = 500;
