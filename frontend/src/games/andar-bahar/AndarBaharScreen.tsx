@@ -62,7 +62,7 @@ export const AndarBaharScreen: React.FC<AndarBaharScreenProps> = ({
   const animatedRoundsRef = useRef<{ [key: string]: boolean }>({});
 
   // Dynamic vector calculation from shoe to destination slot
-  const getTrajectory = useCallback((targetRef: React.RefObject<HTMLDivElement>) => {
+  const getTrajectory = useCallback((targetRef: React.RefObject<HTMLDivElement | null>) => {
     try {
       if (!shoeRef.current || !targetRef.current) return { x: 70, y: -100 };
       const shoeRect = shoeRef.current.getBoundingClientRect();
