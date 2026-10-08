@@ -10,7 +10,7 @@ import type { Request, Response } from 'express';
 const GAME_ROOM_ID = 'aviator-main';
 
 export interface AviatorGameDeps {
-  supabaseRepo: any; requireAuth: any; requirePlayerForGames: any; requireRoles: any; walletService: any; storageService: any; recordHistory: any; broadcastRealtime: any; acquireGameLease: any; safeSaveAuthoritativeGameState: any; safeGetAuthoritativeGameState: any; debitForUser: any; creditForUser: any; getRequestUser: any;
+  supabaseRepo: any; requireAuth: any; requirePlayerForGames: any; requireRoles: any; walletService: any; storageService: any; recordHistory: any; broadcastRealtime: any; acquireGameLease: any; safeSaveAuthoritativeGameState: any; safeGetAuthoritativeGameState: any; debitForUser: any; creditForUser: any; getRequestUser: any; generateDeck?: any; secureShuffleDeck?: any; evaluateTeenPattiHand?: any; compareHands?: any; computePlayerSettlement?: any; createAuthoritativeTeenPattiRound?: any; sanitizeTeenPattiState?: any;
 }
 
 export function registerAviatorGame(app: any, deps: AviatorGameDeps) {
