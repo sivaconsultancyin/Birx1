@@ -16,6 +16,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({ transaction })
     payout: Award,
     bet: Dices,
     bonus: Award,
+  refund: ArrowDownLeft,
   recharge: Award
   };
 
