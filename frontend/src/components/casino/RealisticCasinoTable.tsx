@@ -14,7 +14,7 @@ interface RealisticCasinoTableProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
   children: React.ReactNode;
-  shoeRef?: React.RefObject<HTMLDivElement>;
+  shoeRef?: React.RefObject<HTMLDivElement | null>;
   className?: string;
   hideStudioHeader?: boolean;
 }
