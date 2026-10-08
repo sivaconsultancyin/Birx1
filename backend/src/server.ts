@@ -98,6 +98,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(express.json({ limit: '256kb' }));
+
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', service: 'brix-backend', environment: process.env.NODE_ENV || 'development' });
+});
 // Foundation API namespaces. Gameplay is intentionally not implemented here.
 app.use('/api/aviator', createAviatorRouter());
 app.use('/api/roulette', createRouletteRouter());
@@ -690,7 +694,9 @@ const startServer = async () => {
     // Establish the authoritative DB -> WebSocket bridge before the HTTP server
     // becomes reachable. This prevents the first game-state update from racing
     // Supabase Realtime channel startup.
-    await startAuthoritativeRealtimeBridge();
+    if (process.env.E2E_TEST_MODE !== '1' && process.env.E2E_TEST_MODE !== 'true') {
+      await startAuthoritativeRealtimeBridge();
+    }
     // Frontend is deployed separately. The backend serves API + WebSocket only.
     // Do not mount Vite or serve dist/index.html from the production backend.
 
