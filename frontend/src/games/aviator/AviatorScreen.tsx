@@ -40,6 +40,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const currentBetRef = useRef<AviatorBet | null>(null);
+  const planeRef = useRef<HTMLDivElement | null>(null);
   currentBetRef.current = currentBet;
 
   useEffect(() => {
@@ -153,9 +154,28 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   const phase = gameState?.phase || 'betting';
   const isRunning = phase === 'running';
   const isCrashed = phase === 'crashed';
-  const progress = Math.min(1, Math.max(0, (multiplier - 1) / 8));
-  const planeX = 7 + progress * 78;
-  const planeY = 78 - progress * 58;
+
+  // Keep the plane on the exact same curve geometry used by the SVG.
+  const progress = Math.min(1, Math.max(0, Math.log(Math.max(1, multiplier)) / Math.log(10)));
+  const cubic = (p0: number, p1: number, p2: number, p3: number, t: number) =>
+    (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t ** 2 * p2 + t ** 3 * p3;
+  const curvePoint = (t: number) => {
+    if (t <= 0.5) {
+      const u = t * 2;
+      return {
+        x: cubic(0, 180, 250, 390, u),
+        y: cubic(550, 540, 500 - progress * 100, 460 - progress * 210, u)
+      };
+    }
+    const u = (t - 0.5) * 2;
+    return {
+      x: cubic(390, 530, 670, 1000, u),
+      y: cubic(460 - progress * 210, 420 - progress * 200, 300 - progress * 200, 60 - progress * 40, u)
+    };
+  };
+  const planePoint = curvePoint(progress);
+  const planeX = (planePoint.x / 1000) * 100;
+  const planeY = (planePoint.y / 560) * 100;
 
   const placeButton = (secondary = false) => (
     <button
@@ -266,8 +286,12 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
               {!isRunning && !isCrashed && <span>WAITING FOR TAKEOFF</span>}
             </div>
 
-            {isRunning && (
-              <div className="aviator-reference-plane" style={{ left: `${planeX}%`, top: `${planeY}%` }}>
+            {(isRunning || isCrashed) && (
+              <div
+                ref={planeRef}
+                className={`aviator-reference-plane ${isCrashed ? 'crashed' : ''}`}
+                style={{ left: `${planeX}%`, top: `${planeY}%` }}
+              >
                 <Plane size={58} fill="currentColor" />
                 <span />
               </div>
