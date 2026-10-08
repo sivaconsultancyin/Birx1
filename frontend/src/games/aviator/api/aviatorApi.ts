@@ -24,7 +24,7 @@ async function request<T>(path:string, options:RequestInit={}):Promise<T>{
 }
 
 export const aviatorApi={
-  getState:()=>request<{state:AviatorState & {currentBet:AviatorBet|null}}>('/games/aviator/state'),
+  getState:()=>request<{state:AviatorState & {currentBet:AviatorBet|null}}>('/aviator/state'),
   placeBet:(amount:number)=>request<{success:boolean;bet:AviatorBet;wallet:Wallet}>('/games/aviator/bet',{method:'POST',body:JSON.stringify({amount})}),
   cashOut:()=>request<{success:boolean;cashMultiplier:number;winAmount:number;wallet:Wallet}>('/games/aviator/cashout',{method:'POST'})
 };
