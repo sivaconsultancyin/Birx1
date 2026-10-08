@@ -256,15 +256,10 @@ async function startAuthoritativeRealtimeBridge() {
     if (!row?.game_id || !row?.state) return;
     const rawState = row.state;
     const gameId = row.game_id;
-    const ROOM_IDS: Record<string, string> = { aviator: 'aviator-main', roulette: 'roulette-main', 'teen-patti': 'teen-patti-main', dice: 'dice-main', 'dragon-tiger': 'dragon-tiger-main', 'andar-bahar': 'andar-bahar-main' };
+    const ROOM_IDS: Record<string, string> = { roulette: 'roulette-main', 'teen-patti': 'teen-patti-main', dice: 'dice-main', 'dragon-tiger': 'dragon-tiger-main', 'andar-bahar': 'andar-bahar-main' };
     const roomId = rawState.roomId ?? ROOM_IDS[gameId] ?? `${gameId}-main`;
     // Never expose backend-only secrets/internal collections to browsers.
-    // Aviator's crashTarget is persisted for authoritative recovery but stays server-side.
     const state = { ...rawState };
-    if (gameId === 'aviator') {
-      delete state.crashTarget;
-      delete state.activeBets;
-    }
     if (gameId === 'roulette') {
       // Roulette persistence contains server-only fairness material and internal
       // per-player bet/settlement maps. Never broadcast those through WebSocket.
@@ -662,7 +657,6 @@ const skipGameLoops = process.env.E2E_SMOKE_ONLY === '1';
 if (!skipGameLoops) {
   registerRouletteGame(app, createGameModuleDeps('roulette', 'roulette-main'));
   registerTeenPattiGame(app, createGameModuleDeps('teen-patti', 'teen-patti-main'));
-  registerAviatorGame(app, createGameModuleDeps('aviator', 'aviator-main'));
   registerDiceGame(app, createGameModuleDeps('dice', 'dice-main'));
   registerDragonTigerGame(app, createGameModuleDeps('dragon-tiger', 'dragon-tiger-main'));
   registerAndarBaharGame(app, createGameModuleDeps('andar-bahar', 'andar-bahar-main'));
