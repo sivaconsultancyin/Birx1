@@ -3,7 +3,7 @@ import { BackgroundRenderer } from './BackgroundRenderer.js';
 import { CurveRenderer } from './CurveRenderer.js';
 import { ParticlePool } from './ParticlePool.js';
 import { ScreenShake } from './effects.js';
-import { FlightPath } from '../utils/FlightPath.js';
+import { FlightPath } from '../../utils/FlightPath.js';
 
 export class CanvasRenderer {
   constructor(canvas) {
