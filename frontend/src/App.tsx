@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GameId, NavigationTab, User, Wallet } from './types.ts';
-import { authApi, walletApi, subscribeToEvents } from '../frontend/api/client.ts';
+import { authApi, walletApi, subscribeToEvents } from './api/client.ts';
 import { SplashScreen } from './components/SplashScreen.tsx';
 import { AuthScreen } from './components/AuthScreen.tsx';
 import { AppHeader } from './components/AppHeader.tsx';
@@ -10,12 +10,12 @@ import { GamesScreen } from './screens/GamesScreen.tsx';
 import { WalletScreen } from './screens/WalletScreen.tsx';
 import { HistoryScreen } from './screens/HistoryScreen.tsx';
 import { ProfileScreen } from './screens/ProfileScreen.tsx';
-import { RouletteScreen } from '../frontend/games/roulette/RouletteScreen.tsx';
-import { TeenPattiScreen } from '../frontend/games/teen-patti/TeenPattiScreen.tsx';
-import { AviatorScreen } from '../frontend/games/aviator/AviatorScreen.tsx';
-import { DiceScreen } from '../frontend/games/dice/DiceScreen.tsx';
-import { DragonTigerScreen } from '../frontend/games/dragon-tiger/DragonTigerScreen.tsx';
-import { AndarBaharScreen } from '../frontend/games/andar-bahar/AndarBaharScreen.tsx';
+import { RouletteScreen } from './games/roulette/RouletteScreen.tsx';
+import { TeenPattiScreen } from './games/teen-patti/TeenPattiScreen.tsx';
+import { AviatorScreen } from './games/aviator/AviatorScreen.tsx';
+import { DiceScreen } from './games/dice/DiceScreen.tsx';
+import { DragonTigerScreen } from './games/dragon-tiger/DragonTigerScreen.tsx';
+import { AndarBaharScreen } from './games/andar-bahar/AndarBaharScreen.tsx';
 import { WinLossNotification } from './components/WinLossNotification.tsx';
 import { AdminDashboard } from './components/admin/AdminDashboard.tsx';
 
