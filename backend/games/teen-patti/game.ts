@@ -155,7 +155,7 @@ setInterval(async () => {
             roundId: teenPattiState.roundId,
             betAmount: settlement.betAmount,
             grossPayout: settlement.grossPayout,
-            netResult: settlement.netResult,
+            netResult: settlement.netProfit,
             outcome: settlement.outcome,
             multiplier: settlement.multiplier
           });
