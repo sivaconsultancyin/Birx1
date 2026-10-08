@@ -1,6 +1,6 @@
 // Shared TypeScript types for Brix Games platform
 
-export type GameId = 'roulette' | 'teen-patti' | 'aviator' | 'dice' | 'dragon-tiger' | 'andar-bahar';
+export type GameId = 'roulette' | 'teen-patti' | 'dice' | 'dragon-tiger' | 'andar-bahar';
 
 export type UserRole = 'OWNER' | 'SUPER_ADMIN' | 'ADMIN' | 'PLAYER';
 
@@ -287,28 +287,6 @@ export interface TeenPattiState {
 }
 
 // -------------------------------------------------------------
-// AVIATOR TYPES
-// -------------------------------------------------------------
-export interface AviatorState {
-  /** Permanent backend-owned room for every round of this game. */
-  roomId?: string;
-  roundId: string;
-  phase: 'betting' | 'running' | 'crashed';
-  multiplier: number;
-  crashMultiplier: number | null;
-  countdown: number;
-  previousMultipliers: number[];
-}
-
-export interface AviatorBet {
-  betId: string;
-  amount: number;
-  cashedOut: boolean;
-  cashOutMultiplier?: number;
-  winAmount?: number;
-}
-
-// -------------------------------------------------------------
 // DICE TYPES
 // -------------------------------------------------------------
 export type DiceBetType = 'under7' | 'exact7' | 'over7' | 'even' | 'odd' | 'doubles';
@@ -386,7 +364,6 @@ export type ServerEventType =
   | 'settlement'
   | 'wallet_updated'
   | 'round_recovered'
-  | 'aviator_tick'
   | 'teen_patti_round_started'
   | 'teen_patti_betting_open'
   | 'teen_patti_betting_closed'
