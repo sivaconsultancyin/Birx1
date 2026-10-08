@@ -36,7 +36,7 @@ function validateRouletteBetGeometry(bet: RouletteBet): void {
   if (!bet?.type) throw new Error('Roulette bet type is required');
   if (bet.type==='straight' || bet.type==='number') {
     const target=bet.value ?? bet.numbers?.[0];
-    if (!Number.isInteger(target) || target < 0 || target > 36) throw new Error('Straight-up Roulette bet must target one number from 0 to 36');
+    if (typeof target !== 'number' || !Number.isInteger(target) || target < 0 || target > 36) throw new Error('Straight-up Roulette bet must target one number from 0 to 36');
     if (bet.numbers !== undefined && (nums(bet.numbers).length !== 1 || nums(bet.numbers)[0] !== target)) throw new Error('Invalid straight-up Roulette numbers');
   } else if (bet.type in COMBINATION_LENGTHS) {
     validateCombination(bet.type, bet.numbers);
