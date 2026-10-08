@@ -2126,3 +2126,14 @@ html { touch-action: manipulation; }
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
 }
+
+
+/* Brix Aviator canvas integration */
+.aviator-reference-arena { position: relative; overflow: hidden; }
+.aviator-reference-canvas-host { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+.aviator-reference-canvas { display: block; width: 100%; height: 100%; }
+.aviator-arena-overlay { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.aviator-arena-overlay .aviator-arena-top { pointer-events: none; }
+.aviator-arena-overlay .aviator-reference-multiplier { pointer-events: none; }
+.aviator-arena-overlay .aviator-takeoff { pointer-events: none; }
+.aviator-arena-tools { position: absolute; z-index: 10; }
