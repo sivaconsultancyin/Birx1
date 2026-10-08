@@ -12,7 +12,6 @@ import { HistoryScreen } from './screens/HistoryScreen.tsx';
 import { ProfileScreen } from './screens/ProfileScreen.tsx';
 import { RouletteScreen } from './games/roulette/RouletteScreen.tsx';
 import { TeenPattiScreen } from './games/teen-patti/TeenPattiScreen.tsx';
-import { AviatorScreen } from './games/aviator/AviatorScreen.tsx';
 import { DiceScreen } from './games/dice/DiceScreen.tsx';
 import { DragonTigerScreen } from './games/dragon-tiger/DragonTigerScreen.tsx';
 import { AndarBaharScreen } from './games/andar-bahar/AndarBaharScreen.tsx';
@@ -150,16 +149,6 @@ export default function App() {
       case 'teen-patti':
         screenNode = (
           <TeenPattiScreen
-            wallet={wallet}
-            onUpdateWallet={handleUpdateWallet}
-            onBack={() => setActiveGame(null)}
-            onOpenWallet={() => handleOpenWalletWithTab('deposit')}
-          />
-        );
-        break;
-      case 'aviator':
-        screenNode = (
-          <AviatorScreen
             wallet={wallet}
             onUpdateWallet={handleUpdateWallet}
             onBack={() => setActiveGame(null)}
