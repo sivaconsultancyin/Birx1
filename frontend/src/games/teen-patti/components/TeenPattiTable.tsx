@@ -13,13 +13,13 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import { TeenPattiState, Card, Wallet } from '../../../../types.ts';
+import { TeenPattiState, Card, Wallet } from '../../../types.ts';
 import { PlayingCard } from './PlayingCard.tsx';
-import { RealisticDealerStudio, DealerActionState } from '../casino/RealisticDealerStudio.tsx';
-import { RealisticLiveShuffleEngine } from '../casino/RealisticLiveShuffleEngine.tsx';
-import { RealHumanShuffleVideo } from '../casino/RealHumanShuffleVideo.tsx';
-import { DealerDealingHand } from '../casino/DealerDealingHand.tsx';
-import { Live3DDealerCanvas } from '../casino3d/Live3DDealerCanvas.tsx';
+import { RealisticDealerStudio, DealerActionState } from '../../../../components/casino/RealisticDealerStudio.tsx';
+import { RealisticLiveShuffleEngine } from '../../../../components/casino/RealisticLiveShuffleEngine.tsx';
+import { RealHumanShuffleVideo } from '../../../../components/casino/RealHumanShuffleVideo.tsx';
+import { DealerDealingHand } from '../../../../components/casino/DealerDealingHand.tsx';
+import { Live3DDealerCanvas } from '../../../../components/casino3d/Live3DDealerCanvas.tsx';
 import { casinoAudio } from '../../utils/casinoAudio.ts';
 import { TEEN_PATTI_PAYOUT_MULTIPLIERS } from '../../engines/teenPattiEngine.ts';
 
