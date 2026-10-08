@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Card } from '../../../../types.ts';
+import { Card } from '../../../types.ts';
 
 interface PlayingCardProps {
   card?: Card;
