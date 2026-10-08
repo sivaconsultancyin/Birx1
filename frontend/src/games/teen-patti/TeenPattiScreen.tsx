@@ -1,11 +1,11 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ExternalTeenPattiUI } from '../../../src/components/external/ExternalTeenPattiUI.tsx';
+import { ExternalTeenPattiUI } from './components/ExternalTeenPattiUI.tsx';
 import { TeenPattiState, Wallet } from '../../../src/types.ts';
 import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
-import { TeenPattiTable } from '../../../src/components/teenpatti/TeenPattiTable.tsx';
+import { TeenPattiTable } from './components/TeenPattiTable.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
 
 interface TeenPattiScreenProps {
