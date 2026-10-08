@@ -9,6 +9,8 @@
     "isolatedModules":true,
     "moduleDetection":"force",
     "strict":true,
+    "allowJs":true,
+    "checkJs":false,
     "noImplicitAny":true,"types":["vite/client"],
     
     "jsx":"react-jsx",
