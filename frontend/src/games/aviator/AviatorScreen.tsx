@@ -5,6 +5,7 @@ import { AviatorCanvas } from './components/AviatorCanvas';
 import { useAviatorGame } from './hooks/useAviatorGame';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
+import './aviator-source-ui.css';
 
 interface AviatorScreenProps {
   wallet: Wallet;
