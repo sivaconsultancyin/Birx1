@@ -1,4 +1,4 @@
-import { GameState } from './engine/GameStates.js';
+import { GameState } from '../engine/GameStates.js';
 
 export class BackgroundRenderer {
   constructor() {
