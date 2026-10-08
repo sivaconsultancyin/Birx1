@@ -7,7 +7,7 @@ export type AviatorSocketEvent = typeof AVIATOR_SOCKET_EVENTS[number];
 
 export function connectAviatorSocket(): Socket {
   const base=connectSocket();
-  const namespace=base.io.uri.endsWith('/aviator') ? base : base.io.socket('/aviator');
+  const namespace=base.io.socket(gameNamespace('aviator'));
   if(!namespace.connected) namespace.connect();
   return namespace;
 }
