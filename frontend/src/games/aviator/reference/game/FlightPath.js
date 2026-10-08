@@ -66,6 +66,21 @@ export class FlightPath {
     return laneCenterY - fraction * maxRise;
   }
 
+  multiplierToFlightTime(multiplier, crashMultiplier) {
+    const m = Math.max(1, Number(multiplier || 1));
+    const crash = Math.max(1.0001, Number(crashMultiplier || 1.0001));
+    if (m >= crash) return this._flightTimeAtCrash(crash);
+    const k = Math.log(crash) / 8;
+    const normFactor = Math.exp(k * 8) - 1;
+    const ratio = Math.min(1, Math.max(0, (m - 1) / (crash - 1)));
+    return Math.max(0, Math.log(1 + ratio * normFactor) / k) * 1000;
+  }
+
+  _flightTimeAtCrash(crashMultiplier) {
+    const k = Math.log(Math.max(1.0001, crashMultiplier)) / 8;
+    return (8 / k) * 1000;
+  }
+
   getPlanePosition(flightTimeMs, crashMultiplier) {
     const multiplier = getMultiplierAtTime(flightTimeMs, crashMultiplier);
     const prevMultiplier = getMultiplierAtTime(Math.max(0, flightTimeMs - 200), crashMultiplier);
