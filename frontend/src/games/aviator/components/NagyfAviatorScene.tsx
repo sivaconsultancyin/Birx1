@@ -58,7 +58,7 @@ function createAirplane() {
   }
   propeller.position.x = 36;
   plane.add(propeller);
-  (plane as THREE.Object3D & { userData: { propeller: THREE.Group } }).userData.propeller = propeller;
+  plane.userData.propeller = propeller;
 
   plane.rotation.y = Math.PI;
   plane.scale.setScalar(0.9);
@@ -172,7 +172,7 @@ export const NagyfAviatorScene: React.FC<Props> = ({ phase, multiplier, crashMul
       airplane.rotation.x = Math.sin(time * 2.1) * 0.025;
       airplane.rotation.y = Math.PI + Math.sin(time * 0.7) * 0.04;
 
-      const propeller = (airplane as THREE.Object3D & { userData: { propeller: THREE.Group } }).userData.propeller;
+      const propeller = airplane.userData.propeller as THREE.Group;
       propeller.rotation.x += dt * 18;
 
       for (let i = 0; i < positions.count; i += 1) {
