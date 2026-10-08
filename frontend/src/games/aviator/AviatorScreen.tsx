@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Clock, ShieldCheck, Volume2, VolumeX, Menu, MessageCircle, Users, TrendingUp } from 'lucide-react';
-import type { Wallet } from '../../../types.ts';
+import type { Wallet } from '../../types.ts';
 import { AviatorCanvas } from './components/AviatorCanvas';
 import { useAviatorGame } from './hooks/useAviatorGame';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
