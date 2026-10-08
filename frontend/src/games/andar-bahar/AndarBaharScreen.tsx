@@ -1,7 +1,7 @@
 /* External UI integration target: adapted from public GitHub frontend patterns; game logic/API remains local. */
 /* UI integration: preserve existing game logic; visual layer remains component-driven. */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ExternalAndarBaharUI } from '../../../src/components/external/ExternalAndarBaharUI.tsx';
+import { ExternalAndarBaharUI } from './components/ExternalAndarBaharUI.tsx';
 import { motion, AnimatePresence } from 'motion/react';
 import { Flame, Sparkles, Clock, RotateCcw, ShieldCheck, Award } from 'lucide-react';
 import { AndarBaharDealtCard, AndarBaharSide, AndarBaharState, Card, Wallet } from '../../../src/types.ts';
@@ -14,7 +14,7 @@ import { RealisticLiveShuffleEngine } from '../../../src/components/casino/Reali
 import { RealHumanShuffleVideo } from '../../../src/components/casino/RealHumanShuffleVideo.tsx';
 import { DealerDealingHand } from '../../../src/components/casino/DealerDealingHand.tsx';
 import { Live3DDealerCanvas } from '../../../src/components/casino3d/Live3DDealerCanvas.tsx';
-import { PlayingCard } from '../../../src/components/teenpatti/PlayingCard.tsx';
+import { PlayingCard } from './components/PlayingCard.tsx';
 import { casinoAudio } from '../../../src/utils/casinoAudio.ts';
 
 interface AndarBaharScreenProps {
