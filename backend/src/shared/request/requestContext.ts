@@ -1,0 +1,1 @@
+import crypto from 'node:crypto'; import type {RequestHandler} from 'express'; export const requestContext:RequestHandler=(req,res,next)=>{const requestId=String(req.header('X-Request-Id')||crypto.randomUUID());res.setHeader('X-Request-Id',requestId);(req as any).requestId=requestId;next();};

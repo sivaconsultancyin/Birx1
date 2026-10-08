@@ -1,0 +1,733 @@
+import express, { Request, Response, NextFunction } from 'express';
+import { createServer as createHttpServer } from 'node:http';
+// @ts-ignore - ws is dependency-backed and ships its own runtime API.
+import { WebSocketServer, WebSocket } from 'ws';
+import { registerRouletteGame } from './games/roulette/game.ts';
+import { registerTeenPattiGame } from './games/teen-patti/game.ts';
+import { registerAviatorGame } from './games/aviator/game.ts';
+import { registerDiceGame } from './games/dice/game.ts';
+import { registerDragonTigerGame } from './games/dragon-tiger/game.ts';
+import { registerAndarBaharGame } from './games/andar-bahar/game.ts';
+
+
+import crypto from 'node:crypto';
+import path from 'path';
+import { createServer as createViteServer } from 'vite';
+import {
+  Card,
+  GameHistoryEntry,
+  RouletteBet,
+  RouletteState,
+  TeenPattiPlayer,
+  TeenPattiState,
+  AviatorBet,
+  AviatorState,
+  DiceState,
+  DragonTigerState,
+  DragonTigerBetSide,
+  AndarBaharState,
+  AndarBaharSide,
+  Transaction,
+  User,
+  UserRole,
+  Wallet
+} from './types.ts';
+import { supabaseRepo, getSupabaseConfigStatus } from './supabase/supabaseClient.ts';
+import { authService, requireAuth, requirePlayerForGames, requireRoles } from './auth/authService.ts';
+import { walletService } from './wallet/walletService.ts';
+import { storageService } from './storage/storageService.ts';
+import { gameRecoveryService } from './recovery/gameRecoveryService.ts';
+import { gameEventBus } from './events/gameEventBus.ts';
+import { createSocketServer } from './shared/socket/socketServer.ts';
+import { createAviatorRouter } from './games/aviator/routes/index.ts';
+import { createRouletteRouter } from './games/roulette/routes/index.ts';
+import { createTeenPattiRouter } from './games/teen-patti/routes/index.ts';
+import { createDiceRouter } from './games/dice/routes/index.ts';
+import { createDragonTigerRouter } from './games/dragon-tiger/routes/index.ts';
+import { createAndarBaharRouter } from './games/andar-bahar/routes/index.ts';
+
+
+const app = express();
+const PORT = Number(process.env.PORT) || 10000;
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+function rateLimit(limit: number, windowMs: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const key = `${req.ip}:${req.path}`;
+    const now = Date.now();
+    const bucket = rateBuckets.get(key);
+    if (!bucket || now >= bucket.resetAt) {
+      rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    if (bucket.count >= limit) return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    bucket.count += 1;
+    next();
+  };
+}
+function setAuthCookie(res: Response, token: string) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `brix_access_token=${encodeURIComponent(token)}; HttpOnly; SameSite=None; Path=/; Max-Age=3600${secure}`);
+}
+function clearAuthCookie(res: Response) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `brix_access_token=; HttpOnly; SameSite=None; Path=/; Max-Age=0${secure}`);
+}
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const configuredOrigins = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((value) => value.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  const allowedOrigins = new Set([
+    'https://brix1-frontend.onrender.com',
+    ...configuredOrigins,
+    ...(process.env.NODE_ENV !== 'production'
+      ? ['http://127.0.0.1:5173', 'http://localhost:5173']
+      : []),
+  ]);
+  const origin = String(req.headers.origin || '').replace(/\/$/, '');
+  if (origin && allowedOrigins.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
+app.use(express.json({ limit: '256kb' }));
+app.get('/api/health', (_req: Request, res: Response) => res.status(200).json({ status: 'ok', service: 'brix-backend' }));
+
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', service: 'brix-backend', environment: process.env.NODE_ENV || 'development' });
+});
+// Foundation API namespaces. Gameplay is intentionally not implemented here.
+app.use('/api/aviator', createAviatorRouter());
+app.use('/api/roulette', createRouletteRouter());
+app.use('/api/teen-patti', createTeenPattiRouter());
+app.use('/api/dice', createDiceRouter());
+app.use('/api/dragon-tiger', createDragonTigerRouter());
+app.use('/api/andar-bahar', createAndarBaharRouter());
+
+
+app.disable('x-powered-by');
+app.use((_req: Request, res: Response, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
+
+// Request-scoped identity only. Never use process-global user/wallet state for authorization.
+const gameHistories: GameHistoryEntry[] = [];
+function recordHistory(entry: Omit<GameHistoryEntry, 'id' | 'createdAt'> & Partial<Pick<GameHistoryEntry, 'id' | 'createdAt'>>) {
+  const normalized: GameHistoryEntry = {
+    id: entry.id || `hist_${crypto.randomUUID()}`,
+    createdAt: entry.createdAt || new Date().toISOString(),
+    gameId: entry.gameId,
+    gameName: entry.gameName,
+    betAmount: Number(entry.betAmount) || 0,
+    winAmount: Number(entry.winAmount) || 0,
+    netProfit: entry.netProfit,
+    outcome: String(entry.outcome || ''),
+    multiplier: Number(entry.multiplier) || 0,
+    settlementStatus: entry.settlementStatus
+  };
+  gameHistories.unshift(normalized);
+  if (gameHistories.length > 500) gameHistories.pop();
+  return normalized;
+}
+const transactions: Transaction[] = [];
+const PROCESS_OWNER_ID = `brix-${process.pid}-${crypto.randomUUID()}`;
+let leaseConfigWarningShown = false;
+async function acquireGameLease(gameId: string): Promise<boolean> {
+  // CI/E2E runs use an isolated local authoritative process. Do not contend
+  // with the production Render process through the shared Supabase lease.
+  if (process.env.E2E_TEST_MODE === '1' || process.env.E2E_TEST_MODE === 'true') return true;
+
+  // Keep the local game loop alive when the lease RPC is unavailable.
+  // A single Node process can safely use its in-memory authoritative state.
+  if (!getSupabaseConfigStatus().isConfigured) {
+    if (!leaseConfigWarningShown) {
+      console.warn('[GameLease] Supabase lease unavailable; using single-process local game loop.');
+      leaseConfigWarningShown = true;
+    }
+    return true;
+  }
+  try {
+    const claimed = await supabaseRepo.claimGameLease(gameId, PROCESS_OWNER_ID, 10000);
+    if (claimed) return true;
+
+    // This process may have temporarily lost the lease to another instance.
+    // Do not advance the round while another authoritative owner is active.
+    return false;
+  } catch (e) {
+    // A transient Supabase/RPC outage must not freeze a single active game
+    // process. Keep the local authority alive until persistence recovers.
+    console.warn(`[GameLease:${gameId}] lease RPC unavailable; continuing local authority temporarily.`, e);
+    return true;
+  }
+}
+
+async function safeSaveAuthoritativeGameState(gameId: string, state: any): Promise<void> {
+  try {
+    if (getSupabaseConfigStatus().isConfigured) {
+      await supabaseRepo.saveAuthoritativeGameState(gameId, state);
+    }
+  } catch (e) {
+    console.warn(`[GameState:${gameId}] persistence unavailable; keeping local authoritative state.`, e);
+  }
+}
+
+async function safeGetAuthoritativeGameState(gameId: string): Promise<any | null> {
+  try {
+    if (!getSupabaseConfigStatus().isConfigured) return null;
+    return await supabaseRepo.getAuthoritativeGameState(gameId);
+  } catch (e) {
+    console.warn(`[GameState:${gameId}] read unavailable; keeping local authoritative state.`, e);
+    return null;
+  }
+}
+
+async function getRequestUser(req: Request): Promise<User> {
+  if (!req.user) throw new Error('Authentication required');
+  return req.user;
+}
+
+async function debitForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string) {
+  const user = await getRequestUser(req);
+  return supabaseRepo.atomicDebit(user.id, amount, 'bet', description, gameId, idempotencyKey);
+}
+
+async function creditForUser(req: Request, amount: number, description: string, gameId?: string, idempotencyKey?: string) {
+  const user = await getRequestUser(req);
+  return supabaseRepo.atomicCredit(user.id, amount, 'payout', description, gameId, idempotencyKey);
+}
+// -------------------------------------------------------------
+// WEBSOCKET REALTIME TRANSPORT
+// -------------------------------------------------------------
+const websocketClients = new Set<{ socket: WebSocket; userId: string }>();
+const websocketServer = new WebSocketServer({ noServer: true });
+
+function sendRealtimeToWebSocket(event: { type: string; data: Record<string, unknown> }) {
+  const payload = JSON.stringify({ type: event.type, ...event.data });
+  const targetUserId = event.data?.userId || event.data?.playerId || null;
+
+  for (const client of websocketClients) {
+    if (targetUserId && targetUserId !== client.userId) continue;
+    if (client.socket.readyState !== WebSocket.OPEN) {
+      websocketClients.delete(client);
+      continue;
+    }
+    try { client.socket.send(payload); } catch { websocketClients.delete(client); }
+  }
+}
+
+// Central backend event flow:
+// game modules -> EventBus -> realtime subscribers -> WebSocket -> clients.
+// Games never need to know how browser delivery is implemented.
+const stopWebSocketEventBridge = gameEventBus.onAny((event) => {
+  sendRealtimeToWebSocket(event);
+});
+
+function broadcastRealtime(event: string, data: Record<string, unknown> = {}) {
+  return gameEventBus.emit(event, data);
+}
+
+websocketServer.on('connection', (socket: WebSocket, user: any) => {
+  const client = { socket, userId: user?.id || 'anonymous' };
+  websocketClients.add(client);
+  socket.send(JSON.stringify({ type: 'connected', time: Date.now() }));
+  const heartbeat = setInterval(() => {
+    if (socket.readyState === WebSocket.OPEN) socket.ping();
+  }, 25000);
+  socket.on('close', () => {
+    clearInterval(heartbeat);
+    websocketClients.delete(client);
+  });
+  socket.on('error', () => {
+    clearInterval(heartbeat);
+    websocketClients.delete(client);
+  });
+});
+
+async function authenticateWebSocketRequest(req: import('node:http').IncomingMessage): Promise<User | null> {
+  const cookieHeader = String(req.headers.cookie || '');
+  const tokenMatch = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith('brix_access_token='));
+  const token = tokenMatch ? decodeURIComponent(tokenMatch.slice('brix_access_token='.length)) : '';
+  return token ? authService.resolveUserFromToken(token) : null;
+}
+
+// Supabase remains the authoritative persistence/realtime source; WebSocket is the client transport.
+let stopAuthoritativeRealtime: (() => void) | null = null;
+async function startAuthoritativeRealtimeBridge() {
+  if (stopAuthoritativeRealtime || !getSupabaseConfigStatus().isConfigured) return;
+  stopAuthoritativeRealtime = await supabaseRepo.subscribeToAuthoritativeGameStates((payload: any) => {
+    const row = payload?.new;
+    if (!row?.game_id || !row?.state) return;
+    const rawState = row.state;
+    const gameId = row.game_id;
+    const ROOM_IDS: Record<string, string> = { aviator: 'aviator-main', roulette: 'roulette-main', 'teen-patti': 'teen-patti-main', dice: 'dice-main', 'dragon-tiger': 'dragon-tiger-main', 'andar-bahar': 'andar-bahar-main' };
+    const roomId = rawState.roomId ?? ROOM_IDS[gameId] ?? `${gameId}-main`;
+    // Never expose backend-only secrets/internal collections to browsers.
+    // Aviator's crashTarget is persisted for authoritative recovery but stays server-side.
+    const state = { ...rawState };
+    if (gameId === 'aviator') {
+      delete state.crashTarget;
+      delete state.activeBets;
+    }
+    if (gameId === 'roulette') {
+      // Roulette persistence contains server-only fairness material and internal
+      // per-player bet/settlement maps. Never broadcast those through WebSocket.
+      delete state.fairRound;
+      delete state.currentRoundBets;
+      delete state.roundSettlements;
+      delete state.processedRouletteIdempotency;
+    }
+    broadcastRealtime('game_state', {
+      gameId,
+      roomId,
+      roundId: row.round_id ?? state.roundId ?? null,
+      phase: row.phase ?? state.phase ?? null,
+      version: Number(row.version ?? state.version ?? 0),
+      state: { ...state, gameId, roomId }
+    });
+  });
+}
+// Realtime bridge is started and awaited inside startServer() before /ready is exposed.
+
+// -------------------------------------------------------------
+// HEALTH CHECK
+// -------------------------------------------------------------
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', platform: 'Brix Games Authoritative Server', timestamp: Date.now() });
+});
+
+app.get('/api/ready', async (_req: Request, res: Response) => {
+  try {
+    const db = await supabaseRepo.checkConnectivity();
+    if (!db.configured) return res.status(503).json({ status: 'not_ready', reason: 'database_not_configured' });
+    if (!db.reachable) return res.status(503).json({ status: 'not_ready', reason: 'database_unreachable' });
+    return res.json({ status: 'ready', dependencies: { supabase: 'ok' }, timestamp: Date.now() });
+  } catch {
+    return res.status(503).json({ status: 'not_ready', reason: 'dependency_check_failed' });
+  }
+});
+
+// -------------------------------------------------------------
+ // AUTH ENDPOINTS
+ // -------------------------------------------------------------
+function normalizeMobile(value: unknown): string {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 15) throw new Error('Invalid mobile number');
+  return digits;
+}
+
+app.post('/api/auth/login', rateLimit(60, 60_000), async (req: Request, res: Response) => {
+  try {
+    const mobile = normalizeMobile(req.body.mobile);
+    const password = String(req.body.password || '');
+    const session = await authService.login(mobile, password);
+    setAuthCookie(res, session.token);
+    res.json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+  } catch (err: any) { res.status(401).json({ error: err.message || 'Invalid credentials' }); }
+});
+
+app.post('/api/auth/register', rateLimit(5, 60_000), async (req: Request, res: Response) => {
+  try {
+    const mobile = normalizeMobile(req.body.mobile);
+    const username = String(req.body.username || '').trim();
+    const password = String(req.body.password || '');
+    if (username.length < 3 || username.length > 50) return res.status(400).json({ error: 'Username must be 3-50 characters' });
+    const session = await authService.register(mobile, username, password, 'PLAYER');
+    setAuthCookie(res, session.token);
+    res.status(201).json({ success: true, token: session.token, user: session.user, wallet: session.wallet });
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+});
+
+app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
+  res.json({ user: req.user, wallet: req.wallet });
+});
+
+app.post('/api/auth/logout', requireAuth, async (req: Request, res: Response) => {
+  const token = authService.extractToken(req);
+  if (token) await authService.logout(token);
+  clearAuthCookie(res);
+  res.json({ success: true });
+});
+
+app.post('/api/auth/switch-role', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const requestedRole = String(req.body?.role || '') as UserRole;
+    const actor = req.user!;
+    const allowedRoles: UserRole[] = ['OWNER', 'SUPER_ADMIN', 'ADMIN', 'PLAYER'];
+    if (!allowedRoles.includes(requestedRole)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+    if (!authService.canManageUser(actor, requestedRole) && requestedRole !== actor.role) {
+      return res.status(403).json({ error: 'Role switch not permitted' });
+    }
+    const switched = await authService.switchRole(actor.id, requestedRole);
+    res.json({ success: true, user: switched.user, wallet: switched.wallet, token: null });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Unable to switch role' });
+  }
+});
+
+// -------------------------------------------------------------
+// ADMIN MANAGEMENT ENDPOINTS (Strict Role-Based Access Control)
+// -------------------------------------------------------------
+// GET visible users respecting OWNER -> SUPER_ADMIN -> ADMIN -> PLAYER hierarchy
+app.get('/api/admin/users', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const users = await supabaseRepo.getVisibleUsers(actor);
+    res.json({ users });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// CREATE subordinate user under actor
+app.post('/api/admin/users/create', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const { mobile, username, role, password } = req.body;
+    if (!mobile || !username || !role || !password) {
+      return res.status(400).json({ error: 'mobile, username, role, and password are required' });
+    }
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (!authService.canManageUser(actor, role)) {
+      return res.status(403).json({ error: `Actor with role ${actor.role} cannot create user with role ${role}` });
+    }
+
+    const session = await authService.register(String(mobile), String(username).trim(), String(password), role, actor.id);
+    res.json({ success: true, user: session.user });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// UPDATE user role
+app.patch('/api/admin/users/:id/role', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const { role } = req.body;
+    if (!authService.canManageUser(actor, role)) {
+      return res.status(403).json({ error: `Permission denied: ${actor.role} cannot grant role ${role}` });
+    }
+    const updated = await supabaseRepo.updateUserRole(req.params.id, role);
+    res.json({ success: true, user: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// COIN RECHARGES
+app.get('/api/admin/recharges', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const recharges = await walletService.getRecharges();
+  res.json({ recharges });
+});
+
+app.post('/api/admin/recharges/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const recharge = await walletService.approveCoinRecharge(req.params.id, actor.id);
+    // Sync local wallet if it was for current user
+    res.json({ success: true, recharge });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/recharges/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const recharge = await walletService.rejectCoinRecharge(req.params.id, actor.id);
+    res.json({ success: true, recharge });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// WITHDRAWALS
+app.get('/api/admin/withdrawals', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const withdrawals = await walletService.getWithdrawals();
+  res.json({ withdrawals });
+});
+
+app.post('/api/admin/withdrawals/:id/approve', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const withdrawal = await walletService.approveWithdrawal(req.params.id, actor.id);
+    res.json({ success: true, withdrawal });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/withdrawals/:id/reject', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const actor = req.user!;
+    const withdrawal = await walletService.rejectWithdrawal(req.params.id, actor.id);
+    res.json({ success: true, withdrawal });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// SUPABASE STATUS & HEALTH
+app.get('/api/admin/supabase-status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const status = getSupabaseConfigStatus();
+  const allUsers = await supabaseRepo.getVisibleUsers({ role: 'OWNER' } as User);
+  const recharges = await walletService.getRecharges();
+  const withdrawals = await walletService.getWithdrawals();
+  const allTransactions = await walletService.getTransactions();
+
+  res.json({
+    status,
+    stats: {
+      totalUsers: allUsers.length,
+      totalRecharges: recharges.length,
+      totalWithdrawals: withdrawals.length,
+      totalTransactions: allTransactions.length,
+      schemaFile: 'supabase/migrations/20260920000000_supabase_brix_platform.sql'
+    }
+  });
+});
+
+// STORAGE ASSETS & SHUFFLE VIDEO
+app.get('/api/storage/shuffle-video', async (_req: Request, res: Response) => {
+  const info = await storageService.getShuffleVideoInfo();
+  res.json(info);
+});
+
+app.get('/api/admin/storage/assets', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (_req: Request, res: Response) => {
+  const assets = await storageService.listAssets('all');
+  res.json({ assets });
+});
+
+// DOCUMENT UPLOADS & GOOGLE DRIVE INTEGRATION METADATA
+app.get('/api/storage/documents', requireAuth, async (_req: Request, res: Response) => {
+  const docs = await storageService.listDocuments();
+  res.json({ documents: docs });
+});
+
+app.post('/api/storage/documents/upload', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const { name, category, url, size, uploadedBy } = req.body;
+    if (!name || !category) {
+      return res.status(400).json({ error: 'Document name and category are required' });
+    }
+    const doc = await storageService.recordDocument({
+      name,
+      category,
+      url: url || `/assets/docs/${name}`,
+      size: Number(size) || 125000,
+      uploadedBy: req.user!.id
+    });
+    res.json({ success: true, document: doc });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/storage/documents/:id/status', requireAuth, requireRoles(['OWNER', 'SUPER_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const updated = await storageService.updateDocumentStatus(id, status);
+  if (!updated) return res.status(404).json({ error: 'Document not found' });
+  res.json({ success: true, document: updated });
+});
+
+// CLAIMS & APPLICATION STATUS MANAGEMENT
+// CLAIMS & POLICY MANAGEMENT — Supabase authoritative storage
+interface PlatformClaim { id:string; userId:string; type:string; title:string; description:string; status:string; createdAt:string; updatedAt:string; }
+
+app.get('/api/admin/claims', requireAuth, requireRoles(['OWNER','SUPER_ADMIN','ADMIN']), async (_req,res) => {
+  try { res.json({ claims: await supabaseRepo.getClaims() }); }
+  catch (e:any) { res.status(500).json({error:e.message}); }
+});
+
+app.post('/api/admin/claims/create', requireAuth, requireRoles(['OWNER','SUPER_ADMIN','ADMIN']), async (req,res) => {
+  try {
+    const claim={ id:`clm_${crypto.randomUUID()}`, user_id:req.user!.id, type:String(req.body.type||'general'), title:String(req.body.title||'').trim(), description:String(req.body.description||'').trim(), status:'pending' };
+    if(!claim.title || !claim.description) return res.status(400).json({error:'title and description are required'});
+    res.status(201).json({success:true,claim:await supabaseRepo.createClaim(claim)});
+  } catch(e:any){res.status(500).json({error:e.message});}
+});
+
+app.patch('/api/admin/claims/:id/status', requireAuth, requireRoles(['OWNER','SUPER_ADMIN','ADMIN']), async (req,res) => {
+  try {
+    const status=String(req.body.status||'');
+    if(!['pending','approved','rejected','resolved'].includes(status)) return res.status(400).json({error:'Invalid status'});
+    res.json({success:true,claim:await supabaseRepo.updateClaimStatus(req.params.id,status)});
+  } catch(e:any){res.status(500).json({error:e.message});}
+});
+
+// POLICY PRICING & AGENT COMMISSION CONFIGURATION — Supabase authoritative storage
+app.get('/api/admin/policies', requireAuth, requireRoles(['OWNER','SUPER_ADMIN','ADMIN']), async (_req,res) => {
+  try { res.json({policies:await supabaseRepo.getPolicies()}); }
+  catch(e:any){res.status(500).json({error:e.message});}
+});
+app.post('/api/admin/policies/update', requireAuth, requireRoles(['OWNER','SUPER_ADMIN']), async (req,res) => {
+  try {
+    const current=await supabaseRepo.getPolicies();
+    const allowed=['commissionRates','withdrawalFees','minDeposit','minWithdrawal','gameLimits','vipTiers'];
+    const next:any={...current};
+    for(const key of allowed) if(req.body[key]!==undefined) next[key]=req.body[key];
+    res.json({success:true,policies:await supabaseRepo.updatePolicies(next,req.user!.id)});
+  } catch(e:any){res.status(500).json({error:e.message});}
+});
+
+// WALLET ENDPOINTS (Authoritative PostgreSQL Operations)
+// -------------------------------------------------------------
+app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
+  const actor = req.user!;
+  const wallet = await supabaseRepo.getWallet(actor.id);
+  
+  res.json({ wallet });
+});
+
+app.get('/api/wallet/transactions', requireAuth, async (req: Request, res: Response) => {
+  const actor = req.user!;
+  const txList = await supabaseRepo.getTransactions(actor.id);
+  res.json({ transactions: txList });
+});
+
+app.post('/api/wallet/deposit', requireAuth, async (req: Request, res: Response) => {
+  const { amount, method = 'UPI', idempotencyKey } = req.body;
+  const numAmount = Number(amount);
+  if (!numAmount || numAmount < 100) {
+    return res.status(400).json({ error: 'Minimum deposit amount is ₹100' });
+  }
+
+  const actor = req.user!;
+  const result = await walletService.deposit(actor.id, numAmount, method, idempotencyKey);
+  broadcastRealtime('wallet_updated', { userId: actor.id, wallet: result.wallet });
+  return res.json({ success: true, wallet: result.wallet, request: result.request });
+});
+
+app.post('/api/wallet/withdraw', requireAuth, async (req: Request, res: Response) => {
+  const { amount, upiId, idempotencyKey } = req.body;
+  const numAmount = Number(amount);
+  if (!numAmount || numAmount < 500) {
+    return res.status(400).json({ error: 'Minimum withdrawal is ₹500' });
+  }
+
+  const actor = req.user!;
+  try {
+    const result = await walletService.requestWithdrawal(actor.id, numAmount, upiId || 'Bank Account', idempotencyKey);
+    broadcastRealtime('wallet_updated', { userId: actor.id, wallet: result.wallet });
+    return res.json({ success: true, wallet: result.wallet, request: result.request });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// STRICT AUTHORIZATION GUARD FOR GAMES:
+// Game state/rules GET endpoints are public so the client can synchronize the
+// authoritative room/round before authentication. Betting/mutation endpoints
+// remain protected below.
+// -------------------------------------------------------------
+
+// All wagering/game mutation endpoints require an authenticated PLAYER.
+// Read-only game state/rules remain public.
+const requireGameMutationAuth = (req: Request, res: Response, next: NextFunction) => {
+  if (req.method === 'GET') return next();
+  return requireAuth(req, res, () => requirePlayerForGames(req, res, next));
+};
+app.use('/api/games', requireGameMutationAuth);
+
+app.get('/api/games/history', requireAuth, requirePlayerForGames, (_req: Request, res: Response) => {
+  res.json({ history: gameHistories });
+});
+
+// -------------------------------------------------------------
+const sharedGameModuleDeps = {
+  supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService,
+  recordHistory, acquireGameLease, safeSaveAuthoritativeGameState,
+  safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser,
+  rateLimit, getSupabaseConfigStatus, authService, crypto
+};
+
+// Hard game boundary: each module receives a scoped realtime publisher.
+// Shared EventBus/WebSocket infrastructure stays common, but every game event
+// is stamped with its own gameId + roomId so one game's changes cannot leak into another.
+function createGameModuleDeps(gameId: string, roomId: string) {
+  return {
+    ...sharedGameModuleDeps,
+    broadcastRealtime: (event: string, data: Record<string, unknown> = {}) =>
+      broadcastRealtime(event, { ...data, gameId, roomId })
+  };
+}
+
+// Browser smoke tests can boot the HTTP/Vite server without starting the
+// long-running game loops. Full game E2E runs should use the configured Supabase
+// environment and leave this disabled.
+const skipGameLoops = process.env.E2E_SMOKE_ONLY === '1';
+
+if (!skipGameLoops) {
+  registerRouletteGame(app, createGameModuleDeps('roulette', 'roulette-main'));
+  registerTeenPattiGame(app, createGameModuleDeps('teen-patti', 'teen-patti-main'));
+  registerAviatorGame(app, createGameModuleDeps('aviator', 'aviator-main'));
+  registerDiceGame(app, createGameModuleDeps('dice', 'dice-main'));
+  registerDragonTigerGame(app, createGameModuleDeps('dragon-tiger', 'dragon-tiger-main'));
+  registerAndarBaharGame(app, createGameModuleDeps('andar-bahar', 'andar-bahar-main'));
+}
+
+const startServer = async () => {
+  try {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction && !getSupabaseConfigStatus().isConfigured) {
+      throw new Error('Supabase is required in production. Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+    }
+    // Browsers request /favicon.ico automatically; return an explicit empty response so this is not a real missing resource.
+    app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204).end());
+
+    // Establish the authoritative DB -> WebSocket bridge before the HTTP server
+    // becomes reachable. This prevents the first game-state update from racing
+    // Supabase Realtime channel startup.
+    if (process.env.E2E_TEST_MODE !== '1' && process.env.E2E_TEST_MODE !== 'true') {
+      if (process.env.E2E_TEST_MODE !== '1' && process.env.E2E_TEST_MODE !== 'true') await startAuthoritativeRealtimeBridge();
+    }
+    // Frontend is deployed separately. The backend serves API + WebSocket only.
+    // Do not mount Vite or serve dist/index.html from the production backend.
+
+    const httpServer = createHttpServer(app);
+    const socketIo = createSocketServer(httpServer);
+    void socketIo;
+    httpServer.on('upgrade', async (req, socket, head) => {
+      if (req.url !== '/ws') {
+        socket.destroy();
+        return;
+      }
+      try {
+        // WebSocket transport supports anonymous connections for public game state.
+        // Authentication is still required for all game mutations and private events.
+        const user = await authenticateWebSocketRequest(req);
+        websocketServer.handleUpgrade(req, socket, head, (ws) => {
+          websocketServer.emit('connection', ws, user || { id: 'anonymous' });
+        });
+      } catch {
+        socket.destroy();
+      }
+    });
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      console.log(`[server] listening on http://0.0.0.0:${PORT}`);
+      console.log('[realtime] WebSocket endpoint enabled at /ws');
+    });
+  } catch (error) {
+    console.error('[server] startup failed:', error);
+    process.exit(1);
+  }
+};
+
+startServer();

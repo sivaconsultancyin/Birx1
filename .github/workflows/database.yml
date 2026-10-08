@@ -1,0 +1,36 @@
+name: Brix Database Migration Guard
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'database/**'
+      - 'supabase/migrations/**'
+  push:
+    branches: [main]
+    paths:
+      - 'database/**'
+      - 'supabase/migrations/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate migration layout
+        run: |
+          test -d database/migrations
+          test -d supabase/migrations
+          find database/migrations supabase/migrations -type f -name '*.sql' -print | sort
+      - name: Prevent game-specific foundation tables
+        run: |
+          if git diff --name-only origin/main...HEAD -- database/migrations supabase/migrations | grep -E '\.sql$' | xargs -r grep -Ein 'CREATE[[:space:]]+TABLE.*(aviator|roulette|teen.?patti|dice|dragon.?tiger|andar.?bahar)' ; then
+            echo "Game-specific tables are not allowed in Step 1 foundation migrations."
+            exit 1
+          fi

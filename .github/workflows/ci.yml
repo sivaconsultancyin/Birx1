@@ -10,31 +10,39 @@ on:
 permissions:
   contents: read
 
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+concurrency:
+  group: brix-ci-${{ github.ref }}
+  cancel-in-progress: true
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+jobs:
+  frontend:
+    name: Frontend typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck --workspace @brix/frontend
+      - run: npm run lint --workspace @brix/frontend
+      - run: npm run test --workspace @brix/frontend
+      - run: npm run build --workspace @brix/frontend
 
-      - name: Install locked dependencies
-        run: npm ci
-
-      - name: TypeScript check
-        run: npm run lint
-
-      - name: Build frontend
-        run: npm run build:frontend
-
-      - name: Build backend
-        run: npm run build:backend
-
-      - name: Verify production build
-        run: npm run build
+  backend:
+    name: Backend typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck --workspace @brix/backend
+      - run: npm run lint --workspace @brix/backend
+      - run: npm run test --workspace @brix/backend
+      - run: npm run build --workspace @brix/backend

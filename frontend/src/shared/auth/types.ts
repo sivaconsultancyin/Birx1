@@ -1,0 +1,2 @@
+export interface SessionUser { id:string; email?:string; mobile?:string; username?:string; role?:string; }
+export interface AuthSession { user:SessionUser|null; accessToken?:string|null; expiresAt?:number; }

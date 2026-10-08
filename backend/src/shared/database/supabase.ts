@@ -1,0 +1,1 @@
+import {createClient} from '@supabase/supabase-js'; import {serverEnv} from '../config/env.ts'; export const supabaseAdmin=serverEnv.supabaseUrl&&serverEnv.supabaseServiceRoleKey?createClient(serverEnv.supabaseUrl,serverEnv.supabaseServiceRoleKey,{auth:{autoRefreshToken:false,persistSession:false}}):null;
