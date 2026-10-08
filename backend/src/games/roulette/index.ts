@@ -4,7 +4,7 @@ export * from './bets.ts';
 export * from './settlement.ts';
 export * from './fairness.ts';
 export * from './wallet.ts';
-export * from './routes.ts';
+export * from './routes/index.ts';
 export * from './socket.ts';
 
 export const rouletteModule = {
