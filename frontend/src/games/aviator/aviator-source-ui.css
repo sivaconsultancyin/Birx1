@@ -2379,3 +2379,80 @@ html { touch-action: manipulation; }
 @media (min-width: 761px) and (max-width: 1050px) {
   #screen-aviator .aviator-reference-layout { grid-template-columns:190px minmax(0,1fr); }
 }
+
+
+#screen-aviator .nagyf-aviator-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: linear-gradient(180deg, #e4e0ba 0%, #f7d9aa 48%, #68c3c0 100%);
+}
+#screen-aviator .nagyf-aviator-scene canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+#screen-aviator .aviator-reference-arena {
+  min-height: clamp(390px, 72vh, 760px);
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, #e4e0ba, #f7d9aa);
+  box-shadow: none;
+}
+#screen-aviator .aviator-arena-overlay {
+  align-items: flex-start;
+  justify-content: center;
+}
+#screen-aviator .aviator-arena-top {
+  top: 14px;
+}
+#screen-aviator .aviator-round-id,
+#screen-aviator .aviator-status {
+  background: rgba(255,255,255,.22);
+  border-color: rgba(255,255,255,.35);
+  color: #493b32;
+  text-shadow: 0 1px rgba(255,255,255,.35);
+}
+#screen-aviator .aviator-reference-multiplier {
+  margin-top: 34px;
+}
+#screen-aviator .aviator-reference-multiplier strong {
+  color: #59332e;
+  text-shadow: 0 3px 12px rgba(255,255,255,.4);
+}
+#screen-aviator .aviator-reference-multiplier.crashed strong {
+  color: #b72f25;
+}
+#screen-aviator .aviator-reference-multiplier span,
+#screen-aviator .aviator-takeoff {
+  color: #594b40;
+}
+@media (max-width: 760px) {
+  #screen-aviator .aviator-reference-arena {
+    min-height: calc(100dvh - 70px);
+    aspect-ratio: auto;
+  }
+  #screen-aviator .aviator-reference-layout {
+    padding: 0;
+  }
+  #screen-aviator .aviator-reference-history {
+    display: none;
+  }
+  #screen-aviator .aviator-ref-bet-row {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 20;
+    margin: 0;
+  }
+  #screen-aviator .aviator-ref-bet-card {
+    background: rgba(255,255,255,.78);
+    border-color: rgba(89,51,46,.16);
+    backdrop-filter: blur(10px);
+  }
+}
