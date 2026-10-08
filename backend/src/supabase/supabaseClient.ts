@@ -31,7 +31,7 @@ export function getSupabaseAdmin(): SupabaseClient | null {
   if (!isConfigured) return null;
   if (!cachedAdminClient) {
     if (!SUPABASE_SERVICE_ROLE_KEY) return null;
-    cachedAdminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    cachedAdminClient = createClient(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
   }
@@ -42,7 +42,7 @@ export function getSupabasePublic(): SupabaseClient | null {
   if (!isConfigured) return null;
   if (!cachedPublicClient) {
     if (!SUPABASE_ANON_KEY) return null;
-    cachedPublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    cachedPublicClient = createClient(SUPABASE_URL as string, SUPABASE_ANON_KEY as string);
   }
   return cachedPublicClient;
 }
