@@ -28,19 +28,6 @@ export const ALL_GAMES: GameCardInfo[] = [
     bannerBg: 'from-slate-900 to-emerald-950/40'
   },
   {
-    id: 'aviator',
-    name: 'Aviator',
-    tagline: 'Rising plane crash multiplier game',
-    badge: 'Hot',
-    isLive: true,
-    activePlayers: 12450,
-    minBet: 10,
-    maxPayout: '100x+ Flight',
-    accentColor: 'from-rose-500/30 to-orange-600/30',
-    iconEmoji: '🚀',
-    bannerBg: 'from-slate-900 to-rose-950/40'
-  },
-  {
     id: 'dice',
     name: 'Dice',
     tagline: 'Roll 2 dice for Over, Under, or Lucky 7',
