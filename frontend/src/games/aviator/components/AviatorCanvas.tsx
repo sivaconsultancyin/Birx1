@@ -12,7 +12,7 @@ type Props = {
   onToggleMute?: () => void;
 };
 
-export const AviatorReferenceCanvas: React.FC<Props> = ({
+export const AviatorCanvas: React.FC<Props> = ({
   phase,
   multiplier,
   crashMultiplier,
