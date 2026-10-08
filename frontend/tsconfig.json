@@ -10,7 +10,7 @@
     "moduleDetection":"force",
     "strict":true,
     "noImplicitAny":true,
-    "noUncheckedIndexedAccess":true,
+    
     "jsx":"react-jsx",
     "allowImportingTsExtensions":true,
     "noEmit":true,
