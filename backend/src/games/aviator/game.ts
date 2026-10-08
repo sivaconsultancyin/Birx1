@@ -3,7 +3,8 @@ import { AVIATOR_ROOM_ID, INITIAL_AVIATOR_STATE, AVIATOR_BETTING_SECONDS, AVIATO
 import { hashSeed, generateCrashPoint } from './fairness.ts';
 import { AVIATOR_SOCKET_EVENTS } from './socket.ts';
 import { createAviatorLossOutcome, createAviatorWinOutcome } from './settlement.ts';
-import type { AviatorBet, AviatorState, Wallet } from '../../types.ts';
+import type { AviatorBet, AviatorState } from './types/aviatorTypes.ts';
+import type { Wallet } from '../../types.ts';
 import type { Request, Response } from 'express';
 
 export interface AviatorGameDeps {
