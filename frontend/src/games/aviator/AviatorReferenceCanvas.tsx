@@ -24,6 +24,7 @@ export const AviatorReferenceCanvas: React.FC<Props> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CanvasRenderer | null>(null);
   const latestRef = useRef({ phase, multiplier, crashMultiplier, countdown });
+  const flightTimeRef = useRef(0);
   const previousPhaseRef = useRef(phase);
   const soundRef = useRef<SoundEngine | null>(null);
 
@@ -72,6 +73,7 @@ export const AviatorReferenceCanvas: React.FC<Props> = ({
 
       if (s.phase === 'running') flightTime += dt;
       else if (s.phase === 'betting') flightTime = 0;
+      flightTimeRef.current = flightTime;
 
       const state = {
         ...visualState,
@@ -110,7 +112,7 @@ export const AviatorReferenceCanvas: React.FC<Props> = ({
           currentState: GameState.CRASHED,
           multiplier: Math.max(1, multiplier),
           crashMultiplier: Math.max(1.01, Number(crashMultiplier ?? multiplier)),
-          currentFlightTimeMs: 0,
+          currentFlightTimeMs: flightTimeRef.current,
         };
         const path = renderer.getFlightPath();
         const pos = path.getPlanePosition(state.currentFlightTimeMs, state.crashMultiplier);
