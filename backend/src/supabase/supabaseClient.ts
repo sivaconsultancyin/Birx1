@@ -519,7 +519,7 @@ const supabaseRepoImpl = {
 
     const result = { success: true, wallet, transaction: tx };
     if (typeof idempotencyKey === 'string' && idempotencyKey.length > 0) {
-      dbStore.idempotency.set(idempotencyKey, result);
+      dbStore.idempotency.set(String(idempotencyKey), result);
     }
     return result;
   },
