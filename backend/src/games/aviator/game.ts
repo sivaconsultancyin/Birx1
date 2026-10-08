@@ -6,15 +6,23 @@ import { calculateAviatorPayout, createAviatorLossOutcome, createAviatorWinOutco
 import type { AviatorBet, AviatorState, Wallet } from '../../types.ts';
 import type { Request, Response } from 'express';
 
-/** Server-authoritative aviator module. All shared infrastructure is injected by the thin router. */
-const GAME_ROOM_ID = 'aviator-main';
-
 export interface AviatorGameDeps {
-  supabaseRepo: any; requireAuth: any; requirePlayerForGames: any; requireRoles: any; walletService: any; storageService: any; recordHistory: any; broadcastRealtime: any; acquireGameLease: any; safeSaveAuthoritativeGameState: any; safeGetAuthoritativeGameState: any; debitForUser: any; creditForUser: any; getRequestUser: any; generateDeck?: any; secureShuffleDeck?: any; evaluateTeenPattiHand?: any; compareHands?: any; computePlayerSettlement?: any; createAuthoritativeTeenPattiRound?: any; sanitizeTeenPattiState?: any;
+  supabaseRepo: any;
+  requireAuth: any;
+  requirePlayerForGames: any;
+  walletService: any;
+  recordHistory: any;
+  broadcastRealtime: any;
+  acquireGameLease: any;
+  safeSaveAuthoritativeGameState: any;
+  safeGetAuthoritativeGameState: any;
+  debitForUser: any;
+  creditForUser: any;
+  getRequestUser?: any;
 }
 
 export function registerAviatorGame(app: any, deps: AviatorGameDeps) {
-  const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
+  const { supabaseRepo, requireAuth, requirePlayerForGames, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser } = deps;
 
 // -------------------------------------------------------------
 
