@@ -1,4 +1,4 @@
-import { GameState } from './engine/GameStates.js';
+import { GameState } from '../engine/GameStates.js';
 import { BackgroundRenderer } from './BackgroundRenderer.js';
 import { CurveRenderer } from './CurveRenderer.js';
 import { ParticlePool } from './ParticlePool.js';
