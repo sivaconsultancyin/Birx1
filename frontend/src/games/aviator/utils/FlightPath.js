@@ -1,0 +1,119 @@
+import { getMultiplierAtTime } from './CrashAlgorithm.js';
+
+const TARGET_SCREEN_FRACTION = 0.52;
+const LERP_SPEED = 3.0;
+
+export class FlightPath {
+  constructor(width, height) {
+    this._cameraOffset = 0;
+    this._fixedViewMax = 10;
+    this.resize(width, height);
+  }
+
+  resize(width, height) {
+    this.width = width;
+    this.height = height;
+    this.paddingLeft = 60;
+    this.paddingBottom = 50;
+    this.paddingTop = 30;
+    this.paddingRight = 20;
+    this.plotWidth = width - this.paddingLeft - this.paddingRight;
+    this.plotHeight = height - this.paddingTop - this.paddingBottom;
+  }
+
+  setFixedViewMax(crashMultiplier) {
+    this._fixedViewMax = Math.max(10, crashMultiplier * 1.15);
+  }
+
+  updateCamera(flightTimeMs, dtMs) {
+    const seconds = flightTimeMs / 1000;
+    const viewSeconds = 20;
+    if (seconds <= viewSeconds * TARGET_SCREEN_FRACTION) {
+      this._cameraOffset += (0 - this._cameraOffset) * Math.min(1, LERP_SPEED * (dtMs / 1000));
+      return;
+    }
+    const targetX = seconds * (this.plotWidth / viewSeconds);
+    const visibleFraction = TARGET_SCREEN_FRACTION * this.plotWidth;
+    const targetOffset = targetX - visibleFraction;
+    this._cameraOffset += (targetOffset - this._cameraOffset) * Math.min(1, LERP_SPEED * (dtMs / 1000));
+  }
+
+  getCameraOffset() {
+    return this._cameraOffset;
+  }
+
+  resetCamera() {
+    this._cameraOffset = 0;
+  }
+
+  timeToX(flightTimeMs) {
+    const seconds = flightTimeMs / 1000;
+    const viewSeconds = 20;
+    const rawX = (seconds / viewSeconds) * this.plotWidth;
+    return this.paddingLeft + rawX - this._cameraOffset;
+  }
+
+  multiplierToY(multiplier) {
+    // Keep the flight visually inside a bounded takeoff lane.
+    // X carries the flight forward; multiplier only raises the plane gradually.
+    const viewMax = this._fixedViewMax;
+    const logMax = Math.log(viewMax);
+    const logVal = Math.log(Math.max(1, multiplier));
+    const fraction = logMax > 0 ? Math.min(1, Math.max(0, logVal / logMax)) : 0;
+
+    const laneCenterY = this.paddingTop + this.plotHeight * 0.72;
+    const maxRise = this.plotHeight * 0.50;
+    return laneCenterY - fraction * maxRise;
+  }
+
+  multiplierToFlightTime(multiplier, crashMultiplier) {
+    const m = Math.max(1, Number(multiplier || 1));
+    const crash = Math.max(1.0001, Number(crashMultiplier || 1.0001));
+    if (m >= crash) return this._flightTimeAtCrash(crash);
+    const k = Math.log(crash) / 8;
+    const normFactor = Math.exp(k * 8) - 1;
+    const ratio = Math.min(1, Math.max(0, (m - 1) / (crash - 1)));
+    return Math.max(0, Math.log(1 + ratio * normFactor) / k) * 1000;
+  }
+
+  _flightTimeAtCrash(crashMultiplier) {
+    const k = Math.log(Math.max(1.0001, crashMultiplier)) / 8;
+    return (8 / k) * 1000;
+  }
+
+  getPlanePosition(flightTimeMs, crashMultiplier) {
+    const multiplier = getMultiplierAtTime(flightTimeMs, crashMultiplier);
+    const prevMultiplier = getMultiplierAtTime(Math.max(0, flightTimeMs - 200), crashMultiplier);
+    return {
+      x: this.timeToX(flightTimeMs),
+      y: this.multiplierToY(multiplier),
+      angle: Math.atan2(
+        this.multiplierToY(multiplier) - this.multiplierToY(prevMultiplier),
+        this.timeToX(flightTimeMs) - this.timeToX(Math.max(0, flightTimeMs - 200))
+      ),
+    };
+  }
+
+  getGridLines(cameraOffset) {
+    const hLines = [];
+    const vLines = [];
+
+    const yValues = [1, 2, 5, 10, 20, 50, 100];
+    for (const val of yValues) {
+      hLines.push({ y: this.multiplierToY(val), label: val + 'x' });
+    }
+
+    const secondsPerTick = 5;
+    const viewSeconds = 20;
+    const rawStartSec = Math.floor((cameraOffset / this.plotWidth) * viewSeconds / secondsPerTick) * secondsPerTick;
+    const rawEndSec = ((cameraOffset + this.plotWidth) / this.plotWidth) * viewSeconds;
+    for (let sec = rawStartSec; sec <= rawEndSec + secondsPerTick; sec += secondsPerTick) {
+      if (sec < 0) continue;
+      const rawX = (sec / viewSeconds) * this.plotWidth;
+      const x = this.paddingLeft + rawX - cameraOffset;
+      vLines.push({ x, label: sec + 's' });
+    }
+
+    return { hLines, vLines };
+  }
+}
