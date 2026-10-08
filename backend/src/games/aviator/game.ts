@@ -9,7 +9,11 @@ import type { Request, Response } from 'express';
 /** Server-authoritative aviator module. All shared infrastructure is injected by the thin router. */
 const GAME_ROOM_ID = 'aviator-main';
 
-export interface AviatorGameDeps {\n  supabaseRepo: any; requireAuth: any; requirePlayerForGames: any; requireRoles: any; walletService: any; storageService: any; recordHistory: any; broadcastRealtime: any; acquireGameLease: any; safeSaveAuthoritativeGameState: any; safeGetAuthoritativeGameState: any; debitForUser: any; creditForUser: any; getRequestUser: any;\n}\n\nexport function registerAviatorGame(app: any, deps: AviatorGameDeps) {
+export interface AviatorGameDeps {
+  supabaseRepo: any; requireAuth: any; requirePlayerForGames: any; requireRoles: any; walletService: any; storageService: any; recordHistory: any; broadcastRealtime: any; acquireGameLease: any; safeSaveAuthoritativeGameState: any; safeGetAuthoritativeGameState: any; debitForUser: any; creditForUser: any; getRequestUser: any;
+}
+
+export function registerAviatorGame(app: any, deps: AviatorGameDeps) {
   const { supabaseRepo, requireAuth, requirePlayerForGames, requireRoles, walletService, storageService, recordHistory, broadcastRealtime, acquireGameLease, safeSaveAuthoritativeGameState, safeGetAuthoritativeGameState, debitForUser, creditForUser, getRequestUser, generateDeck, secureShuffleDeck, evaluateTeenPattiHand, compareHands, computePlayerSettlement, createAuthoritativeTeenPattiRound, sanitizeTeenPattiState } = deps;
 
 // -------------------------------------------------------------
