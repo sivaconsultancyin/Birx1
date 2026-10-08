@@ -2137,3 +2137,20 @@ html { touch-action: manipulation; }
 .aviator-arena-overlay .aviator-reference-multiplier { pointer-events: none; }
 .aviator-arena-overlay .aviator-takeoff { pointer-events: none; }
 .aviator-arena-tools { position: absolute; z-index: 10; }
+
+/* Stock-flight visual tuning */
+.aviator-reference-arena { min-height: clamp(300px, 52vw, 470px); aspect-ratio: 16 / 8.6; }
+.aviator-reference-canvas-host { min-height: 100%; }
+.aviator-reference-canvas { image-rendering: auto; }
+.aviator-arena-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.aviator-arena-top { position: absolute; top: 12px; left: 14px; right: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.aviator-reference-multiplier { margin-top: -2%; }
+.aviator-reference-multiplier strong { font-size: clamp(42px, 9vw, 78px); line-height: .9; letter-spacing: -.045em; text-shadow: 0 6px 24px rgba(0,0,0,.35); }
+.aviator-arena-tools { top: 12px; right: 12px; display: flex; gap: 6px; }
+.aviator-arena-tools button { width: 34px; height: 34px; border-radius: 9px; }
+@media (max-width: 640px) {
+  .aviator-reference-arena { min-height: 285px; aspect-ratio: 1.42 / 1; }
+  .aviator-reference-multiplier strong { font-size: clamp(40px, 14vw, 62px); }
+  .aviator-arena-top { top: 8px; left: 9px; right: 9px; }
+  .aviator-arena-tools { top: 8px; right: 8px; }
+}
