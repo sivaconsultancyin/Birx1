@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AviatorReferenceCanvas } from './AviatorReferenceCanvas';
+import React, { useState } from 'react';
+import { AviatorCanvas } from './components/AviatorCanvas';
+import { useAviatorGame } from './hooks/useAviatorGame';
 import { Clock, Plane, ShieldCheck, Volume2, VolumeX, Menu, MessageCircle, Users, TrendingUp } from 'lucide-react';
-import { AviatorBet, AviatorState, Wallet } from '../../../src/types.ts';
-import { gamesApi, subscribeToRealtimeEvents } from '../../../src/api/client.ts';
+import type { Wallet } from '../../../types.ts';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
 import { notifyWinLoss } from '../../../src/components/WinLossNotification.tsx';
@@ -31,77 +31,37 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
   onBack,
   onOpenWallet
 }) => {
-  const [gameState, setGameState] = useState<AviatorState | null>(null);
-  const [currentBet, setCurrentBet] = useState<AviatorBet | null>(null);
+  const { gameState, currentBet, loading, errorMsg, placeBet, cashOut, setErrorMsg } = useAviatorGame(wallet, onUpdateWallet);
   const [betAmount, setBetAmount] = useState(100);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [muted, setMuted] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const currentBetRef = useRef<AviatorBet | null>(null);
-  const planeRef = useRef<HTMLDivElement | null>(null);
-  currentBetRef.current = currentBet;
 
-  useEffect(() => {
-    let mounted = true;
+  const multiplier = gameState?.multiplier || 1;
+  const phase = gameState?.phase || 'betting';
+  const isRunning = phase === 'running';
+  const isCrashed = phase === 'crashed';
 
-    const syncState = async () => {
-      try {
-        const res = await gamesApi.aviator.getState();
-        if (!mounted) return;
-        setGameState(res.state);
-        setCurrentBet(res.state.currentBet ?? null);
-      } catch {
-        // SSE can recover the live state.
-      }
-    };
+  const placeButton = (secondary = false) => (
+    <button
+      type="button"
+      disabled={secondary || loading || phase !== 'betting'}
+      onClick={secondary ? undefined : () => void placeBet(betAmount)}
+      className={`aviator-ref-action ${secondary ? 'aviator-ref-action-muted' : 'aviator-ref-action-bet'}`}
+    >
+      {secondary ? 'SECOND SLOT' : phase === 'betting' ? `PLACE BET · ₹${betAmount.toLocaleString('en-IN')}` : 'WAITING FOR NEXT ROUND'}
+    </button>
+  );
 
-    void syncState();
+  const cashoutButton = (
+    <button id="btn-aviator-cashout" type="button" disabled={loading} onClick={() => void cashOut()} className="aviator-ref-action aviator-ref-action-cashout">
+      <span>CASH OUT</span>
+      <small>₹{Math.floor((currentBet?.amount ?? 0) * multiplier).toLocaleString('en-IN')} · {multiplier.toFixed(2)}x</small>
+    </button>
+  );
 
-    const unsubscribe = subscribeToRealtimeEvents((payload) => {
-      if (!mounted) return;
-      const data: any = payload.data || {};
-
-      if (payload.event === 'aviator_tick') {
-        setGameState((prev) => prev ? {
-          ...prev,
-          roundId: data.roundId || prev.roundId,
-          phase: data.phase || prev.phase,
-          multiplier: Number(data.multiplier ?? prev.multiplier),
-          countdown: Number(data.countdown ?? prev.countdown)
-        } : null);
-        return;
-      }
-
-      if (payload.event === 'round_started' && data.gameId === 'aviator') {
-        void syncState();
-        return;
-      }
-
-      if (payload.event === 'betting_closed' && data.gameId === 'aviator') {
-        setGameState((prev) => prev ? { ...prev, phase: 'running' } : prev);
-        return;
-      }
-
-      if (payload.event === 'result' && data.gameId === 'aviator') {
-        setGameState((prev) => prev ? {
-          ...prev,
-          phase: 'crashed',
-          multiplier: Number(data.multiplier ?? prev.multiplier),
-          crashMultiplier: Number(data.multiplier ?? prev.crashMultiplier ?? 0)
-        } : null);
-
-        if (currentBetRef.current && !currentBetRef.current.cashedOut) {
-          notifyWinLoss({ type: 'loss', amount: currentBetRef.current.amount });
-          setCurrentBet(null);
-        }
-        void syncState();
-      }
-    });
-
-    return () => {
+  return () => {
       mounted = false;
       unsubscribe();
     };
@@ -252,7 +212,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
           </div>
 
           <section className="aviator-reference-arena">
-            <AviatorReferenceCanvas
+            <AviatorCanvas
               phase={phase}
               multiplier={multiplier}
               crashMultiplier={gameState?.crashMultiplier ?? null}
@@ -291,7 +251,7 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({
             </div>
           </section>
 
-          {errorMsg && <div className="aviator-reference-error">{errorMsg}</div>}
+          {errorMsg && <div className="aviator-reference-error" role="alert" onClick={() => setErrorMsg(null)}>{errorMsg}</div>}
 
           <section className="aviator-ref-bet-row">
             <div className="aviator-ref-bet-card">
