@@ -15,13 +15,13 @@ import {
 } from 'lucide-react';
 import { TeenPattiState, Card, Wallet } from '../../../types.ts';
 import { PlayingCard } from './PlayingCard.tsx';
-import { RealisticDealerStudio, DealerActionState } from '../../../../components/casino/RealisticDealerStudio.tsx';
-import { RealisticLiveShuffleEngine } from '../../../../components/casino/RealisticLiveShuffleEngine.tsx';
-import { RealHumanShuffleVideo } from '../../../../components/casino/RealHumanShuffleVideo.tsx';
-import { DealerDealingHand } from '../../../../components/casino/DealerDealingHand.tsx';
-import { Live3DDealerCanvas } from '../../../../components/casino3d/Live3DDealerCanvas.tsx';
-import { casinoAudio } from '../../utils/casinoAudio.ts';
-import { TEEN_PATTI_PAYOUT_MULTIPLIERS } from '../../engines/teenPattiEngine.ts';
+import { RealisticDealerStudio, DealerActionState } from '../../../components/casino/RealisticDealerStudio.tsx';
+import { RealisticLiveShuffleEngine } from '../../../components/casino/RealisticLiveShuffleEngine.tsx';
+import { RealHumanShuffleVideo } from '../../../components/casino/RealHumanShuffleVideo.tsx';
+import { DealerDealingHand } from '../../../components/casino/DealerDealingHand.tsx';
+import { Live3DDealerCanvas } from '../../../components/casino3d/Live3DDealerCanvas.tsx';
+import { casinoAudio } from '../../../utils/casinoAudio.ts';
+import { TEEN_PATTI_PAYOUT_MULTIPLIERS } from './constants.ts';
 
 interface TeenPattiTableProps {
   state: TeenPattiState;
