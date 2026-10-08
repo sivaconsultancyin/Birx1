@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, ShieldCheck, Volume2, VolumeX, Menu, MessageCircle, Users, TrendingUp } from 'lucide-react';
 import type { Wallet } from '../../types.ts';
-import { AviatorCanvas } from './components/AviatorCanvas';
+import { NagyfAviatorScene } from './components/NagyfAviatorScene';
 import { useAviatorGame } from './hooks/useAviatorGame';
 import { GameHeader } from '../../../src/components/GameHeader.tsx';
 import { RulesModal } from '../../../src/components/RulesModal.tsx';
@@ -96,12 +96,11 @@ export const AviatorScreen: React.FC<AviatorScreenProps> = ({ wallet, onUpdateWa
           </div>
 
           <section className="aviator-reference-arena">
-            <AviatorCanvas
+            <NagyfAviatorScene
               phase={phase}
               multiplier={multiplier}
               crashMultiplier={gameState?.crashMultiplier ?? null}
               countdown={Number(gameState?.countdown || 0)}
-              muted={muted}
             />
 
             <div className="aviator-arena-overlay">
