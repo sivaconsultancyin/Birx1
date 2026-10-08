@@ -178,6 +178,7 @@ async function startAviatorFlight() {
 
     if (nextMult >= currentCrashTarget) {
       clearInterval(flightInterval);
+      await withSettlementMutation(async () => {
       aviatorState.multiplier = currentCrashTarget;
       aviatorState.crashMultiplier = currentCrashTarget;
       aviatorState.phase = 'crashed';
@@ -202,6 +203,7 @@ async function startAviatorFlight() {
         aviatorBets.delete(userId);
         }
       }
+      });
 
       broadcastRealtime('result', {
         gameId: 'aviator',
@@ -357,29 +359,24 @@ app.post('/api/games/aviator/bet', requireAuth, requirePlayerForGames, async (re
 
 app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async (req: Request, res: Response) => {
   await hydrateAviatorState();
-  const currentAviatorBet = aviatorBets.get(req.user!.id);
-  if (!currentAviatorBet || currentAviatorBet.cashedOut) {
-    return res.status(400).json({ error: 'No active bet to cash out' });
-  }
-
-  if (aviatorState.phase !== 'running') {
-    return res.status(400).json({ error: 'Aircraft has already crashed or round ended' });
-  }
-
-  // Authoritative payout calculated strictly on server
-  const cashMultiplier = aviatorState.multiplier;
-  const payout = calculateAviatorPayout(currentAviatorBet, cashMultiplier);
-
-  const payoutIdempotencyKey = `aviator_payout_${currentAviatorBet.betId}`;
+  let currentAviatorBet!: AviatorBet;
+  let cashMultiplier = 0;
+  let payout = 0;
   try {
+    await withSettlementMutation(async () => {
+      currentAviatorBet = aviatorBets.get(req.user!.id)!;
+      if (!currentAviatorBet || currentAviatorBet.cashedOut) throw new Error('NO_ACTIVE_BET');
+      if (aviatorState.phase !== 'running') throw new Error('ROUND_ENDED');
+      cashMultiplier = aviatorState.multiplier;
+      payout = calculateAviatorPayout(currentAviatorBet, cashMultiplier);
+      const payoutIdempotencyKey = `aviator_payout_${currentAviatorBet.betId}`;
     // Credit first; only finalize/remove the active bet after the wallet mutation succeeds.
     await creditForUser(req, payout, `Aviator Cashout @ ${cashMultiplier}x`, 'aviator', payoutIdempotencyKey);
   } catch (e: any) {
+    if (e?.message === 'NO_ACTIVE_BET') return res.status(400).json({ error: 'No active bet to cash out' });
+    if (e?.message === 'ROUND_ENDED') return res.status(400).json({ error: 'Aircraft has already crashed or round ended' });
     console.error('[Aviator] Cashout wallet credit failed:', e);
-    return res.status(502).json({
-      error: 'Wallet payout service temporarily unavailable',
-      detail: String(e?.message || 'Wallet credit failed')
-    });
+    return res.status(502).json({ error: 'Wallet payout service temporarily unavailable', detail: String(e?.message || 'Wallet credit failed') });
   }
 
   currentAviatorBet.cashedOut = true;
@@ -392,10 +389,11 @@ app.post('/api/games/aviator/cashout', requireAuth, requirePlayerForGames, async
   } catch (e) {
     console.error('[Aviator] Cashout wallet credited but bet audit persistence failed:', e);
   }
-  const roundStats = aviatorRoundStats.get(aviatorState.roundId) || { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 };
-  roundStats.totalPayoutAmount += payout;
-  aviatorRoundStats.set(aviatorState.roundId, roundStats);
-  await persistAviatorState();
+      const roundStats = aviatorRoundStats.get(aviatorState.roundId) || { totalBets: 0, totalBetAmount: 0, totalPayoutAmount: 0 };
+      roundStats.totalPayoutAmount += payout;
+      aviatorRoundStats.set(aviatorState.roundId, roundStats);
+      await persistAviatorState();
+    });
 
   recordHistory({
     gameId: 'aviator',
