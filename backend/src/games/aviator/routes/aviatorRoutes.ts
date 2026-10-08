@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import type { AviatorGameDeps } from '../game.ts';
+import type { AviatorControllerRuntime } from '../controllers/aviatorController.ts';
 
-export function registerAviatorRoutes(app: any, deps: AviatorGameDeps, runtime: any) {
+export function registerAviatorRoutes(app: any, deps: AviatorGameDeps, runtime: AviatorControllerRuntime) {
   const { requireAuth, requirePlayerForGames } = deps;
   const { getFairness, getState, placeBet, cashOut } = runtime;
   app.get('/api/aviator/fairness', async (_req: Request, res: Response) => getFairness(res));
