@@ -15,15 +15,17 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({ transaction })
     withdrawal: ArrowUpRight,
     payout: Award,
     bet: Dices,
-    bonus: Award
+    bonus: Award,
+  recharge: Award
   };
 
   const Icon = typeIcons[transaction.type] || Dices;
 
-  const statusBadges = {
+  const statusBadges: Record<Transaction['status'], {label:string; color:string}> = {
     success: { label: 'Success', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
     pending: { label: 'Pending', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
-    failed: { label: 'Failed', color: 'text-red-400 bg-red-500/10 border-red-500/30' }
+    failed: { label: 'Failed', color: 'text-red-400 bg-red-500/10 border-red-500/30' },
+    rejected: { label: 'Rejected', color: 'text-red-400 bg-red-500/10 border-red-500/30' }
   };
 
   const status = statusBadges[transaction.status];
